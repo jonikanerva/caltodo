@@ -62,7 +62,9 @@ export default function MainPage() {
       setNewTask({ title: "", details: "", urgent: false });
       toast({
         title: "Task created",
-        description: "Your task has been scheduled in your calendar",
+        description: hasCalendar 
+          ? "Your task has been scheduled in your calendar"
+          : "Task saved. Configure a calendar to enable scheduling.",
       });
     },
     onError: () => {
