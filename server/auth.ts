@@ -22,6 +22,11 @@ declare global {
 }
 
 export function setupAuth(app: Express): void {
+  // Trust proxy for secure cookies behind Replit's load balancer
+  app.set("trust proxy", 1);
+
+  const isProduction = process.env.NODE_ENV === "production" || !!process.env.PRODUCTION_APP_URL;
+  
   const sessionMiddleware = session({
     store: new PgSession({
       pool,
@@ -32,7 +37,7 @@ export function setupAuth(app: Express): void {
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: isProduction,
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
       sameSite: "lax",
