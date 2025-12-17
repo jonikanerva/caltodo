@@ -111,6 +111,22 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to check token status
+  app.get("/api/debug/tokens", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      res.json({
+        userId: user?.id,
+        hasAccessToken: !!user?.accessToken,
+        hasRefreshToken: !!user?.refreshToken,
+        accessTokenLength: user?.accessToken?.length || 0,
+        refreshTokenLength: user?.refreshToken?.length || 0,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get debug info" });
+    }
+  });
+
   app.get("/api/tasks", requireAuth, async (req, res) => {
     try {
       const tasks = await storage.getTasksByUserId(req.user!.id);

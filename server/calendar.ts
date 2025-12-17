@@ -7,6 +7,7 @@ const APP_IDENTIFIER = "[CalTodo]";
 
 export async function getCalendarClient(userId: string): Promise<calendar_v3.Calendar | null> {
   const user = await storage.getUser(userId);
+  console.log("getCalendarClient - user found:", !!user, "hasAccessToken:", !!user?.accessToken, "hasRefreshToken:", !!user?.refreshToken);
   if (!user?.accessToken) return null;
 
   const oauth2Client = new google.auth.OAuth2(
