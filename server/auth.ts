@@ -5,6 +5,7 @@ import type { Express, RequestHandler } from "express";
 import { storage } from "./storage";
 import pgSession from "connect-pg-simple";
 import { pool } from "./db";
+import { sessionSecret } from "./config";
 
 const PgSession = pgSession(session);
 
@@ -33,7 +34,7 @@ export function setupAuth(app: Express): void {
       tableName: "user_sessions",
       createTableIfMissing: true,
     }),
-    secret: process.env.SESSION_SECRET || "caltodo-secret-key",
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {

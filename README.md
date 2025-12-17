@@ -93,6 +93,7 @@ DATABASE_URL=postgresql://localhost:5432/caltodo
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 SESSION_SECRET=any-random-string-for-session-encryption
+ACTION_TOKEN_SECRET=another-random-string-for-action-links
 ```
 
 ### Installation
@@ -133,6 +134,7 @@ DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
 GOOGLE_CLIENT_ID=your-production-client-id
 GOOGLE_CLIENT_SECRET=your-production-client-secret
 SESSION_SECRET=strong-random-secret-min-32-chars
+ACTION_TOKEN_SECRET=another-strong-random-secret-min-32-chars
 NODE_ENV=production
 PRODUCTION_APP_URL=https://your-domain.com
 ```

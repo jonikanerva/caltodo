@@ -1,6 +1,5 @@
 import crypto from "crypto";
-
-const SECRET = process.env.SESSION_SECRET || "caltodo-action-token-secret";
+import { actionTokenSecret } from "./config";
 const TOKEN_EXPIRY = 7 * 24 * 60 * 60 * 1000;
 
 export function generateActionToken(taskId: string, action: "complete" | "reschedule"): string {
@@ -13,7 +12,7 @@ export function generateActionToken(taskId: string, action: "complete" | "resche
   const data = JSON.stringify(payload);
   const encoded = Buffer.from(data).toString("base64url");
   const signature = crypto
-    .createHmac("sha256", SECRET)
+    .createHmac("sha256", actionTokenSecret)
     .update(encoded)
     .digest("base64url");
   
@@ -26,7 +25,7 @@ export function verifyActionToken(token: string): { taskId: string; action: "com
     if (!encoded || !signature) return null;
     
     const expectedSignature = crypto
-      .createHmac("sha256", SECRET)
+      .createHmac("sha256", actionTokenSecret)
       .update(encoded)
       .digest("base64url");
     
