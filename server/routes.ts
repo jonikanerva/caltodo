@@ -21,6 +21,10 @@ import { createTaskSchema, updateSettingsSchema, updateTaskSchema } from "@share
 import { verifyActionToken } from "./tokens";
 
 function getBaseUrl(req: any): string {
+  // Use production URL if set, otherwise detect from request
+  if (process.env.PRODUCTION_APP_URL) {
+    return process.env.PRODUCTION_APP_URL;
+  }
   const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
   const host = req.headers["x-forwarded-host"] || req.headers.host;
   return `${protocol}://${host}`;
@@ -32,11 +36,10 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuth(app);
 
-  const baseUrl = process.env.REPL_SLUG
-    ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co`
-    : "http://localhost:5000";
+  const cronBaseUrl = process.env.PRODUCTION_APP_URL 
+    || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
   
-  setupCronJobs(baseUrl);
+  setupCronJobs(cronBaseUrl);
 
   // Log the callback URL being used for debugging
   console.log("OAuth callback URL:", 
