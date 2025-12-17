@@ -197,46 +197,35 @@ export async function registerRoutes(
         ? await getCalendarEventsForTasks(req.user!.id, settings.calendarId, eventIds)
         : new Map<string, CalendarEventData | typeof EVENT_DELETED | undefined>();
       
-      // Track which task IDs had their events deleted
+      // Track which task IDs had their events deleted - these tasks should be removed
       const deletedEventTaskIds = new Set<string>();
       
-      // Clear calendarEventId for tasks whose events were deleted (404/410 only)
+      // Delete tasks whose calendar events were deleted externally
       for (const task of tasks) {
         if (task.calendarEventId && calendarEvents.get(task.calendarEventId) === EVENT_DELETED) {
-          await storage.updateTask(task.id, {
-            calendarEventId: null,
-            scheduledStart: null,
-            scheduledEnd: null,
-          });
+          console.log(`Deleting task ${task.id} because its calendar event was deleted`);
+          await storage.deleteTask(task.id);
           deletedEventTaskIds.add(task.id);
         }
       }
       
-      // Enrich tasks with live calendar data
-      const enrichedTasks = tasks.map(task => {
-        // If event was deleted, return task with cleared calendar fields
-        if (deletedEventTaskIds.has(task.id)) {
-          return {
-            ...task,
-            calendarEventId: null,
-            scheduledStart: null,
-            scheduledEnd: null,
-          };
-        }
-        
-        // Enrich with live calendar data if available
-        if (task.calendarEventId && !task.completed) {
-          const eventData = calendarEvents.get(task.calendarEventId);
-          if (eventData && eventData !== EVENT_DELETED) {
-            return {
-              ...task,
-              scheduledStart: eventData.start,
-              scheduledEnd: eventData.end,
-            };
+      // Filter out deleted tasks and enrich remaining with live calendar data
+      const enrichedTasks = tasks
+        .filter(task => !deletedEventTaskIds.has(task.id))
+        .map(task => {
+          // Enrich with live calendar data if available
+          if (task.calendarEventId && !task.completed) {
+            const eventData = calendarEvents.get(task.calendarEventId);
+            if (eventData && eventData !== EVENT_DELETED) {
+              return {
+                ...task,
+                scheduledStart: eventData.start,
+                scheduledEnd: eventData.end,
+              };
+            }
           }
-        }
-        return task;
-      });
+          return task;
+        });
       
       // Reorder priorities for uncompleted tasks based on calendar event order
       const uncompletedWithTimes = enrichedTasks
