@@ -4,6 +4,19 @@ import type { Task, UserSettings } from "@shared/schema";
 import { generateActionToken } from "./tokens";
 
 const APP_SIGNATURE = "Created by CalTodo";
+const EVENT_TITLE_PREFIX = "☑️ ";
+
+// Helper to add/strip the emoji prefix from event titles
+function formatEventTitle(title: string): string {
+  return `${EVENT_TITLE_PREFIX}${title}`;
+}
+
+export function stripEventTitlePrefix(summary: string): string {
+  if (summary.startsWith(EVENT_TITLE_PREFIX)) {
+    return summary.slice(EVENT_TITLE_PREFIX.length);
+  }
+  return summary;
+}
 
 // Helper to build event description without leading newlines
 function buildEventDescription(task: Task, completeLink: string, rescheduleLink: string): string {
@@ -217,7 +230,7 @@ export async function createCalendarEvent(
 
   try {
     const requestBody: calendar_v3.Schema$Event = {
-      summary: task.title,
+      summary: formatEventTitle(task.title),
       description,
       visibility: "private",
       start: {
@@ -283,7 +296,7 @@ export async function updateCalendarEvent(
 
   try {
     const requestBody: calendar_v3.Schema$Event = {
-      summary: task.title,
+      summary: formatEventTitle(task.title),
       description,
       visibility: "private",
       start: {
@@ -371,7 +384,7 @@ export async function updateCalendarEventContent(
       calendarId: settings.calendarId,
       eventId,
       requestBody: {
-        summary: task.title,
+        summary: formatEventTitle(task.title),
         description,
         visibility: "private",
         extendedProperties: {

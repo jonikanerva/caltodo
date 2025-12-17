@@ -14,6 +14,7 @@ import {
   getCalendarEventsForTasks,
   getCalendarEvent,
   EVENT_DELETED,
+  stripEventTitlePrefix,
   type CalendarEventData
 } from "./calendar";
 import { setupCronJobs } from "./cron";
@@ -202,19 +203,35 @@ export async function registerRoutes(
       
       // Track which task IDs had their events deleted - mark them as completed
       const completedByDeletionIds = new Set<string>();
+      // Track title updates from calendar
+      const titleUpdates = new Map<string, string>();
       
-      // Mark tasks as completed when their calendar events are deleted externally
+      // Sync tasks with calendar events
       for (const task of tasks) {
-        if (task.calendarEventId && calendarEvents.get(task.calendarEventId) === EVENT_DELETED) {
-          console.log(`Marking task ${task.id} as completed because its calendar event was deleted`);
-          await storage.updateTask(task.id, {
-            completed: true,
-            completedAt: new Date(),
-            calendarEventId: null,
-            scheduledStart: null,
-            scheduledEnd: null,
-          });
-          completedByDeletionIds.add(task.id);
+        if (task.calendarEventId) {
+          const eventData = calendarEvents.get(task.calendarEventId);
+          
+          // Mark as completed if calendar event was deleted
+          if (eventData === EVENT_DELETED) {
+            console.log(`Marking task ${task.id} as completed because its calendar event was deleted`);
+            await storage.updateTask(task.id, {
+              completed: true,
+              completedAt: new Date(),
+              calendarEventId: null,
+              scheduledStart: null,
+              scheduledEnd: null,
+            });
+            completedByDeletionIds.add(task.id);
+          } 
+          // Update title if it was changed in calendar
+          else if (eventData && eventData.summary) {
+            const calendarTitle = stripEventTitlePrefix(eventData.summary);
+            if (calendarTitle !== task.title) {
+              console.log(`Updating task ${task.id} title from calendar: "${task.title}" -> "${calendarTitle}"`);
+              await storage.updateTask(task.id, { title: calendarTitle });
+              titleUpdates.set(task.id, calendarTitle);
+            }
+          }
         }
       }
       
@@ -232,18 +249,22 @@ export async function registerRoutes(
           };
         }
         
+        // Apply title update if changed in calendar
+        const updatedTitle = titleUpdates.get(task.id);
+        
         // Enrich with live calendar data if available
         if (task.calendarEventId && !task.completed) {
           const eventData = calendarEvents.get(task.calendarEventId);
           if (eventData && eventData !== EVENT_DELETED) {
             return {
               ...task,
+              title: updatedTitle || task.title,
               scheduledStart: eventData.start,
               scheduledEnd: eventData.end,
             };
           }
         }
-        return task;
+        return updatedTitle ? { ...task, title: updatedTitle } : task;
       });
       
       // Reorder priorities for uncompleted tasks based on calendar event order
