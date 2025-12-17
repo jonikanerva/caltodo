@@ -45,3 +45,7 @@ integrations = ["javascript_database:1.0.0"]
 
 [userenv.production]
 PRODUCTION_APP_URL = "https://todo.calmdonut.com"
+
+[userenv.shared]
+TOKEN_ENCRYPTION_KEY = "ATP8x1hUhPUDiWNAtp7bEUEkBMibsV6AtpL2Bn9u2M3OYH6rbp1zCBIbcshxOKb1"
+ACTION_TOKEN_SECRET = "tn+ScarzqOZQSm7uVRaAidxGVLy0RrZx2rkOWRRjU07xlZSisvC7xkY6AUH75rTr"
