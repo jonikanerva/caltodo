@@ -44,4 +44,4 @@ integrations = ["javascript_database:1.0.0"]
 [userenv]
 
 [userenv.production]
-PRODUCTION_APP_URL = "https://calendar-planner--calmdonut.replit.app"
+PRODUCTION_APP_URL = "https://todo.calmdonut.com"
