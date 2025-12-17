@@ -47,10 +47,38 @@ const getTimezoneOffset = (tz: string): string => {
   }
 };
 
+// Get numeric offset in minutes for sorting
+const getOffsetMinutes = (tz: string): number => {
+  try {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'shortOffset',
+    });
+    const parts = formatter.formatToParts(now);
+    const offsetPart = parts.find(p => p.type === 'timeZoneName');
+    const gmtOffset = offsetPart?.value || 'GMT+0';
+    const match = gmtOffset.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+    if (match) {
+      const sign = match[1] === '+' ? 1 : -1;
+      const hours = parseInt(match[2], 10);
+      const mins = parseInt(match[3] || '0', 10);
+      return sign * (hours * 60 + mins);
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+};
+
 const TIMEZONES = Intl.supportedValuesOf('timeZone').sort((a, b) => {
-  const offsetA = new Date().toLocaleString('en-US', { timeZone: a, timeZoneName: 'shortOffset' });
-  const offsetB = new Date().toLocaleString('en-US', { timeZone: b, timeZoneName: 'shortOffset' });
-  return offsetA.localeCompare(offsetB);
+  const offsetA = getOffsetMinutes(a);
+  const offsetB = getOffsetMinutes(b);
+  // Sort by offset first, then alphabetically by name
+  if (offsetA !== offsetB) {
+    return offsetA - offsetB;
+  }
+  return a.localeCompare(b);
 });
 
 const GOOGLE_CALENDAR_COLORS: { id: string; name: string; hex: string }[] = [

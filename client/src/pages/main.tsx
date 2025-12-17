@@ -26,11 +26,10 @@ import {
   Pencil,
   Check,
   X,
-  CheckCheck,
   RefreshCw,
-  CheckSquare,
   Trash2,
-  Bell
+  Bell,
+  RotateCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -82,8 +81,6 @@ export default function MainPage() {
   });
   const [completedOpen, setCompletedOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<EditingTask | null>(null);
-  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
-  const [selectionMode, setSelectionMode] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -164,23 +161,21 @@ export default function MainPage() {
     },
   });
 
-  const bulkCompleteMutation = useMutation({
-    mutationFn: async (taskIds: string[]) => {
-      return apiRequest("POST", "/api/tasks/bulk-complete", { taskIds });
+  const reloadCalendarMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/tasks/reload", {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      setSelectedTasks(new Set());
-      setSelectionMode(false);
       toast({
-        title: "Tasks completed",
-        description: "Selected tasks have been marked as complete",
+        title: "Calendar synced",
+        description: "Task times have been updated from Google Calendar",
       });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to complete tasks. Please try again.",
+        description: "Failed to sync calendar. Please try again.",
         variant: "destructive",
       });
     },
@@ -225,30 +220,6 @@ export default function MainPage() {
       });
     },
   });
-
-  const toggleTaskSelection = (taskId: string) => {
-    const newSelected = new Set(selectedTasks);
-    if (newSelected.has(taskId)) {
-      newSelected.delete(taskId);
-    } else {
-      newSelected.add(taskId);
-    }
-    setSelectedTasks(newSelected);
-  };
-
-  const toggleSelectAll = () => {
-    const uncompleted = tasks.filter((t) => !t.completed);
-    if (selectedTasks.size === uncompleted.length) {
-      setSelectedTasks(new Set());
-    } else {
-      setSelectedTasks(new Set(uncompleted.map((t) => t.id)));
-    }
-  };
-
-  const exitSelectionMode = () => {
-    setSelectionMode(false);
-    setSelectedTasks(new Set());
-  };
 
   const startEditing = (task: Task) => {
     setEditingTask({
@@ -421,68 +392,36 @@ export default function MainPage() {
         <div className="flex items-center justify-between gap-2 px-1 flex-wrap">
           <h2 className="text-lg font-semibold">Tasks</h2>
           <div className="flex items-center gap-2">
-            {selectionMode ? (
+            {hasCalendar && uncompletedTasks.length > 0 && (
               <>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={toggleSelectAll}
-                  data-testid="button-select-all"
+                  onClick={() => reloadCalendarMutation.mutate()}
+                  disabled={reloadCalendarMutation.isPending}
+                  data-testid="button-reload-calendar"
                 >
-                  {selectedTasks.size === uncompletedTasks.length ? "Deselect All" : "Select All"}
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  disabled={selectedTasks.size === 0 || bulkCompleteMutation.isPending}
-                  onClick={() => bulkCompleteMutation.mutate(Array.from(selectedTasks))}
-                  data-testid="button-bulk-complete"
-                >
-                  {bulkCompleteMutation.isPending ? (
+                  {reloadCalendarMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   ) : (
-                    <CheckCheck className="h-4 w-4 mr-2" />
+                    <RotateCw className="h-4 w-4 mr-2" />
                   )}
-                  Complete ({selectedTasks.size})
+                  Reload
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={exitSelectionMode}
-                  data-testid="button-cancel-selection"
+                  onClick={() => rescheduleAllMutation.mutate()}
+                  disabled={rescheduleAllMutation.isPending}
+                  data-testid="button-reschedule-all"
                 >
-                  <X className="h-4 w-4" />
+                  {rescheduleAllMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Reschedule All
                 </Button>
-              </>
-            ) : (
-              <>
-                {uncompletedTasks.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectionMode(true)}
-                    data-testid="button-selection-mode"
-                  >
-                    <CheckSquare className="h-4 w-4 mr-2" />
-                    Select
-                  </Button>
-                )}
-                {hasCalendar && uncompletedTasks.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => rescheduleAllMutation.mutate()}
-                    disabled={rescheduleAllMutation.isPending}
-                    data-testid="button-reschedule-all"
-                  >
-                    {rescheduleAllMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
-                    Reschedule All
-                  </Button>
-                )}
               </>
             )}
           </div>
@@ -618,34 +557,23 @@ export default function MainPage() {
                               </div>
                             ) : (
                               <div className="flex items-start gap-3">
-                                {!selectionMode && (
-                                  <div
-                                    {...provided.dragHandleProps}
-                                    className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground"
-                                  >
-                                    <GripVertical className="h-5 w-5" />
-                                  </div>
-                                )}
-                                {selectionMode ? (
-                                  <Checkbox
-                                    checked={selectedTasks.has(task.id)}
-                                    onCheckedChange={() => toggleTaskSelection(task.id)}
-                                    className="mt-0.5"
-                                    data-testid={`checkbox-select-${task.id}`}
-                                  />
-                                ) : (
-                                  <Checkbox
-                                    checked={false}
-                                    onCheckedChange={() =>
-                                      completeTaskMutation.mutate({
-                                        id: task.id,
-                                        completed: true,
-                                      })
-                                    }
-                                    className="mt-0.5"
-                                    data-testid={`checkbox-complete-${task.id}`}
-                                  />
-                                )}
+                                <div
+                                  {...provided.dragHandleProps}
+                                  className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground"
+                                >
+                                  <GripVertical className="h-5 w-5" />
+                                </div>
+                                <Checkbox
+                                  checked={false}
+                                  onCheckedChange={() =>
+                                    completeTaskMutation.mutate({
+                                      id: task.id,
+                                      completed: true,
+                                    })
+                                  }
+                                  className="mt-0.5"
+                                  data-testid={`checkbox-complete-${task.id}`}
+                                />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-medium">{task.title}</span>

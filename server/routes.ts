@@ -12,6 +12,7 @@ import {
   rescheduleAllUserTasks,
   updateCalendarEventContent,
   getCalendarEventsForTasks,
+  getCalendarEvent,
   EVENT_DELETED,
   type CalendarEventData
 } from "./calendar";
@@ -530,6 +531,42 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error rescheduling all tasks:", error);
       res.status(500).json({ error: "Failed to reschedule tasks" });
+    }
+  });
+
+  // Reload calendar data - fetch latest event times from Google Calendar
+  app.post("/api/tasks/reload", requireAuth, async (req, res) => {
+    try {
+      const settings = await storage.getUserSettings(req.user!.id);
+      if (!settings?.calendarId) {
+        return res.status(400).json({ error: "No calendar configured" });
+      }
+
+      const tasks = await storage.getTasksByUserId(req.user!.id);
+      const incompleteTasks = tasks.filter((t) => !t.completed && t.calendarEventId);
+
+      for (const task of incompleteTasks) {
+        const event = await getCalendarEvent(req.user!.id, task.calendarEventId!, settings.calendarId);
+        if (event) {
+          await storage.updateTask(task.id, {
+            scheduledStart: event.start,
+            scheduledEnd: event.end,
+          });
+        } else {
+          // Event may have been deleted externally - clear the reference
+          console.log(`Could not fetch event for task ${task.id}, clearing reference`);
+          await storage.updateTask(task.id, {
+            calendarEventId: null,
+            scheduledStart: null,
+            scheduledEnd: null,
+          });
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error reloading calendar data:", error);
+      res.status(500).json({ error: "Failed to reload calendar data" });
     }
   });
 
