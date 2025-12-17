@@ -18,15 +18,16 @@ export function stripEventTitlePrefix(summary: string): string {
   return summary;
 }
 
-// Helper to build event description without leading newlines
+// Helper to build event description: details first (if any), then actions
 function buildEventDescription(task: Task, completeLink: string, rescheduleLink: string): string {
   const parts: string[] = [];
-  parts.push(`Actions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`);
   if (task.details) {
-    parts.push(`\nDetails:\n${task.details}`);
+    parts.push(task.details);
+    parts.push('');
   }
+  parts.push(`Actions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`);
   parts.push(`\n---\n${APP_SIGNATURE}`);
-  return parts.join('');
+  return parts.join('\n');
 }
 
 // Helper to get hours and minutes in a specific timezone
