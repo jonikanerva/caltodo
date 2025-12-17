@@ -43,9 +43,18 @@ export function setupAuth(app: Express): void {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const callbackURL = process.env.REPLIT_DEV_DOMAIN
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/auth/google/callback`
-    : "http://localhost:5000/api/auth/google/callback";
+  // Priority: PRODUCTION_APP_URL (for deployed app) > REPLIT_DEV_DOMAIN (dev preview) > localhost
+  const getAppOrigin = () => {
+    if (process.env.PRODUCTION_APP_URL) {
+      return process.env.PRODUCTION_APP_URL;
+    }
+    if (process.env.REPLIT_DEV_DOMAIN) {
+      return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+    }
+    return "http://localhost:5000";
+  };
+
+  const callbackURL = `${getAppOrigin()}/api/auth/google/callback`;
 
   passport.use(
     new GoogleStrategy(
