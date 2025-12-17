@@ -323,6 +323,13 @@ export async function getCalendarEvent(
     });
 
     const event = response.data;
+    
+    // Check if event is cancelled/deleted
+    if (event.status === "cancelled") {
+      console.log(`Event ${eventId} has status: cancelled (deleted)`);
+      return null;
+    }
+    
     if (!event.start?.dateTime || !event.end?.dateTime) {
       return null;
     }
@@ -333,7 +340,8 @@ export async function getCalendarEvent(
     };
   } catch (error: any) {
     // Event might have been deleted from calendar
-    if (error?.code === 404) {
+    const statusCode = error?.code || error?.response?.status || error?.status;
+    if (statusCode === 404 || statusCode === 410) {
       return null;
     }
     console.error("Error fetching calendar event:", error?.message || error);
@@ -374,6 +382,13 @@ export async function getCalendarEventsForTasks(
       });
 
       const event = response.data;
+      
+      // Check if event is cancelled/deleted (Google Calendar returns status: "cancelled" for deleted events)
+      if (event.status === "cancelled") {
+        console.log(`Event ${eventId} has status: cancelled (deleted)`);
+        return { eventId, data: EVENT_DELETED };
+      }
+      
       if (event.start?.dateTime && event.end?.dateTime) {
         return {
           eventId,
@@ -387,8 +402,12 @@ export async function getCalendarEventsForTasks(
       }
       return { eventId, data: undefined };
     } catch (error: any) {
+      // Check for deleted events - Google API may return code in different places
+      const statusCode = error?.code || error?.response?.status || error?.status;
+      console.log(`Event ${eventId} fetch error - code: ${statusCode}, message: ${error?.message}`);
+      
       // Only mark as deleted for 404 (not found) or 410 (gone) errors
-      if (error?.code === 404 || error?.code === 410) {
+      if (statusCode === 404 || statusCode === 410) {
         return { eventId, data: EVENT_DELETED };
       }
       // For other errors (auth, rate limit, network), leave undefined (no change)
