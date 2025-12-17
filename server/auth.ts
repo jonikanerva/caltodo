@@ -22,6 +22,12 @@ declare global {
   }
 }
 
+declare module "express-session" {
+  interface SessionData {
+    csrfToken?: string;
+  }
+}
+
 export function setupAuth(app: Express): void {
   // Trust proxy for secure cookies behind Replit's load balancer
   app.set("trust proxy", 1);
@@ -68,6 +74,7 @@ export function setupAuth(app: Express): void {
         clientID: process.env.GOOGLE_CLIENT_ID!,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
         callbackURL,
+        passReqToCallback: true,
         scope: [
           "profile",
           "email",
@@ -75,8 +82,15 @@ export function setupAuth(app: Express): void {
           "https://www.googleapis.com/auth/calendar.events",
         ],
       },
-      async (accessToken, refreshToken, profile, done) => {
+      async (req, accessToken, refreshToken, profile, done) => {
         try {
+          await new Promise<void>((resolve, reject) => {
+            if (!req.session) {
+              return reject(new Error("Session not initialized"));
+            }
+            req.session.regenerate((err) => (err ? reject(err) : resolve()));
+          });
+
           let user = await storage.getUserByGoogleId(profile.id);
 
           if (user) {
