@@ -29,7 +29,8 @@ import {
   CheckCheck,
   RefreshCw,
   CheckSquare,
-  Trash2
+  Trash2,
+  Bell
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -41,6 +42,7 @@ interface CreateTaskInput {
   details: string;
   urgent: boolean;
   duration?: number;
+  reminderMinutes?: number;
 }
 
 interface EditingTask {
@@ -48,7 +50,17 @@ interface EditingTask {
   title: string;
   details: string;
   duration: number | null;
+  reminderMinutes: number | null;
 }
+
+const REMINDER_OPTIONS = [
+  { value: "0", label: "At time of event" },
+  { value: "5", label: "5 min before" },
+  { value: "10", label: "10 min before" },
+  { value: "15", label: "15 min before" },
+  { value: "30", label: "30 min before" },
+  { value: "60", label: "1 hour before" },
+];
 
 const DURATION_OPTIONS = [
   { value: "15", label: "15 min" },
@@ -125,8 +137,8 @@ export default function MainPage() {
   });
 
   const editTaskMutation = useMutation({
-    mutationFn: async ({ id, title, details, duration }: { id: string; title: string; details: string; duration: number | null }) => {
-      return apiRequest("PUT", `/api/tasks/${id}`, { title, details, duration });
+    mutationFn: async ({ id, title, details, duration, reminderMinutes }: { id: string; title: string; details: string; duration: number | null; reminderMinutes: number | null }) => {
+      return apiRequest("PUT", `/api/tasks/${id}`, { title, details, duration, reminderMinutes });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
@@ -239,6 +251,7 @@ export default function MainPage() {
       title: task.title,
       details: task.details || "",
       duration: task.duration,
+      reminderMinutes: task.reminderMinutes,
     });
   };
 
@@ -352,6 +365,27 @@ export default function MainPage() {
                     <SelectContent>
                       <SelectItem value="default">Default</SelectItem>
                       {DURATION_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm text-muted-foreground">Reminder:</Label>
+                  <Select
+                    value={newTask.reminderMinutes?.toString() || "none"}
+                    onValueChange={(val) => 
+                      setNewTask({ ...newTask, reminderMinutes: val === "none" ? undefined : parseInt(val) })
+                    }
+                  >
+                    <SelectTrigger className="w-32" data-testid="select-reminder">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No reminder</SelectItem>
+                      {REMINDER_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
                         </SelectItem>
@@ -506,26 +540,49 @@ export default function MainPage() {
                                   data-testid={`textarea-edit-details-${task.id}`}
                                 />
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <div className="flex items-center gap-2">
-                                    <Label className="text-sm text-muted-foreground">Duration:</Label>
-                                    <Select
-                                      value={editingTask.duration?.toString() || "default"}
-                                      onValueChange={(val) => 
-                                        setEditingTask({ ...editingTask, duration: val === "default" ? null : parseInt(val) })
-                                      }
-                                    >
-                                      <SelectTrigger className="w-28" data-testid={`select-edit-duration-${task.id}`}>
-                                        <SelectValue placeholder="Default" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="default">Default</SelectItem>
-                                        {DURATION_OPTIONS.map((opt) => (
-                                          <SelectItem key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                  <div className="flex items-center gap-4 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                      <Label className="text-sm text-muted-foreground">Duration:</Label>
+                                      <Select
+                                        value={editingTask.duration?.toString() || "default"}
+                                        onValueChange={(val) => 
+                                          setEditingTask({ ...editingTask, duration: val === "default" ? null : parseInt(val) })
+                                        }
+                                      >
+                                        <SelectTrigger className="w-28" data-testid={`select-edit-duration-${task.id}`}>
+                                          <SelectValue placeholder="Default" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="default">Default</SelectItem>
+                                          {DURATION_OPTIONS.map((opt) => (
+                                            <SelectItem key={opt.value} value={opt.value}>
+                                              {opt.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Label className="text-sm text-muted-foreground">Reminder:</Label>
+                                      <Select
+                                        value={editingTask.reminderMinutes?.toString() || "none"}
+                                        onValueChange={(val) => 
+                                          setEditingTask({ ...editingTask, reminderMinutes: val === "none" ? null : parseInt(val) })
+                                        }
+                                      >
+                                        <SelectTrigger className="w-32" data-testid={`select-edit-reminder-${task.id}`}>
+                                          <SelectValue placeholder="None" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="none">No reminder</SelectItem>
+                                          {REMINDER_OPTIONS.map((opt) => (
+                                            <SelectItem key={opt.value} value={opt.value}>
+                                              {opt.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <Button
@@ -603,6 +660,12 @@ export default function MainPage() {
                                   {task.duration && (
                                     <Badge variant="outline" className="gap-1 text-xs">
                                       {task.duration >= 60 ? `${task.duration / 60}h` : `${task.duration}m`}
+                                    </Badge>
+                                  )}
+                                  {task.reminderMinutes !== null && task.reminderMinutes !== undefined && (
+                                    <Badge variant="outline" className="gap-1 text-xs">
+                                      <Bell className="h-3 w-3" />
+                                      {task.reminderMinutes === 0 ? "At start" : `${task.reminderMinutes}m`}
                                     </Badge>
                                   )}
                                   {task.scheduledStart && (

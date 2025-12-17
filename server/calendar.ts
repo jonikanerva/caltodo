@@ -146,21 +146,37 @@ export async function createCalendarEvent(
   const description = `${task.details || ""}\n\n---\n${APP_IDENTIFIER}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`;
 
   try {
+    const requestBody: calendar_v3.Schema$Event = {
+      summary: `${APP_IDENTIFIER} ${task.title}`,
+      description,
+      start: {
+        dateTime: slot.start.toISOString(),
+        timeZone: settings.timezone,
+      },
+      end: {
+        dateTime: slot.end.toISOString(),
+        timeZone: settings.timezone,
+      },
+      colorId: settings.eventColor,
+    };
+
+    if (task.reminderMinutes !== null && task.reminderMinutes !== undefined) {
+      requestBody.reminders = {
+        useDefault: false,
+        overrides: [
+          { method: "popup", minutes: task.reminderMinutes },
+        ],
+      };
+    } else {
+      requestBody.reminders = {
+        useDefault: false,
+        overrides: [],
+      };
+    }
+
     const response = await calendar.events.insert({
       calendarId: settings.calendarId,
-      requestBody: {
-        summary: `${APP_IDENTIFIER} ${task.title}`,
-        description,
-        start: {
-          dateTime: slot.start.toISOString(),
-          timeZone: settings.timezone,
-        },
-        end: {
-          dateTime: slot.end.toISOString(),
-          timeZone: settings.timezone,
-        },
-        colorId: settings.eventColor,
-      },
+      requestBody,
     });
 
     return response.data.id || null;
@@ -190,22 +206,38 @@ export async function updateCalendarEvent(
   const description = `${task.details || ""}\n\n---\n${APP_IDENTIFIER}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`;
 
   try {
+    const requestBody: calendar_v3.Schema$Event = {
+      summary: `${APP_IDENTIFIER} ${task.title}`,
+      description,
+      start: {
+        dateTime: slot.start.toISOString(),
+        timeZone: settings.timezone,
+      },
+      end: {
+        dateTime: slot.end.toISOString(),
+        timeZone: settings.timezone,
+      },
+      colorId: settings.eventColor,
+    };
+
+    if (task.reminderMinutes !== null && task.reminderMinutes !== undefined) {
+      requestBody.reminders = {
+        useDefault: false,
+        overrides: [
+          { method: "popup", minutes: task.reminderMinutes },
+        ],
+      };
+    } else {
+      requestBody.reminders = {
+        useDefault: false,
+        overrides: [],
+      };
+    }
+
     await calendar.events.update({
       calendarId: settings.calendarId,
       eventId,
-      requestBody: {
-        summary: `${APP_IDENTIFIER} ${task.title}`,
-        description,
-        start: {
-          dateTime: slot.start.toISOString(),
-          timeZone: settings.timezone,
-        },
-        end: {
-          dateTime: slot.end.toISOString(),
-          timeZone: settings.timezone,
-        },
-        colorId: settings.eventColor,
-      },
+      requestBody,
     });
     return true;
   } catch (error) {

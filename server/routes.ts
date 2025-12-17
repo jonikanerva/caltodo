@@ -7,6 +7,7 @@ import {
   listCalendars, 
   findFreeSlot, 
   createCalendarEvent, 
+  updateCalendarEvent,
   deleteCalendarEvent,
   rescheduleAllUserTasks,
   updateCalendarEventContent
@@ -136,6 +137,7 @@ export async function registerRoutes(
         title: data.title,
         details: data.details || null,
         duration: data.duration || null,
+        reminderMinutes: data.reminderMinutes ?? null,
         urgent: data.urgent,
         priority,
         completed: false,
@@ -184,11 +186,13 @@ export async function registerRoutes(
       }
 
       const durationChanged = data.duration !== undefined && data.duration !== task.duration;
+      const reminderChanged = data.reminderMinutes !== undefined && data.reminderMinutes !== task.reminderMinutes;
       
       const updatedTask = await storage.updateTask(id, {
         title: data.title || task.title,
         details: data.details !== undefined ? data.details : task.details,
         duration: data.duration !== undefined ? data.duration : task.duration,
+        reminderMinutes: data.reminderMinutes !== undefined ? data.reminderMinutes : task.reminderMinutes,
       });
 
       const settings = await storage.getUserSettings(req.user!.id);
@@ -196,6 +200,15 @@ export async function registerRoutes(
       if (task.calendarEventId && settings?.calendarId && updatedTask) {
         if (durationChanged) {
           await rescheduleAllUserTasks(req.user!.id, getBaseUrl(req));
+        } else if (reminderChanged && task.scheduledStart && task.scheduledEnd) {
+          await updateCalendarEvent(
+            req.user!.id,
+            task.calendarEventId,
+            settings,
+            { start: task.scheduledStart, end: task.scheduledEnd },
+            updatedTask,
+            getBaseUrl(req)
+          );
         } else {
           await updateCalendarEventContent(
             req.user!.id,
