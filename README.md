@@ -94,6 +94,7 @@ GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 SESSION_SECRET=any-random-string-for-session-encryption
 ACTION_TOKEN_SECRET=another-random-string-for-action-links
+TOKEN_ENCRYPTION_KEY=32+_char_random_key_for_token_encryption
 ```
 
 ### Installation
@@ -135,6 +136,7 @@ GOOGLE_CLIENT_ID=your-production-client-id
 GOOGLE_CLIENT_SECRET=your-production-client-secret
 SESSION_SECRET=strong-random-secret-min-32-chars
 ACTION_TOKEN_SECRET=another-strong-random-secret-min-32-chars
+TOKEN_ENCRYPTION_KEY=strong-32-char-key-for-encryption
 NODE_ENV=production
 PRODUCTION_APP_URL=https://your-domain.com
 ```

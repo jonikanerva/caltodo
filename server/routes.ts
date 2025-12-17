@@ -49,14 +49,11 @@ function getBaseUrl(req: any): string {
     return configuredOrigin;
   }
 
-  const hostHeader =
-    (typeof req.get === "function" ? req.get("host") : undefined) ||
-    req.headers?.host ||
-    "";
-  const host = hostHeader.split(",")[0].trim();
-  const protocol = req.protocol === "https" ? "https" : "http";
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("PRODUCTION_APP_URL must be set in production to build trusted action links");
+  }
 
-  return normalize(`${protocol}://${host || "localhost:5000"}`) || "http://localhost:5000";
+  return "http://localhost:5000";
 }
 
 const patchTaskSchema = updateTaskSchema.extend({

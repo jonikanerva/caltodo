@@ -1,11 +1,17 @@
-import { 
-  users, userSettings, tasks,
-  type User, type InsertUser, 
-  type UserSettings, type InsertUserSettings,
-  type Task, type InsertTask
+import {
+  users,
+  userSettings,
+  tasks,
+  type User,
+  type InsertUser,
+  type UserSettings,
+  type InsertUserSettings,
+  type Task,
+  type InsertTask,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc } from "drizzle-orm";
+import { decryptToken, encryptToken } from "./crypto";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -27,24 +33,48 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private decryptUserTokens(user: User | undefined): User | undefined {
+    if (!user) return undefined;
+    return {
+      ...user,
+      accessToken: decryptToken(user.accessToken) ?? null,
+      refreshToken: decryptToken(user.refreshToken) ?? null,
+    };
+  }
+
+  private withEncryptedTokens(data: Partial<InsertUser>): Partial<InsertUser> {
+    const result = { ...data };
+    if (Object.prototype.hasOwnProperty.call(result, "accessToken")) {
+      result.accessToken = encryptToken(result.accessToken) ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(result, "refreshToken")) {
+      result.refreshToken = encryptToken(result.refreshToken) ?? null;
+    }
+    return result;
+  }
+
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || undefined;
+    return this.decryptUserTokens(user) || undefined;
   }
 
   async getUserByGoogleId(googleId: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
-    return user || undefined;
+    return this.decryptUserTokens(user) || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
+    const [user] = await db.insert(users).values(this.withEncryptedTokens(insertUser)).returning();
+    return this.decryptUserTokens(user)!;
   }
 
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
-    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
-    return user || undefined;
+    const [user] = await db
+      .update(users)
+      .set(this.withEncryptedTokens(data))
+      .where(eq(users.id, id))
+      .returning();
+    return this.decryptUserTokens(user) || undefined;
   }
 
   async getUserSettings(userId: string): Promise<UserSettings | undefined> {
