@@ -5,6 +5,54 @@ import { generateActionToken } from "./tokens";
 
 const APP_SIGNATURE = "Created by CalTodo";
 
+// Helper to get hours and minutes in a specific timezone
+function getTimeInTimezone(date: Date, timezone: string): { hours: number; minutes: number; dayOfWeek: number } {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    minute: 'numeric',
+    weekday: 'short',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const hours = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+  const minutes = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+  const weekdayStr = parts.find(p => p.type === 'weekday')?.value || 'Mon';
+  const dayMap: Record<string, number> = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+  const dayOfWeek = dayMap[weekdayStr] ?? 1;
+  return { hours, minutes, dayOfWeek };
+}
+
+// Helper to set time to a specific hour in user's timezone
+function setToHourInTimezone(date: Date, hour: number, timezone: string): Date {
+  // Get current time in user's timezone
+  const { hours: currentHours, minutes: currentMinutes } = getTimeInTimezone(date, timezone);
+  const currentTotalMinutes = currentHours * 60 + currentMinutes;
+  const targetTotalMinutes = hour * 60;
+  const diffMinutes = targetTotalMinutes - currentTotalMinutes;
+  
+  const result = new Date(date);
+  result.setMinutes(result.getMinutes() + diffMinutes);
+  result.setSeconds(0);
+  result.setMilliseconds(0);
+  return result;
+}
+
+// Helper to advance to next day at a specific hour in user's timezone
+function advanceToNextDayAtHour(date: Date, hour: number, timezone: string): Date {
+  // First, go to the target hour today
+  let result = setToHourInTimezone(date, hour, timezone);
+  // Then add 24 hours
+  result.setTime(result.getTime() + 24 * 60 * 60 * 1000);
+  // Adjust for DST by ensuring we're exactly at the target hour
+  const { hours } = getTimeInTimezone(result, timezone);
+  if (hours !== hour) {
+    const diff = hour - hours;
+    result.setHours(result.getHours() + diff);
+  }
+  return result;
+}
+
 export async function getCalendarClient(userId: string): Promise<calendar_v3.Calendar | null> {
   const user = await storage.getUser(userId);
   console.log("getCalendarClient - user found:", !!user, "hasAccessToken:", !!user?.accessToken, "hasRefreshToken:", !!user?.refreshToken);
@@ -65,6 +113,7 @@ export async function findFreeSlot(
   const calendar = await getCalendarClient(userId);
   if (!calendar || !settings.calendarId) return null;
 
+  const timezone = settings.timezone || 'UTC';
   const now = afterTime || new Date();
   const searchEndDate = new Date(now);
   searchEndDate.setDate(searchEndDate.getDate() + 14);
@@ -81,32 +130,34 @@ export async function findFreeSlot(
     const events = response.data.items || [];
     
     let currentDate = new Date(now);
+    // Round up to next 15-minute interval
     currentDate.setMinutes(Math.ceil(currentDate.getMinutes() / 15) * 15);
     currentDate.setSeconds(0);
     currentDate.setMilliseconds(0);
 
     while (currentDate < searchEndDate) {
-      const dayOfWeek = currentDate.getDay();
+      // Get current time in user's timezone
+      const { hours: currentHour, minutes: currentMinute, dayOfWeek } = getTimeInTimezone(currentDate, timezone);
+      
+      // Skip weekends
       if (dayOfWeek === 0 || dayOfWeek === 6) {
-        currentDate.setDate(currentDate.getDate() + 1);
-        currentDate.setHours(settings.workStartHour, 0, 0, 0);
+        currentDate = advanceToNextDayAtHour(currentDate, settings.workStartHour, timezone);
         continue;
       }
 
-      const currentHour = currentDate.getHours();
-      const currentMinute = currentDate.getMinutes();
       const currentTimeMinutes = currentHour * 60 + currentMinute;
       const workStartMinutes = settings.workStartHour * 60;
       const workEndMinutes = settings.workEndHour * 60;
 
+      // If before work hours, jump to work start
       if (currentTimeMinutes < workStartMinutes) {
-        currentDate.setHours(settings.workStartHour, 0, 0, 0);
+        currentDate = setToHourInTimezone(currentDate, settings.workStartHour, timezone);
         continue;
       }
 
+      // If task would extend past work hours, go to next day
       if (currentTimeMinutes + durationMinutes > workEndMinutes) {
-        currentDate.setDate(currentDate.getDate() + 1);
-        currentDate.setHours(settings.workStartHour, 0, 0, 0);
+        currentDate = advanceToNextDayAtHour(currentDate, settings.workStartHour, timezone);
         continue;
       }
 
