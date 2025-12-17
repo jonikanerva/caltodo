@@ -33,17 +33,24 @@ export async function getCalendarClient(userId: string): Promise<calendar_v3.Cal
 
 export async function listCalendars(userId: string): Promise<{ id: string; summary: string; primary?: boolean }[]> {
   const calendar = await getCalendarClient(userId);
-  if (!calendar) return [];
+  if (!calendar) {
+    console.error("No calendar client available for user:", userId);
+    return [];
+  }
 
   try {
     const response = await calendar.calendarList.list();
+    console.log("Calendar API response items:", response.data.items?.length || 0);
     return (response.data.items || []).map((cal) => ({
       id: cal.id || "",
       summary: cal.summary || "",
       primary: cal.primary || false,
     }));
-  } catch (error) {
-    console.error("Error listing calendars:", error);
+  } catch (error: any) {
+    console.error("Error listing calendars:", error?.message || error);
+    if (error?.response?.data) {
+      console.error("API error details:", JSON.stringify(error.response.data));
+    }
     return [];
   }
 }

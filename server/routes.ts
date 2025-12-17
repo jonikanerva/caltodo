@@ -101,9 +101,12 @@ export async function registerRoutes(
 
   app.get("/api/calendars", requireAuth, async (req, res) => {
     try {
+      console.log("Fetching calendars for user:", req.user!.id);
       const calendars = await listCalendars(req.user!.id);
+      console.log("Calendars found:", calendars.length);
       res.json(calendars);
     } catch (error) {
+      console.error("Error fetching calendars:", error);
       res.status(500).json({ error: "Failed to list calendars" });
     }
   });
