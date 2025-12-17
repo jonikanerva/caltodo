@@ -308,6 +308,103 @@ export async function updateCalendarEventContent(
   }
 }
 
+export async function getCalendarEvent(
+  userId: string,
+  eventId: string,
+  calendarId: string
+): Promise<{ start: Date; end: Date } | null> {
+  const calendar = await getCalendarClient(userId);
+  if (!calendar) return null;
+
+  try {
+    const response = await calendar.events.get({
+      calendarId,
+      eventId,
+    });
+
+    const event = response.data;
+    if (!event.start?.dateTime || !event.end?.dateTime) {
+      return null;
+    }
+
+    return {
+      start: new Date(event.start.dateTime),
+      end: new Date(event.end.dateTime),
+    };
+  } catch (error: any) {
+    // Event might have been deleted from calendar
+    if (error?.code === 404) {
+      return null;
+    }
+    console.error("Error fetching calendar event:", error?.message || error);
+    return null;
+  }
+}
+
+export interface CalendarEventData {
+  eventId: string;
+  start: Date;
+  end: Date;
+  summary?: string;
+}
+
+// Special marker for deleted events (404/410 errors)
+export const EVENT_DELETED = "__EVENT_DELETED__" as const;
+
+export type CalendarEventResult = CalendarEventData | typeof EVENT_DELETED | undefined;
+
+export async function getCalendarEventsForTasks(
+  userId: string,
+  calendarId: string,
+  eventIds: string[]
+): Promise<Map<string, CalendarEventResult>> {
+  const calendar = await getCalendarClient(userId);
+  const results = new Map<string, CalendarEventResult>();
+  
+  if (!calendar || eventIds.length === 0) {
+    return results;
+  }
+
+  // Fetch events in parallel for better performance
+  const promises = eventIds.map(async (eventId) => {
+    try {
+      const response = await calendar.events.get({
+        calendarId,
+        eventId,
+      });
+
+      const event = response.data;
+      if (event.start?.dateTime && event.end?.dateTime) {
+        return {
+          eventId,
+          data: {
+            eventId,
+            start: new Date(event.start.dateTime),
+            end: new Date(event.end.dateTime),
+            summary: event.summary || undefined,
+          } as CalendarEventData,
+        };
+      }
+      return { eventId, data: undefined };
+    } catch (error: any) {
+      // Only mark as deleted for 404 (not found) or 410 (gone) errors
+      if (error?.code === 404 || error?.code === 410) {
+        return { eventId, data: EVENT_DELETED };
+      }
+      // For other errors (auth, rate limit, network), leave undefined (no change)
+      console.error(`Error fetching event ${eventId}:`, error?.message || error);
+      return { eventId, data: undefined };
+    }
+  });
+
+  const eventResults = await Promise.all(promises);
+  for (const result of eventResults) {
+    results.set(result.eventId, result.data);
+  }
+
+  return results;
+}
+
 export async function rescheduleAllUserTasks(userId: string, baseUrl: string): Promise<void> {
   const settings = await storage.getUserSettings(userId);
   if (!settings?.calendarId) return;

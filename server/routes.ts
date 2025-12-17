@@ -10,7 +10,10 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
   rescheduleAllUserTasks,
-  updateCalendarEventContent
+  updateCalendarEventContent,
+  getCalendarEventsForTasks,
+  EVENT_DELETED,
+  type CalendarEventData
 } from "./calendar";
 import { setupCronJobs } from "./cron";
 import { createTaskSchema, updateSettingsSchema, updateTaskSchema } from "@shared/schema";
@@ -181,8 +184,62 @@ export async function registerRoutes(
   app.get("/api/tasks", requireAuth, async (req, res) => {
     try {
       const tasks = await storage.getTasksByUserId(req.user!.id);
-      res.json(tasks);
+      const settings = await storage.getUserSettings(req.user!.id);
+      
+      // Get event IDs for tasks that have calendar events
+      const eventIds = tasks
+        .filter(t => t.calendarEventId && !t.completed)
+        .map(t => t.calendarEventId as string);
+      
+      // Fetch live event data from Google Calendar
+      const calendarEvents = settings?.calendarId && eventIds.length > 0
+        ? await getCalendarEventsForTasks(req.user!.id, settings.calendarId, eventIds)
+        : new Map<string, CalendarEventData | typeof EVENT_DELETED | undefined>();
+      
+      // Track which task IDs had their events deleted
+      const deletedEventTaskIds = new Set<string>();
+      
+      // Clear calendarEventId for tasks whose events were deleted (404/410 only)
+      for (const task of tasks) {
+        if (task.calendarEventId && calendarEvents.get(task.calendarEventId) === EVENT_DELETED) {
+          await storage.updateTask(task.id, {
+            calendarEventId: null,
+            scheduledStart: null,
+            scheduledEnd: null,
+          });
+          deletedEventTaskIds.add(task.id);
+        }
+      }
+      
+      // Enrich tasks with live calendar data
+      const enrichedTasks = tasks.map(task => {
+        // If event was deleted, return task with cleared calendar fields
+        if (deletedEventTaskIds.has(task.id)) {
+          return {
+            ...task,
+            calendarEventId: null,
+            scheduledStart: null,
+            scheduledEnd: null,
+          };
+        }
+        
+        // Enrich with live calendar data if available
+        if (task.calendarEventId && !task.completed) {
+          const eventData = calendarEvents.get(task.calendarEventId);
+          if (eventData && eventData !== EVENT_DELETED) {
+            return {
+              ...task,
+              scheduledStart: eventData.start,
+              scheduledEnd: eventData.end,
+            };
+          }
+        }
+        return task;
+      });
+      
+      res.json(enrichedTasks);
     } catch (error) {
+      console.error("Error fetching tasks:", error);
       res.status(500).json({ error: "Failed to get tasks" });
     }
   });
