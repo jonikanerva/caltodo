@@ -5,6 +5,17 @@ import { generateActionToken } from "./tokens";
 
 const APP_SIGNATURE = "Created by CalTodo";
 
+// Helper to build event description without leading newlines
+function buildEventDescription(task: Task, completeLink: string, rescheduleLink: string): string {
+  const parts: string[] = [];
+  parts.push(`Actions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`);
+  if (task.details) {
+    parts.push(`\nDetails:\n${task.details}`);
+  }
+  parts.push(`\n---\n${APP_SIGNATURE}`);
+  return parts.join('');
+}
+
 // Helper to get hours and minutes in a specific timezone
 function getTimeInTimezone(date: Date, timezone: string): { hours: number; minutes: number; dayOfWeek: number } {
   const formatter = new Intl.DateTimeFormat('en-US', {
@@ -202,12 +213,13 @@ export async function createCalendarEvent(
   const completeLink = `${baseUrl}/api/action/${completeToken}`;
   const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
 
-  const description = `${task.details || ""}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}\n\n---\n${APP_SIGNATURE}`;
+  const description = buildEventDescription(task, completeLink, rescheduleLink);
 
   try {
     const requestBody: calendar_v3.Schema$Event = {
       summary: task.title,
       description,
+      visibility: "private",
       start: {
         dateTime: slot.start.toISOString(),
         timeZone: settings.timezone,
@@ -267,12 +279,13 @@ export async function updateCalendarEvent(
   const completeLink = `${baseUrl}/api/action/${completeToken}`;
   const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
 
-  const description = `${task.details || ""}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}\n\n---\n${APP_SIGNATURE}`;
+  const description = buildEventDescription(task, completeLink, rescheduleLink);
 
   try {
     const requestBody: calendar_v3.Schema$Event = {
       summary: task.title,
       description,
+      visibility: "private",
       start: {
         dateTime: slot.start.toISOString(),
         timeZone: settings.timezone,
@@ -351,7 +364,7 @@ export async function updateCalendarEventContent(
   const completeLink = `${baseUrl}/api/action/${completeToken}`;
   const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
 
-  const description = `${task.details || ""}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}\n\n---\n${APP_SIGNATURE}`;
+  const description = buildEventDescription(task, completeLink, rescheduleLink);
 
   try {
     await calendar.events.patch({
@@ -360,6 +373,7 @@ export async function updateCalendarEventContent(
       requestBody: {
         summary: task.title,
         description,
+        visibility: "private",
         extendedProperties: {
           private: {
             caltodoTaskId: task.id,
