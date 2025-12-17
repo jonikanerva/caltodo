@@ -114,7 +114,13 @@ export async function registerRoutes(
       if (err) {
         return res.status(500).json({ error: "Logout failed" });
       }
-      res.json({ success: true });
+      if (req.session) {
+        req.session.destroy(() => {
+          res.json({ success: true });
+        });
+      } else {
+        res.json({ success: true });
+      }
     });
   });
 
@@ -168,8 +174,6 @@ export async function registerRoutes(
         userId: user?.id,
         hasAccessToken: !!user?.accessToken,
         hasRefreshToken: !!user?.refreshToken,
-        accessTokenLength: user?.accessToken?.length || 0,
-        refreshTokenLength: user?.refreshToken?.length || 0,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to get debug info" });
