@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -51,7 +51,11 @@ export const tasks = pgTable("tasks", {
   priority: integer("priority").notNull().default(0),
   urgent: boolean("urgent").notNull().default(false),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  tasksUserCompletedPriorityIdx: index("tasks_user_completed_priority_idx")
+    .on(table.userId, table.completed, table.priority),
+  tasksCalendarEventIdx: index("tasks_calendar_event_idx").on(table.calendarEventId),
+}));
 
 export const tasksRelations = relations(tasks, ({ one }) => ({
   user: one(users, {
