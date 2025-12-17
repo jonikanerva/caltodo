@@ -133,7 +133,8 @@ export async function findFreeSlot(
   userId: string,
   settings: UserSettings,
   durationMinutes: number,
-  afterTime?: Date
+  afterTime?: Date,
+  excludeCalTodoEvents: boolean = false
 ): Promise<{ start: Date; end: Date } | null> {
   const calendar = await getCalendarClient(userId);
   if (!calendar || !settings.calendarId) return null;
@@ -152,7 +153,15 @@ export async function findFreeSlot(
       orderBy: "startTime",
     });
 
-    const events = response.data.items || [];
+    let events = response.data.items || [];
+    
+    // When rescheduling, exclude CalTodo-managed events from conflict check
+    if (excludeCalTodoEvents) {
+      events = events.filter(event => {
+        const caltodoTaskId = event.extendedProperties?.private?.caltodoTaskId;
+        return !caltodoTaskId;
+      });
+    }
     
     let currentDate = new Date(now);
     // Round up to next 15-minute interval
@@ -518,37 +527,6 @@ export async function getCalendarEventsForTasks(
   return results;
 }
 
-// Helper to check if a slot is valid (within work hours, not in past, not on weekend)
-function isSlotValid(
-  slotStart: Date, 
-  slotEnd: Date, 
-  settings: UserSettings, 
-  mustBeAfter?: Date
-): boolean {
-  const now = new Date();
-  const timezone = settings.timezone || 'UTC';
-  
-  // Check if slot is in the past
-  if (slotEnd <= now) return false;
-  
-  // Check if slot starts before the required time
-  if (mustBeAfter && slotStart < mustBeAfter) return false;
-  
-  // Check if slot is within work hours
-  const { hours: startHour, dayOfWeek } = getTimeInTimezone(slotStart, timezone);
-  const { hours: endHour, minutes: endMinutes } = getTimeInTimezone(slotEnd, timezone);
-  const endTimeMinutes = endHour * 60 + endMinutes;
-  
-  // Skip weekends
-  if (dayOfWeek === 0 || dayOfWeek === 6) return false;
-  
-  // Check work hours
-  if (startHour < settings.workStartHour) return false;
-  if (endTimeMinutes > settings.workEndHour * 60) return false;
-  
-  return true;
-}
-
 export async function rescheduleAllUserTasks(userId: string, baseUrl: string): Promise<void> {
   const settings = await storage.getUserSettings(userId);
   if (!settings?.calendarId) return;
@@ -561,36 +539,36 @@ export async function rescheduleAllUserTasks(userId: string, baseUrl: string): P
   for (const task of sortedTasks) {
     const taskDuration = task.duration || settings.defaultDuration;
     
-    // Check if current slot is still valid
-    if (task.scheduledStart && task.scheduledEnd && task.calendarEventId) {
-      const slotStart = new Date(task.scheduledStart);
-      const slotEnd = new Date(task.scheduledEnd);
-      
-      if (isSlotValid(slotStart, slotEnd, settings, lastSlotEnd)) {
-        // Current slot is valid, keep it
-        lastSlotEnd = slotEnd;
-        continue;
-      }
+    // Find the optimal slot, excluding all CalTodo events from conflict check
+    const optimalSlot = await findFreeSlot(userId, settings, taskDuration, lastSlotEnd, true);
+    if (!optimalSlot) continue;
+    
+    // Check if current slot matches the optimal slot (within 1 minute tolerance)
+    const currentStart = task.scheduledStart ? new Date(task.scheduledStart).getTime() : 0;
+    const optimalStart = optimalSlot.start.getTime();
+    const slotMatches = task.calendarEventId && Math.abs(currentStart - optimalStart) < 60000;
+    
+    if (slotMatches) {
+      // Current slot is already optimal, keep it
+      lastSlotEnd = new Date(task.scheduledEnd!);
+      continue;
     }
     
-    // Need to find a new slot
-    const slot = await findFreeSlot(userId, settings, taskDuration, lastSlotEnd);
-    if (!slot) continue;
-
+    // Need to update to the optimal slot
     if (task.calendarEventId) {
-      await updateCalendarEvent(userId, task.calendarEventId, settings, slot, task, baseUrl);
+      await updateCalendarEvent(userId, task.calendarEventId, settings, optimalSlot, task, baseUrl);
     } else {
-      const eventId = await createCalendarEvent(userId, task, settings, slot, baseUrl);
+      const eventId = await createCalendarEvent(userId, task, settings, optimalSlot, baseUrl);
       if (eventId) {
         await storage.updateTask(task.id, { calendarEventId: eventId });
       }
     }
 
     await storage.updateTask(task.id, {
-      scheduledStart: slot.start,
-      scheduledEnd: slot.end,
+      scheduledStart: optimalSlot.start,
+      scheduledEnd: optimalSlot.end,
     });
 
-    lastSlotEnd = slot.end;
+    lastSlotEnd = optimalSlot.end;
   }
 }
