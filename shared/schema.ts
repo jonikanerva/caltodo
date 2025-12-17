@@ -41,6 +41,7 @@ export const tasks = pgTable("tasks", {
   userId: varchar("user_id").notNull().references(() => users.id),
   title: text("title").notNull(),
   details: text("details"),
+  duration: integer("duration"),
   calendarEventId: text("calendar_event_id"),
   scheduledStart: timestamp("scheduled_start"),
   scheduledEnd: timestamp("scheduled_end"),
@@ -66,11 +67,13 @@ export const createTaskSchema = z.object({
   title: z.string().min(1, "Title is required"),
   details: z.string().optional(),
   urgent: z.boolean().optional().default(false),
+  duration: z.number().min(15).max(480).optional(),
 });
 
 export const updateTaskSchema = z.object({
   title: z.string().min(1, "Title is required").optional(),
   details: z.string().optional(),
+  duration: z.number().min(15).max(480).nullable().optional(),
 });
 
 export const updateSettingsSchema = z.object({

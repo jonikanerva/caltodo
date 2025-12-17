@@ -278,7 +278,8 @@ export async function rescheduleAllUserTasks(userId: string, baseUrl: string): P
   let lastSlotEnd: Date | undefined;
 
   for (const task of sortedTasks) {
-    const slot = await findFreeSlot(userId, settings, settings.defaultDuration, lastSlotEnd);
+    const taskDuration = task.duration || settings.defaultDuration;
+    const slot = await findFreeSlot(userId, settings, taskDuration, lastSlotEnd);
     if (!slot) continue;
 
     if (task.calendarEventId) {

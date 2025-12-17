@@ -135,13 +135,15 @@ export async function registerRoutes(
         userId: req.user!.id,
         title: data.title,
         details: data.details || null,
+        duration: data.duration || null,
         urgent: data.urgent,
         priority,
         completed: false,
       });
 
       if (settings?.calendarId) {
-        const slot = await findFreeSlot(req.user!.id, settings, settings.defaultDuration);
+        const taskDuration = task.duration || settings.defaultDuration;
+        const slot = await findFreeSlot(req.user!.id, settings, taskDuration);
         
         if (slot) {
           const eventId = await createCalendarEvent(
@@ -168,6 +170,47 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error creating task:", error);
       res.status(400).json({ error: "Failed to create task" });
+    }
+  });
+
+  app.put("/api/tasks/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const data = updateTaskSchema.parse(req.body);
+      const task = await storage.getTask(id);
+      
+      if (!task || task.userId !== req.user!.id) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+
+      const durationChanged = data.duration !== undefined && data.duration !== task.duration;
+      
+      const updatedTask = await storage.updateTask(id, {
+        title: data.title || task.title,
+        details: data.details !== undefined ? data.details : task.details,
+        duration: data.duration !== undefined ? data.duration : task.duration,
+      });
+
+      const settings = await storage.getUserSettings(req.user!.id);
+      
+      if (task.calendarEventId && settings?.calendarId && updatedTask) {
+        if (durationChanged) {
+          await rescheduleAllUserTasks(req.user!.id, getBaseUrl(req));
+        } else {
+          await updateCalendarEventContent(
+            req.user!.id,
+            task.calendarEventId,
+            settings,
+            updatedTask,
+            getBaseUrl(req)
+          );
+        }
+      }
+
+      res.json(updatedTask);
+    } catch (error) {
+      console.error("Error updating task:", error);
+      res.status(400).json({ error: "Failed to update task" });
     }
   });
 
@@ -258,6 +301,66 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error reordering tasks:", error);
       res.status(500).json({ error: "Failed to reorder tasks" });
+    }
+  });
+
+  app.post("/api/tasks/bulk-complete", requireAuth, async (req, res) => {
+    try {
+      const { taskIds } = req.body;
+      
+      if (!Array.isArray(taskIds)) {
+        return res.status(400).json({ error: "taskIds must be an array" });
+      }
+
+      const settings = await storage.getUserSettings(req.user!.id);
+
+      for (const taskId of taskIds) {
+        const task = await storage.getTask(taskId);
+        if (!task || task.userId !== req.user!.id) continue;
+
+        if (task.calendarEventId && settings?.calendarId) {
+          await deleteCalendarEvent(req.user!.id, task.calendarEventId, settings.calendarId);
+        }
+
+        await storage.updateTask(taskId, {
+          completed: true,
+          completedAt: new Date(),
+          calendarEventId: null,
+          scheduledStart: null,
+          scheduledEnd: null,
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error bulk completing tasks:", error);
+      res.status(500).json({ error: "Failed to complete tasks" });
+    }
+  });
+
+  app.post("/api/tasks/reschedule-all", requireAuth, async (req, res) => {
+    try {
+      await rescheduleAllUserTasks(req.user!.id, getBaseUrl(req));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error rescheduling all tasks:", error);
+      res.status(500).json({ error: "Failed to reschedule tasks" });
+    }
+  });
+
+  app.delete("/api/tasks/completed", requireAuth, async (req, res) => {
+    try {
+      const tasks = await storage.getTasksByUserId(req.user!.id);
+      const completedTasks = tasks.filter((t) => t.completed);
+
+      for (const task of completedTasks) {
+        await storage.deleteTask(task.id);
+      }
+
+      res.json({ success: true, deleted: completedTasks.length });
+    } catch (error) {
+      console.error("Error deleting completed tasks:", error);
+      res.status(500).json({ error: "Failed to delete completed tasks" });
     }
   });
 
@@ -415,7 +518,8 @@ export async function registerRoutes(
           await deleteCalendarEvent(task.userId, task.calendarEventId, settings.calendarId);
         }
 
-        const slot = await findFreeSlot(task.userId, settings, settings.defaultDuration);
+        const taskDuration = task.duration || settings.defaultDuration;
+        const slot = await findFreeSlot(task.userId, settings, taskDuration);
         
         if (slot) {
           const eventId = await createCalendarEvent(
