@@ -3,7 +3,7 @@ import { storage } from "./storage";
 import type { Task, UserSettings } from "@shared/schema";
 import { generateActionToken } from "./tokens";
 
-const APP_IDENTIFIER = "[CalTodo]";
+const APP_SIGNATURE = "Created by CalTodo";
 
 export async function getCalendarClient(userId: string): Promise<calendar_v3.Calendar | null> {
   const user = await storage.getUser(userId);
@@ -151,11 +151,11 @@ export async function createCalendarEvent(
   const completeLink = `${baseUrl}/api/action/${completeToken}`;
   const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
 
-  const description = `${task.details || ""}\n\n---\n${APP_IDENTIFIER}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`;
+  const description = `${task.details || ""}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}\n\n---\n${APP_SIGNATURE}`;
 
   try {
     const requestBody: calendar_v3.Schema$Event = {
-      summary: `${APP_IDENTIFIER} ${task.title}`,
+      summary: task.title,
       description,
       start: {
         dateTime: slot.start.toISOString(),
@@ -166,6 +166,11 @@ export async function createCalendarEvent(
         timeZone: settings.timezone,
       },
       colorId: settings.eventColor,
+      extendedProperties: {
+        private: {
+          caltodoTaskId: task.id,
+        },
+      },
     };
 
     if (task.reminderMinutes !== null && task.reminderMinutes !== undefined) {
@@ -211,11 +216,11 @@ export async function updateCalendarEvent(
   const completeLink = `${baseUrl}/api/action/${completeToken}`;
   const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
 
-  const description = `${task.details || ""}\n\n---\n${APP_IDENTIFIER}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`;
+  const description = `${task.details || ""}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}\n\n---\n${APP_SIGNATURE}`;
 
   try {
     const requestBody: calendar_v3.Schema$Event = {
-      summary: `${APP_IDENTIFIER} ${task.title}`,
+      summary: task.title,
       description,
       start: {
         dateTime: slot.start.toISOString(),
@@ -226,6 +231,11 @@ export async function updateCalendarEvent(
         timeZone: settings.timezone,
       },
       colorId: settings.eventColor,
+      extendedProperties: {
+        private: {
+          caltodoTaskId: task.id,
+        },
+      },
     };
 
     if (task.reminderMinutes !== null && task.reminderMinutes !== undefined) {
@@ -290,15 +300,20 @@ export async function updateCalendarEventContent(
   const completeLink = `${baseUrl}/api/action/${completeToken}`;
   const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
 
-  const description = `${task.details || ""}\n\n---\n${APP_IDENTIFIER}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`;
+  const description = `${task.details || ""}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}\n\n---\n${APP_SIGNATURE}`;
 
   try {
     await calendar.events.patch({
       calendarId: settings.calendarId,
       eventId,
       requestBody: {
-        summary: `${APP_IDENTIFIER} ${task.title}`,
+        summary: task.title,
         description,
+        extendedProperties: {
+          private: {
+            caltodoTaskId: task.id,
+          },
+        },
       },
     });
     return true;
