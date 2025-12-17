@@ -116,9 +116,11 @@ export async function registerRoutes(
       }
       if (req.session) {
         req.session.destroy(() => {
+          clearSessionCookie(res);
           res.json({ success: true });
         });
       } else {
+        clearSessionCookie(res);
         res.json({ success: true });
       }
     });
@@ -163,62 +165,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching calendars:", error);
       res.status(500).json({ error: "Failed to list calendars" });
-    }
-  });
-
-  // Debug endpoint to check token status
-  app.get("/api/debug/tokens", requireAuth, async (req, res) => {
-    try {
-      const user = await storage.getUser(req.user!.id);
-      res.json({
-        userId: user?.id,
-        hasAccessToken: !!user?.accessToken,
-        hasRefreshToken: !!user?.refreshToken,
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get debug info" });
-    }
-  });
-
-  // Debug endpoint to test calendar API
-  app.get("/api/debug/calendars", requireAuth, async (req, res) => {
-    try {
-      const { google } = await import("googleapis");
-      const user = await storage.getUser(req.user!.id);
-      
-      if (!user?.accessToken) {
-        return res.json({ error: "No access token", user: !!user });
-      }
-
-      const oauth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET
-      );
-
-      oauth2Client.setCredentials({
-        access_token: user.accessToken,
-        refresh_token: user.refreshToken,
-      });
-
-      const calendar = google.calendar({ version: "v3", auth: oauth2Client });
-      
-      try {
-        const response = await calendar.calendarList.list();
-        res.json({
-          success: true,
-          calendarCount: response.data.items?.length || 0,
-          calendars: response.data.items?.map(c => ({ id: c.id, summary: c.summary })) || [],
-        });
-      } catch (apiError: any) {
-        res.json({
-          success: false,
-          error: apiError.message,
-          code: apiError.code,
-          details: apiError.response?.data || null,
-        });
-      }
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
     }
   });
 
