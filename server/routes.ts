@@ -74,7 +74,8 @@ export async function registerRoutes(
     if (!req.isAuthenticated() || !req.user) {
       return res.status(401).json({ error: "Not authenticated" });
     }
-    res.json(req.user);
+    const { id, googleId, email, displayName } = req.user;
+    res.json({ id, googleId, email, displayName });
   });
 
   app.post("/api/auth/logout", (req, res) => {
