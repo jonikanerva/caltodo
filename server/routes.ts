@@ -20,6 +20,7 @@ import {
 import { setupCronJobs } from "./cron";
 import { createTaskSchema, updateSettingsSchema, updateTaskSchema, type Task } from "@shared/schema";
 import { verifyActionToken } from "./tokens";
+import { z } from "zod";
 
 function escapeHtml(input: string): string {
   return input
@@ -56,6 +57,10 @@ function getBaseUrl(req: any): string {
 
   return normalize(`${protocol}://${host || "localhost:5000"}`) || "http://localhost:5000";
 }
+
+const patchTaskSchema = updateTaskSchema.extend({
+  completed: z.boolean().optional(),
+});
 
 export async function registerRoutes(
   httpServer: Server,
@@ -465,13 +470,10 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Task not found" });
       }
 
-      const { completed } = req.body;
+      const data = patchTaskSchema.parse(req.body);
       const settings = await storage.getUserSettings(req.user!.id);
-      if (typeof completed !== "boolean") {
-        return res.status(400).json({ error: "completed must be a boolean" });
-      }
 
-      if (completed === true && !task.completed) {
+      if (data.completed === true && !task.completed) {
         if (task.calendarEventId && settings?.calendarId) {
           await deleteCalendarEvent(req.user!.id, task.calendarEventId, settings.calendarId);
         }
@@ -487,7 +489,7 @@ export async function registerRoutes(
         return res.json(updatedTask);
       }
 
-      if (completed === false && task.completed) {
+      if (data.completed === false && task.completed) {
         const existingTasks = await storage.getUncompletedTasksByUser(req.user!.id);
         const priority = existingTasks.length;
 
@@ -520,7 +522,51 @@ export async function registerRoutes(
         return res.json(updatedTask);
       }
 
-      return res.json(task);
+      if (
+        data.title === undefined &&
+        data.details === undefined &&
+        data.duration === undefined &&
+        data.reminderMinutes === undefined
+      ) {
+        return res.json(task);
+      }
+
+      const durationChanged = data.duration !== undefined && data.duration !== task.duration;
+      const reminderChanged =
+        data.reminderMinutes !== undefined && data.reminderMinutes !== task.reminderMinutes;
+
+      const updatedTask = await storage.updateTask(id, {
+        title: data.title ?? task.title,
+        details: data.details !== undefined ? data.details : task.details,
+        duration: data.duration !== undefined ? data.duration : task.duration,
+        reminderMinutes:
+          data.reminderMinutes !== undefined ? data.reminderMinutes : task.reminderMinutes,
+      });
+
+      if (task.calendarEventId && settings?.calendarId && updatedTask) {
+        if (durationChanged) {
+          await rescheduleAllUserTasks(req.user!.id, getBaseUrl(req));
+        } else if (reminderChanged && task.scheduledStart && task.scheduledEnd) {
+          await updateCalendarEvent(
+            req.user!.id,
+            task.calendarEventId,
+            settings,
+            { start: task.scheduledStart, end: task.scheduledEnd },
+            updatedTask,
+            getBaseUrl(req),
+          );
+        } else {
+          await updateCalendarEventContent(
+            req.user!.id,
+            task.calendarEventId,
+            settings,
+            updatedTask,
+            getBaseUrl(req),
+          );
+        }
+      }
+
+      res.json(updatedTask);
     } catch (error) {
       console.error("Error updating task:", error);
       res.status(500).json({ error: "Failed to update task" });
