@@ -43,8 +43,8 @@ export function setupAuth(app: Express): void {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const callbackURL = process.env.REPL_SLUG
-    ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER?.toLowerCase()}.repl.co/api/auth/google/callback`
+  const callbackURL = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/auth/google/callback`
     : "http://localhost:5000/api/auth/google/callback";
 
   passport.use(
