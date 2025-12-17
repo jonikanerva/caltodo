@@ -32,6 +32,11 @@ export function decryptToken(value?: string | null): string | null | undefined {
   const tag = Buffer.from(tagB64, "base64url");
   const encrypted = Buffer.from(cipherB64, "base64url");
 
+  // Enforce expected lengths: 12-byte IV, 16-byte tag
+  if (iv.length !== 12 || tag.length !== 16) {
+    return null;
+  }
+
   try {
     const decipher = crypto.createDecipheriv("aes-256-gcm", KEY, iv);
     decipher.setAuthTag(tag);
