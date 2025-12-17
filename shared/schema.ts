@@ -87,7 +87,15 @@ export const updateSettingsSchema = z.object({
   calendarId: z.string().optional(),
   workStartHour: z.number().min(0).max(23),
   workEndHour: z.number().min(0).max(23),
-  timezone: z.string(),
+  timezone: z
+    .string()
+    .refine((tz) => {
+      try {
+        return Intl.supportedValuesOf("timeZone").includes(tz);
+      } catch {
+        return false;
+      }
+    }, "Invalid timezone"),
   defaultDuration: z.number().min(15).max(480),
   eventColor: z.string(),
 });
