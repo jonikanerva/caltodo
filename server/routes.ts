@@ -21,14 +21,40 @@ import { setupCronJobs } from "./cron";
 import { createTaskSchema, updateSettingsSchema, updateTaskSchema, type Task } from "@shared/schema";
 import { verifyActionToken } from "./tokens";
 
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function getBaseUrl(req: any): string {
-  // Use production URL if set, otherwise detect from request
-  if (process.env.PRODUCTION_APP_URL) {
-    return process.env.PRODUCTION_APP_URL;
+  const normalize = (url: string | undefined): string | null => {
+    if (!url) return null;
+    try {
+      return new URL(url).origin;
+    } catch {
+      return null;
+    }
+  };
+
+  const configuredOrigin =
+    normalize(process.env.PRODUCTION_APP_URL) ||
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null);
+  if (configuredOrigin) {
+    return configuredOrigin;
   }
-  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-  return `${protocol}://${host}`;
+
+  const hostHeader =
+    (typeof req.get === "function" ? req.get("host") : undefined) ||
+    req.headers?.host ||
+    "";
+  const host = hostHeader.split(",")[0].trim();
+  const protocol = req.protocol === "https" ? "https" : "http";
+
+  return normalize(`${protocol}://${host || "localhost:5000"}`) || "http://localhost:5000";
 }
 
 export async function registerRoutes(
@@ -782,6 +808,7 @@ export async function registerRoutes(
       }
 
       const settings = await storage.getUserSettings(task.userId);
+      const safeTitle = escapeHtml(task.title);
 
       if (payload.action === "complete") {
         if (task.calendarEventId && settings?.calendarId) {
@@ -802,7 +829,7 @@ export async function registerRoutes(
           <head><title>Task Completed</title></head>
           <body style="font-family: sans-serif; text-align: center; padding: 50px;">
             <h1>Task Completed!</h1>
-            <p>"${task.title}" has been marked as done.</p>
+            <p>"${safeTitle}" has been marked as done.</p>
             <a href="/">Go to CalTodo</a>
           </body>
           </html>
@@ -853,7 +880,7 @@ export async function registerRoutes(
           <head><title>Task Rescheduled</title></head>
           <body style="font-family: sans-serif; text-align: center; padding: 50px;">
             <h1>Task Rescheduled!</h1>
-            <p>"${task.title}" has been moved to the next available time slot.</p>
+            <p>"${safeTitle}" has been moved to the next available time slot.</p>
             <a href="/">Go to CalTodo</a>
           </body>
           </html>
