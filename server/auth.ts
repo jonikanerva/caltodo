@@ -75,6 +75,7 @@ export function setupAuth(app: Express): void {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
         callbackURL,
         passReqToCallback: true,
+        state: true,
         scope: [
           "profile",
           "email",
