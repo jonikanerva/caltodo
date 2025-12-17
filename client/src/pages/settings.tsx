@@ -95,11 +95,14 @@ const GOOGLE_CALENDAR_COLORS: { id: string; name: string; hex: string }[] = [
   { id: "11", name: "Tomato", hex: "#d60000" },
 ];
 
-const formSchema = updateSettingsSchema.extend({
-  workStartHour: z.coerce.number().min(0).max(23),
-  workEndHour: z.coerce.number().min(0).max(23),
-  defaultDuration: z.coerce.number().min(15).max(480),
-});
+type FormValues = {
+  calendarId?: string;
+  workStartHour: number;
+  workEndHour: number;
+  timezone: string;
+  defaultDuration: number;
+  eventColor: string;
+};
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -112,8 +115,8 @@ export default function SettingsPage() {
     queryKey: ["/api/calendars"],
   });
 
-  const form = useForm<UpdateSettings>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<FormValues>({
+    resolver: zodResolver(updateSettingsSchema),
     defaultValues: {
       calendarId: settings?.calendarId || "",
       workStartHour: settings?.workStartHour ?? 9,
@@ -133,7 +136,7 @@ export default function SettingsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: UpdateSettings) => {
+    mutationFn: async (data: FormValues) => {
       return apiRequest("PATCH", "/api/settings", data);
     },
     onSuccess: () => {
@@ -153,7 +156,7 @@ export default function SettingsPage() {
     },
   });
 
-  const onSubmit = (data: UpdateSettings) => {
+  const onSubmit = (data: FormValues) => {
     updateMutation.mutate(data);
   };
 
