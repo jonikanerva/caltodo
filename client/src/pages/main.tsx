@@ -81,6 +81,7 @@ export default function MainPage() {
   });
   const [completedOpen, setCompletedOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<EditingTask | null>(null);
+  const [completingTaskIds, setCompletingTaskIds] = useState<Set<string>>(new Set());
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -122,10 +123,26 @@ export default function MainPage() {
 
   const completeTaskMutation = useMutation({
     mutationFn: async ({ id, completed }: { id: string; completed: boolean }) => {
+      // Add to completing set immediately for optimistic UI
+      setCompletingTaskIds(prev => new Set(prev).add(id));
       return apiRequest("PATCH", `/api/tasks/${id}`, { completed });
     },
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      // Remove from completing set after success
+      setCompletingTaskIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    },
+    onError: (_, { id }) => {
+      // Remove from completing set on error
+      setCompletingTaskIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     },
   });
 
@@ -563,7 +580,9 @@ export default function MainPage() {
                                 </div>
                               </div>
                             ) : (
-                              <div className="flex items-start gap-3">
+                              <div className={`flex items-start gap-3 transition-opacity ${
+                                completingTaskIds.has(task.id) ? "opacity-50 pointer-events-none" : ""
+                              }`}>
                                 <div
                                   {...provided.dragHandleProps}
                                   className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground"
@@ -571,7 +590,8 @@ export default function MainPage() {
                                   <GripVertical className="h-5 w-5" />
                                 </div>
                                 <Checkbox
-                                  checked={false}
+                                  checked={completingTaskIds.has(task.id)}
+                                  disabled={completingTaskIds.has(task.id)}
                                   onCheckedChange={() =>
                                     completeTaskMutation.mutate({
                                       id: task.id,
