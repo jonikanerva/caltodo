@@ -18,7 +18,7 @@ import {
   type CalendarEventData
 } from "./calendar";
 import { setupCronJobs } from "./cron";
-import { createTaskSchema, updateSettingsSchema, updateTaskSchema } from "@shared/schema";
+import { createTaskSchema, updateSettingsSchema, updateTaskSchema, type Task } from "@shared/schema";
 import { verifyActionToken } from "./tokens";
 
 function getBaseUrl(req: any): string {
@@ -506,11 +506,65 @@ export async function registerRoutes(
         return res.status(400).json({ error: "taskIds must be an array" });
       }
 
+      const settings = await storage.getUserSettings(req.user!.id);
+      
+      // Get all tasks being reordered
+      const tasks = await Promise.all(taskIds.map(id => storage.getTask(id)));
+      const validTasks = tasks.filter(t => t && t.userId === req.user!.id) as Task[];
+      
+      // Collect existing time slots (sorted by start time)
+      const existingSlots = validTasks
+        .filter(t => t.scheduledStart && t.scheduledEnd && t.calendarEventId)
+        .map(t => ({
+          start: new Date(t.scheduledStart!),
+          end: new Date(t.scheduledEnd!),
+          duration: new Date(t.scheduledEnd!).getTime() - new Date(t.scheduledStart!).getTime(),
+        }))
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+      
+      // Update priorities first
       for (let i = 0; i < taskIds.length; i++) {
         await storage.updateTask(taskIds[i], { priority: i });
       }
-
-      await rescheduleAllUserTasks(req.user!.id, getBaseUrl(req));
+      
+      // Reassign slots to tasks in new priority order
+      // Tasks are now in priority order (taskIds array), slots are in time order
+      if (settings?.calendarId && existingSlots.length > 0) {
+        const tasksNeedingSlots = validTasks
+          .filter(t => t.calendarEventId && t.scheduledStart)
+          .sort((a, b) => taskIds.indexOf(a.id) - taskIds.indexOf(b.id));
+        
+        for (let i = 0; i < Math.min(tasksNeedingSlots.length, existingSlots.length); i++) {
+          const task = tasksNeedingSlots[i];
+          const slot = existingSlots[i];
+          
+          // Check if this task already has this slot
+          const currentStart = new Date(task.scheduledStart!).getTime();
+          if (currentStart === slot.start.getTime()) {
+            continue; // No change needed
+          }
+          
+          // Adjust slot end time based on task's duration preference
+          const taskDuration = task.duration || settings.defaultDuration;
+          const adjustedEnd = new Date(slot.start.getTime() + taskDuration * 60 * 1000);
+          
+          // Update calendar event with new time
+          await updateCalendarEvent(
+            req.user!.id,
+            task.calendarEventId!,
+            settings,
+            { start: slot.start, end: adjustedEnd },
+            task,
+            getBaseUrl(req)
+          );
+          
+          // Update task in database
+          await storage.updateTask(task.id, {
+            scheduledStart: slot.start,
+            scheduledEnd: adjustedEnd,
+          });
+        }
+      }
 
       res.json({ success: true });
     } catch (error) {
