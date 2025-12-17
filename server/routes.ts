@@ -547,6 +547,9 @@ export async function registerRoutes(
       // Get all tasks being reordered
       const tasks = await Promise.all(taskIds.map(id => storage.getTask(id)));
       const validTasks = tasks.filter(t => t && t.userId === req.user!.id) as Task[];
+      if (validTasks.length !== taskIds.length) {
+        return res.status(403).json({ error: "One or more tasks do not belong to the user" });
+      }
       
       // Collect existing time slots (sorted by start time)
       const existingSlots = validTasks
