@@ -21,25 +21,37 @@ interface CalendarListItem {
   primary?: boolean;
 }
 
-const TIMEZONES = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Phoenix",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Berlin",
-  "Europe/Moscow",
-  "Asia/Tokyo",
-  "Asia/Shanghai",
-  "Asia/Singapore",
-  "Asia/Dubai",
-  "Australia/Sydney",
-  "Pacific/Auckland",
-];
+const getTimezoneOffset = (tz: string): string => {
+  try {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'shortOffset',
+    });
+    const parts = formatter.formatToParts(now);
+    const offsetPart = parts.find(p => p.type === 'timeZoneName');
+    const gmtOffset = offsetPart?.value || '';
+    // Convert GMT+02:00 to UTC+2, GMT-05:30 to UTC-5:30, GMT+0 to UTC+0
+    const match = gmtOffset.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+    if (match) {
+      const sign = match[1];
+      const hours = parseInt(match[2], 10);
+      const mins = match[3];
+      // Only show minutes if they are non-zero (e.g., :30, :45)
+      const minutes = mins && mins !== '00' ? `:${mins}` : '';
+      return `UTC${sign}${hours}${minutes}`;
+    }
+    return gmtOffset.replace('GMT', 'UTC');
+  } catch {
+    return '';
+  }
+};
+
+const TIMEZONES = Intl.supportedValuesOf('timeZone').sort((a, b) => {
+  const offsetA = new Date().toLocaleString('en-US', { timeZone: a, timeZoneName: 'shortOffset' });
+  const offsetB = new Date().toLocaleString('en-US', { timeZone: b, timeZoneName: 'shortOffset' });
+  return offsetA.localeCompare(offsetB);
+});
 
 const GOOGLE_CALENDAR_COLORS: { id: string; name: string; hex: string }[] = [
   { id: "1", name: "Lavender", hex: "#7986cb" },
@@ -118,9 +130,7 @@ export default function SettingsPage() {
   };
 
   const formatHour = (hour: number) => {
-    const period = hour >= 12 ? "PM" : "AM";
-    const displayHour = hour % 12 || 12;
-    return `${displayHour}:00 ${period}`;
+    return `${hour.toString().padStart(2, '0')}:00`;
   };
 
   if (settingsLoading) {
@@ -273,7 +283,7 @@ export default function SettingsPage() {
                       <SelectContent>
                         {TIMEZONES.map((tz) => (
                           <SelectItem key={tz} value={tz}>
-                            {tz.replace(/_/g, " ")}
+                            {tz.replace(/_/g, " ")} ({getTimezoneOffset(tz)})
                           </SelectItem>
                         ))}
                       </SelectContent>

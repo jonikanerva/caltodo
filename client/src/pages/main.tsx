@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
@@ -84,6 +84,11 @@ export default function MainPage() {
   const [editingTask, setEditingTask] = useState<EditingTask | null>(null);
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    titleInputRef.current?.focus();
+  }, []);
 
   const { data: tasks = [], isLoading } = useQuery<Task[]>({
     queryKey: ["/api/tasks"],
@@ -319,6 +324,7 @@ export default function MainPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Input
+                ref={titleInputRef}
                 placeholder="What needs to be done?"
                 value={newTask.title}
                 onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
@@ -671,7 +677,7 @@ export default function MainPage() {
                                   {task.scheduledStart && (
                                     <Badge variant="secondary" className="gap-1">
                                       <Clock className="h-3 w-3" />
-                                      {format(new Date(task.scheduledStart), "MMM d, h:mm a")}
+                                      {format(new Date(task.scheduledStart), "EEE dd.MM. HH:mm")}
                                     </Badge>
                                   )}
                                   <Button
@@ -756,7 +762,7 @@ export default function MainPage() {
                       </span>
                       {task.completedAt && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          Completed {format(new Date(task.completedAt), "MMM d, h:mm a")}
+                          Completed {format(new Date(task.completedAt), "EEE dd.MM. HH:mm")}
                         </p>
                       )}
                     </div>

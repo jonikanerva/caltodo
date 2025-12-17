@@ -8,11 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { CheckSquare, Settings, ListTodo, LogOut, CalendarDays } from "lucide-react";
+import { CheckSquare, Settings, ListTodo, LogOut } from "lucide-react";
 import AuthPage from "@/pages/auth";
 import MainPage from "@/pages/main";
 import SettingsPage from "@/pages/settings";
-import CalendarViewPage from "@/pages/calendar-view";
 import NotFound from "@/pages/not-found";
 import { logout } from "@/lib/auth";
 import type { User, UserSettings } from "@shared/schema";
@@ -50,17 +49,6 @@ function AppLayout({ children }: { children: React.ReactNode }) {
               >
                 <ListTodo className="h-4 w-4" />
                 <span className="hidden sm:inline">Tasks</span>
-              </Button>
-            </Link>
-            <Link href="/calendar">
-              <Button
-                variant={location === "/calendar" ? "secondary" : "ghost"}
-                size="sm"
-                className="gap-2"
-                data-testid="nav-calendar"
-              >
-                <CalendarDays className="h-4 w-4" />
-                <span className="hidden sm:inline">Calendar</span>
               </Button>
             </Link>
             <Link href="/settings">
@@ -110,7 +98,6 @@ function AuthenticatedRoutes() {
     <AppLayout>
       <Switch>
         <Route path="/" component={MainPage} />
-        <Route path="/calendar" component={CalendarViewPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>

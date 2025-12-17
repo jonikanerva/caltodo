@@ -237,7 +237,52 @@ export async function registerRoutes(
         return task;
       });
       
-      res.json(enrichedTasks);
+      // Reorder priorities for uncompleted tasks based on calendar event order
+      const uncompletedWithTimes = enrichedTasks
+        .filter(t => !t.completed && t.scheduledStart)
+        .sort((a, b) => new Date(a.scheduledStart!).getTime() - new Date(b.scheduledStart!).getTime());
+      
+      const uncompletedWithoutTimes = enrichedTasks
+        .filter(t => !t.completed && !t.scheduledStart)
+        .sort((a, b) => a.priority - b.priority);
+      
+      const completedTasks = enrichedTasks.filter(t => t.completed);
+      
+      // Update priorities based on calendar order (tasks with times first, sorted by time)
+      let newPriority = 0;
+      const priorityUpdates: { id: string; newPriority: number; currentPriority: number }[] = [];
+      
+      for (const task of uncompletedWithTimes) {
+        if (task.priority !== newPriority) {
+          priorityUpdates.push({ id: task.id, newPriority, currentPriority: task.priority });
+        }
+        newPriority++;
+      }
+      
+      for (const task of uncompletedWithoutTimes) {
+        if (task.priority !== newPriority) {
+          priorityUpdates.push({ id: task.id, newPriority, currentPriority: task.priority });
+        }
+        newPriority++;
+      }
+      
+      // Apply priority updates to database (in background, don't block response)
+      if (priorityUpdates.length > 0) {
+        Promise.all(
+          priorityUpdates.map(update => 
+            storage.updateTask(update.id, { priority: update.newPriority })
+          )
+        ).catch(err => console.error("Error updating priorities:", err));
+      }
+      
+      // Return tasks sorted by new priority order
+      const finalTasks = [
+        ...uncompletedWithTimes.map((t, i) => ({ ...t, priority: i })),
+        ...uncompletedWithoutTimes.map((t, i) => ({ ...t, priority: uncompletedWithTimes.length + i })),
+        ...completedTasks,
+      ];
+      
+      res.json(finalTasks);
     } catch (error) {
       console.error("Error fetching tasks:", error);
       res.status(500).json({ error: "Failed to get tasks" });
