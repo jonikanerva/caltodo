@@ -104,6 +104,27 @@ export async function getCalendarClient(userId: string): Promise<calendar_v3.Cal
   return google.calendar({ version: "v3", auth: oauth2Client });
 }
 
+async function listCalendarEventsInRange(
+  calendar: calendar_v3.Calendar,
+  calendarId: string,
+  timeMin: Date,
+  timeMax: Date
+): Promise<calendar_v3.Schema$Event[]> {
+  try {
+    const response = await calendar.events.list({
+      calendarId,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+    });
+    return response.data.items || [];
+  } catch (error: any) {
+    console.error("Error listing calendar events:", error?.message || error);
+    return [];
+  }
+}
+
 export async function listCalendars(userId: string): Promise<{ id: string; summary: string; primary?: boolean }[]> {
   const calendar = await getCalendarClient(userId);
   if (!calendar) {
@@ -133,7 +154,12 @@ export async function findFreeSlot(
   settings: UserSettings,
   durationMinutes: number,
   afterTime?: Date,
-  excludeCalTodoEvents: boolean = false
+  excludeCalTodoEvents: boolean = false,
+  prefetchedEvents?: {
+    events: calendar_v3.Schema$Event[];
+    timeMin: Date;
+    timeMax: Date;
+  }
 ): Promise<{ start: Date; end: Date } | null> {
   const calendar = await getCalendarClient(userId);
   if (!calendar || !settings.calendarId) return null;
@@ -144,15 +170,15 @@ export async function findFreeSlot(
   searchEndDate.setDate(searchEndDate.getDate() + 14);
 
   try {
-    const response = await calendar.events.list({
-      calendarId: settings.calendarId,
-      timeMin: now.toISOString(),
-      timeMax: searchEndDate.toISOString(),
-      singleEvents: true,
-      orderBy: "startTime",
-    });
+    const shouldUsePrefetched =
+      prefetchedEvents &&
+      now >= prefetchedEvents.timeMin &&
+      searchEndDate <= prefetchedEvents.timeMax;
 
-    let events = response.data.items || [];
+    let events =
+      shouldUsePrefetched && prefetchedEvents?.events
+        ? prefetchedEvents.events
+        : await listCalendarEventsInRange(calendar, settings.calendarId, now, searchEndDate);
     
     // When rescheduling, exclude CalTodo-managed events from conflict check
     if (excludeCalTodoEvents) {
@@ -530,6 +556,15 @@ export async function rescheduleAllUserTasks(userId: string, baseUrl: string): P
   const settings = await storage.getUserSettings(userId);
   if (!settings?.calendarId) return;
 
+  const calendar = await getCalendarClient(userId);
+  if (!calendar) return;
+
+  const windowStart = new Date();
+  const windowEnd = new Date(windowStart);
+  windowEnd.setDate(windowEnd.getDate() + 30);
+
+  const windowEvents = await listCalendarEventsInRange(calendar, settings.calendarId, windowStart, windowEnd);
+
   const tasks = await storage.getUncompletedTasksByUser(userId);
   const sortedTasks = tasks.sort((a, b) => a.priority - b.priority);
 
@@ -539,7 +574,14 @@ export async function rescheduleAllUserTasks(userId: string, baseUrl: string): P
     const taskDuration = task.duration || settings.defaultDuration;
     
     // Find the optimal slot, excluding all CalTodo events from conflict check
-    const optimalSlot = await findFreeSlot(userId, settings, taskDuration, lastSlotEnd, true);
+    const optimalSlot = await findFreeSlot(
+      userId,
+      settings,
+      taskDuration,
+      lastSlotEnd,
+      true,
+      { events: windowEvents, timeMin: windowStart, timeMax: windowEnd }
+    );
     if (!optimalSlot) continue;
     
     // Check if current slot matches the optimal slot (within 1 minute tolerance)
