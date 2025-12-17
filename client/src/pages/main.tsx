@@ -449,15 +449,22 @@ export default function MainPage() {
           </Card>
         ) : (
           <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="tasks">
+            <Droppable droppableId="tasks" isDropDisabled={reloadCalendarMutation.isPending || rescheduleAllMutation.isPending || reorderTasksMutation.isPending}>
               {(provided) => (
                 <div
                   {...provided.droppableProps}
                   ref={provided.innerRef}
-                  className="space-y-2"
+                  className={`space-y-2 transition-opacity ${
+                    reloadCalendarMutation.isPending || rescheduleAllMutation.isPending || reorderTasksMutation.isPending ? "opacity-50 pointer-events-none" : ""
+                  }`}
                 >
                   {uncompletedTasks.map((task, index) => (
-                    <Draggable key={task.id} draggableId={task.id} index={index}>
+                    <Draggable 
+                      key={task.id} 
+                      draggableId={task.id} 
+                      index={index}
+                      isDragDisabled={reloadCalendarMutation.isPending || rescheduleAllMutation.isPending || reorderTasksMutation.isPending}
+                    >
                       {(provided, snapshot) => (
                         <Card
                           ref={provided.innerRef}
