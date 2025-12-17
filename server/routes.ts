@@ -441,6 +441,9 @@ export async function registerRoutes(
 
       const { completed } = req.body;
       const settings = await storage.getUserSettings(req.user!.id);
+      if (typeof completed !== "boolean") {
+        return res.status(400).json({ error: "completed must be a boolean" });
+      }
 
       if (completed === true && !task.completed) {
         if (task.calendarEventId && settings?.calendarId) {
@@ -491,8 +494,7 @@ export async function registerRoutes(
         return res.json(updatedTask);
       }
 
-      const updatedTask = await storage.updateTask(id, req.body);
-      res.json(updatedTask);
+      return res.json(task);
     } catch (error) {
       console.error("Error updating task:", error);
       res.status(500).json({ error: "Failed to update task" });
