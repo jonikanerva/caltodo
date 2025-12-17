@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import passport from "passport";
 import { storage } from "./storage";
@@ -59,6 +59,17 @@ function getBaseUrl(req: any): string {
 const patchTaskSchema = updateTaskSchema.extend({
   completed: z.boolean().optional(),
 });
+
+const isProduction = process.env.NODE_ENV === "production" || !!process.env.PRODUCTION_APP_URL;
+
+function clearSessionCookie(res: Response): void {
+  res.clearCookie("connect.sid", {
+    path: "/",
+    sameSite: "lax",
+    httpOnly: true,
+    secure: isProduction,
+  });
+}
 
 export async function registerRoutes(
   httpServer: Server,
