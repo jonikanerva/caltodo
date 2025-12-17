@@ -518,6 +518,37 @@ export async function getCalendarEventsForTasks(
   return results;
 }
 
+// Helper to check if a slot is valid (within work hours, not in past, not on weekend)
+function isSlotValid(
+  slotStart: Date, 
+  slotEnd: Date, 
+  settings: UserSettings, 
+  mustBeAfter?: Date
+): boolean {
+  const now = new Date();
+  const timezone = settings.timezone || 'UTC';
+  
+  // Check if slot is in the past
+  if (slotEnd <= now) return false;
+  
+  // Check if slot starts before the required time
+  if (mustBeAfter && slotStart < mustBeAfter) return false;
+  
+  // Check if slot is within work hours
+  const { hours: startHour, dayOfWeek } = getTimeInTimezone(slotStart, timezone);
+  const { hours: endHour, minutes: endMinutes } = getTimeInTimezone(slotEnd, timezone);
+  const endTimeMinutes = endHour * 60 + endMinutes;
+  
+  // Skip weekends
+  if (dayOfWeek === 0 || dayOfWeek === 6) return false;
+  
+  // Check work hours
+  if (startHour < settings.workStartHour) return false;
+  if (endTimeMinutes > settings.workEndHour * 60) return false;
+  
+  return true;
+}
+
 export async function rescheduleAllUserTasks(userId: string, baseUrl: string): Promise<void> {
   const settings = await storage.getUserSettings(userId);
   if (!settings?.calendarId) return;
@@ -529,6 +560,20 @@ export async function rescheduleAllUserTasks(userId: string, baseUrl: string): P
 
   for (const task of sortedTasks) {
     const taskDuration = task.duration || settings.defaultDuration;
+    
+    // Check if current slot is still valid
+    if (task.scheduledStart && task.scheduledEnd && task.calendarEventId) {
+      const slotStart = new Date(task.scheduledStart);
+      const slotEnd = new Date(task.scheduledEnd);
+      
+      if (isSlotValid(slotStart, slotEnd, settings, lastSlotEnd)) {
+        // Current slot is valid, keep it
+        lastSlotEnd = slotEnd;
+        continue;
+      }
+    }
+    
+    // Need to find a new slot
     const slot = await findFreeSlot(userId, settings, taskDuration, lastSlotEnd);
     if (!slot) continue;
 
