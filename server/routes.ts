@@ -8,10 +8,11 @@ import {
   findFreeSlot, 
   createCalendarEvent, 
   deleteCalendarEvent,
-  rescheduleAllUserTasks
+  rescheduleAllUserTasks,
+  updateCalendarEventContent
 } from "./calendar";
 import { setupCronJobs } from "./cron";
-import { createTaskSchema, updateSettingsSchema } from "@shared/schema";
+import { createTaskSchema, updateSettingsSchema, updateTaskSchema } from "@shared/schema";
 import { verifyActionToken } from "./tokens";
 
 function getBaseUrl(req: any): string {

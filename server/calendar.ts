@@ -234,6 +234,40 @@ export async function deleteCalendarEvent(
   }
 }
 
+export async function updateCalendarEventContent(
+  userId: string,
+  eventId: string,
+  settings: UserSettings,
+  task: Task,
+  baseUrl: string
+): Promise<boolean> {
+  const calendar = await getCalendarClient(userId);
+  if (!calendar || !settings.calendarId) return false;
+
+  const completeToken = generateActionToken(task.id, "complete");
+  const rescheduleToken = generateActionToken(task.id, "reschedule");
+  
+  const completeLink = `${baseUrl}/api/action/${completeToken}`;
+  const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
+
+  const description = `${task.details || ""}\n\n---\n${APP_IDENTIFIER}\n\nActions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`;
+
+  try {
+    await calendar.events.patch({
+      calendarId: settings.calendarId,
+      eventId,
+      requestBody: {
+        summary: `${APP_IDENTIFIER} ${task.title}`,
+        description,
+      },
+    });
+    return true;
+  } catch (error) {
+    console.error("Error updating calendar event content:", error);
+    return false;
+  }
+}
+
 export async function rescheduleAllUserTasks(userId: string, baseUrl: string): Promise<void> {
   const settings = await storage.getUserSettings(userId);
   if (!settings?.calendarId) return;

@@ -68,6 +68,11 @@ export const createTaskSchema = z.object({
   urgent: z.boolean().optional().default(false),
 });
 
+export const updateTaskSchema = z.object({
+  title: z.string().min(1, "Title is required").optional(),
+  details: z.string().optional(),
+});
+
 export const updateSettingsSchema = z.object({
   calendarId: z.string().optional(),
   workStartHour: z.number().min(0).max(23),
@@ -84,4 +89,5 @@ export type UserSettings = typeof userSettings.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 export type CreateTask = z.infer<typeof createTaskSchema>;
+export type UpdateTask = z.infer<typeof updateTaskSchema>;
 export type UpdateSettings = z.infer<typeof updateSettingsSchema>;
