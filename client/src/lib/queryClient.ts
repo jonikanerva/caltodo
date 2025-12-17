@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getCsrfToken, setCsrfToken } from "./csrf";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -12,9 +13,13 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const csrfToken = getCsrfToken();
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {
+      ...(data ? { "Content-Type": "application/json" } : {}),
+      ...(method !== "GET" && csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+    },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -38,7 +43,11 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+    const json = await res.json();
+    if ((queryKey[0] as string) === "/api/auth/user" && json?.csrfToken) {
+      setCsrfToken(json.csrfToken);
+    }
+    return json;
   };
 
 export const queryClient = new QueryClient({

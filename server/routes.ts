@@ -21,6 +21,7 @@ import { setupCronJobs } from "./cron";
 import { createTaskSchema, updateSettingsSchema, updateTaskSchema, type Task } from "@shared/schema";
 import { verifyActionToken } from "./tokens";
 import { z } from "zod";
+import { ensureCsrfToken, requireCsrfToken } from "./csrf";
 
 function escapeHtml(input: string): string {
   return input
@@ -67,6 +68,8 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupAuth(app);
+  app.use(ensureCsrfToken);
+  app.use(requireCsrfToken);
 
   const cronBaseUrl = process.env.PRODUCTION_APP_URL 
     || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
@@ -106,7 +109,7 @@ export async function registerRoutes(
       return res.status(401).json({ error: "Not authenticated" });
     }
     const { id, googleId, email, displayName } = req.user;
-    res.json({ id, googleId, email, displayName });
+    res.json({ id, googleId, email, displayName, csrfToken: req.session?.csrfToken });
   });
 
   app.post("/api/auth/logout", (req, res) => {
