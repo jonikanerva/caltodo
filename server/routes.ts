@@ -34,6 +34,15 @@ export async function registerRoutes(
   
   setupCronJobs(baseUrl);
 
+  // Log the callback URL being used for debugging
+  console.log("OAuth callback URL:", 
+    process.env.PRODUCTION_APP_URL 
+      ? `${process.env.PRODUCTION_APP_URL}/api/auth/google/callback`
+      : process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/auth/google/callback`
+        : "http://localhost:5000/api/auth/google/callback"
+  );
+  
   app.get("/api/auth/google", passport.authenticate("google", {
     scope: [
       "profile",
