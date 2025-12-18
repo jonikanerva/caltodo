@@ -11,3 +11,4 @@ Quick start:
 - Create `.env` with database and Google OAuth secrets (see `README.md`)
 - Develop: `npm run dev`
 - Before committing, verify changes with `npm run check` and `npm run build`
+- Keep commits focused: one holistic change per commit; split unrelated or separate fixes into individual commits
