@@ -43,14 +43,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   private withEncryptedTokens<T extends Partial<InsertUser>>(data: T): T {
-    const result = { ...data };
+    const result: Partial<InsertUser> = { ...data };
     if (Object.prototype.hasOwnProperty.call(result, "accessToken")) {
       (result as any).accessToken = encryptToken(result.accessToken) ?? null;
     }
     if (Object.prototype.hasOwnProperty.call(result, "refreshToken")) {
       (result as any).refreshToken = encryptToken(result.refreshToken) ?? null;
     }
-    return result;
+    return result as T;
   }
 
   async getUser(id: string): Promise<User | undefined> {
