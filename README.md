@@ -7,10 +7,13 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 - **Google OAuth Authentication** - Sign in with your Google account
 - **Automatic Scheduling** - Tasks are scheduled to the first available free slot within your work hours
 - **Drag-and-Drop Reordering** - Prioritize tasks by dragging them; the app swaps their calendar time slots
-- **Task Editing** - Update task titles, descriptions, durations, and reminders
-- **Bulk Operations** - Reschedule all tasks to optimize your calendar
-- **Settings** - Configure your preferred calendar, work hours, timezone, and default task duration
-- **Midnight Rescheduling** - Automatic cron job reschedules incomplete tasks with calendar events to new time slots
+- **Urgent Tasks** - Mark tasks as urgent to push them to the front of the schedule
+- **Task Completion + Redo** - Mark tasks complete and undo when needed
+- **Calendar Sync + Reschedule All** - Pull latest event times and reschedule all incomplete tasks
+- **Calendar Action Links** - Event descriptions include "Mark Complete" and "Reschedule" links
+- **Settings** - Configure your preferred calendar, work hours, timezone, default task duration, and event color
+- **Theme Toggle** - Switch between light and dark modes
+- **Midnight Rescheduling** - Nightly cron job reschedules incomplete tasks (server time)
 
 ## Code Organization
 
@@ -20,14 +23,17 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 │   │   ├── components/      # Reusable UI components (shadcn/ui)
 │   │   ├── hooks/           # Custom React hooks
 │   │   ├── lib/             # Utilities (API client, query client)
-│   │   ├── pages/           # Page components (main, settings, auth, landing)
+│   │   ├── pages/           # Page components (auth, main, settings, calendar view, not found)
 │   │   └── App.tsx          # Root component with routing
 │   └── index.html
 │
 ├── server/                  # Express backend
 │   ├── auth.ts              # Passport.js Google OAuth setup
 │   ├── calendar.ts          # Google Calendar API integration
+│   ├── config.ts            # Environment secret validation
 │   ├── cron.ts              # Midnight rescheduling cron job (runs at 00:00)
+│   ├── crypto.ts            # Token encryption utilities
+│   ├── csrf.ts              # CSRF token middleware
 │   ├── db.ts                # Database connection
 │   ├── index.ts             # Server entry point
 │   ├── routes.ts            # API route handlers
@@ -37,7 +43,8 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 │   └── vite.ts              # Vite dev server integration
 │
 ├── shared/                  # Shared between frontend and backend
-│   └── schema.ts            # Drizzle database schema and types
+│   ├── schema.ts            # Drizzle database schema and types
+│   └── types.ts             # Shared API types
 │
 ├── drizzle.config.ts        # Drizzle ORM configuration
 ├── vite.config.ts           # Vite bundler configuration
@@ -46,7 +53,7 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 
 ### Key Technologies
 
-- **Frontend**: React 18, TypeScript, Vite, TanStack Query, Wouter (routing), shadcn/ui, Tailwind CSS
+- **Frontend**: React 19, TypeScript, Vite, TanStack Query, Wouter (routing), shadcn/ui, Tailwind CSS
 - **Backend**: Node.js, Express, TypeScript, Passport.js
 - **Database**: PostgreSQL with Drizzle ORM
 - **APIs**: Google Calendar API, Google OAuth 2.0
@@ -91,10 +98,13 @@ Create a `.env` file in the project root:
 DATABASE_URL=postgresql://localhost:5432/caltodo
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
-SESSION_SECRET=any-random-string-for-session-encryption
-ACTION_TOKEN_SECRET=another-random-string-for-action-links
+SESSION_SECRET=32+_char_random_session_secret
+ACTION_TOKEN_SECRET=32+_char_random_action_secret
 TOKEN_ENCRYPTION_KEY=32+_char_random_key_for_token_encryption
 ```
+
+Notes:
+- `SESSION_SECRET` and `ACTION_TOKEN_SECRET` must be different values and at least 32 characters long.
 
 ### Installation
 
@@ -170,7 +180,7 @@ npm start
 - [ ] Google OAuth redirect URI updated for production domain
 - [ ] HTTPS configured (required for secure cookies)
 - [ ] Process manager configured for automatic restarts
-- [ ] Cron job runs at midnight in configured timezone for task rescheduling
+- [ ] Cron job runs at midnight server time for task rescheduling (set TZ if needed)
 
 ### Platform-Specific Notes
 

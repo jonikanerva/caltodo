@@ -47,7 +47,7 @@
 - Task creation input spanning full width
 - Title input field (large, text-base)
 - Details textarea below (3-4 rows, expandable feel)
-- Urgent checkbox with label on the right side
+- Urgent checkbox with alert icon next to duration control
 - Create button (primary style, right-aligned)
 - All contained in a card with p-6
 
@@ -60,16 +60,14 @@
   - Task details preview (text-sm, truncated if long)
   - Scheduled time badge (text-xs, right side)
   - Duration indicator (text-xs)
-- Hover state reveals full details
 - Drag-and-drop visual feedback (elevation change)
 
 **Completed Tasks Section:**
 - Collapsible header with chevron icon and count badge
 - When expanded: similar card layout to uncompleted
-- Redo button (ghost/outline style) instead of checkbox
+- Disabled checkbox plus Redo button (ghost style)
 - Completed timestamp shown
 - Slightly reduced opacity for completed items
-- Max height with scroll if many completed tasks
 
 ### Settings View
 
@@ -79,15 +77,15 @@
 
 **Setting Components:**
 - Calendar selector: Dropdown with calendar list
-- Work hours: Two time inputs (start/end) side-by-side
-- Timezone: Searchable dropdown
-- Default duration: Radio buttons or segmented control (30min, 1h, 2h)
-- Event color: Color picker input
+- Work hours: Two dropdowns (start/end) side-by-side
+- Timezone: Dropdown sorted by UTC offset
+- Default duration: Radio group (15 min, 30 min, 1h, 1.5h, 2h)
+- Event color: Color swatch radio group matching Google Calendar palette
 - Save button (primary style, bottom-right)
 
 **Navigation:**
-- Simple tab-style navigation at top switching between Main/Settings
-- Clean underline indicator for active tab
+- Sticky top header with icon buttons for Tasks and Settings
+- Theme toggle in the header
 
 ## Component Library
 
@@ -111,7 +109,7 @@
 - Border for definition
 
 **Icons:**
-- Use Heroicons (CDN)
+- Use Lucide React icons; Google icon from react-icons/si
 - Sizes: 20px (default), 16px (small), 24px (large)
 - Drag handle: grip-vertical icon
 - Checkbox: check icon when checked
@@ -121,7 +119,6 @@
 
 **Badges:**
 - Time/duration indicators: rounded-full, px-3 py-1, text-xs
-- Urgent indicator: Small badge near urgent tasks
 
 ## Interaction Patterns
 
@@ -134,11 +131,9 @@
 **Collapsible Section:**
 - Smooth height transition (duration-200)
 - Rotate chevron icon
-- Preserve state across sessions
 
 **Task Completion:**
-- Checkbox animation on click
-- Item smoothly transitions to completed section
+- Item moves to completed section
 - Toast notification confirming action
 
 **Loading States:**
@@ -163,7 +158,7 @@
 
 - All form inputs have associated labels
 - Focus visible on all interactive elements
-- Keyboard navigation for drag-and-drop (arrow keys + space)
+- Drag-and-drop is pointer-first; no dedicated keyboard reordering
 - ARIA labels for icon-only buttons
 - Screen reader announcements for dynamic changes
 - Color contrast meets WCAG AA standards

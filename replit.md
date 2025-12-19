@@ -11,7 +11,7 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend Architecture
-- **Framework**: React 18 with TypeScript
+- **Framework**: React 19 with TypeScript
 - **Build Tool**: Vite with custom configuration for Replit environment
 - **Routing**: Wouter (lightweight React router)
 - **State Management**: TanStack React Query for server state
@@ -26,23 +26,25 @@ Preferred communication style: Simple, everyday language.
 - **Build**: esbuild for production bundling, tsx for development
 - **Authentication**: Passport.js with Google OAuth 2.0 strategy
 - **Session Management**: express-session with PostgreSQL session store (connect-pg-simple)
-- **Scheduled Jobs**: node-cron for midnight task rescheduling
+- **Scheduled Jobs**: node-cron for midnight task rescheduling (server time)
 
 ### Data Storage
 - **Database**: PostgreSQL
 - **ORM**: Drizzle ORM with drizzle-zod for schema validation
 - **Schema Location**: `shared/schema.ts` contains all table definitions
+- **Task Storage**: Tasks live in Google Calendar events and are mapped to `CalendarTask` on read
 - **Tables**:
-  - `users`: Google OAuth credentials and tokens
+  - `users`: Google OAuth credentials and tokens (encrypted at rest)
   - `user_settings`: Calendar preferences (calendar ID, work hours, timezone, default duration, event color)
-  - `tasks`: Task metadata and calendar event references
+  - `user_sessions`: express-session store (connect-pg-simple)
 
 ### API Structure
 - RESTful API endpoints under `/api/` prefix
 - Authentication endpoints: `/api/auth/google`, `/api/auth/google/callback`, `/api/auth/logout`, `/api/auth/user`
-- Task endpoints: `/api/tasks` (CRUD operations)
+- Task endpoints: `/api/tasks` (list + create), `/api/tasks/:id` (complete/redo), `/api/tasks/reorder`, `/api/tasks/reschedule-all`, `/api/tasks/reload`, `/api/tasks/:id/complete`, `/api/tasks/:id/reschedule`, `/api/tasks/bulk-complete`
 - Settings endpoints: `/api/settings`, `/api/calendars`
 - Action tokens for calendar event links (complete/reschedule tasks via URL)
+- Non-GET requests require `X-CSRF-Token` from `/api/auth/user`
 
 ### Key Design Patterns
 - **Shared Types**: Schema definitions in `shared/` directory used by both frontend and backend
@@ -61,7 +63,10 @@ Preferred communication style: Simple, everyday language.
 - `DATABASE_URL`: PostgreSQL connection string
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret
-- `SESSION_SECRET`: Secret for session encryption (optional, has default)
+- `SESSION_SECRET`: Secret for session encryption (min 32 chars)
+- `ACTION_TOKEN_SECRET`: Secret for action links (min 32 chars, must differ from SESSION_SECRET)
+- `TOKEN_ENCRYPTION_KEY`: Secret for encrypting OAuth tokens (min 32 chars)
+- `PRODUCTION_APP_URL`: Required in production for action links and secure cookies
 
 ### Database
 - PostgreSQL with session table auto-creation
