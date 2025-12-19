@@ -7,6 +7,7 @@ import { generateActionToken } from "./tokens";
 const APP_SIGNATURE = "Created by CalTodo";
 const EVENT_TITLE_PREFIX_INCOMPLETE = "☑️ ";
 const EVENT_TITLE_PREFIX_COMPLETE = "✅ ";
+const EVENT_MARKER_KEY = "caltodo";
 const EVENT_COMPLETED_KEY = "caltodoCompleted";
 const EVENT_ACTIONS_MARKER = "Actions:\n- Mark Complete:";
 
@@ -27,30 +28,19 @@ export function stripEventTitlePrefix(summary: string): string {
 
 function buildEventPrivateProperties(completed: boolean): Record<string, string> {
   return {
+    [EVENT_MARKER_KEY]: "true",
     [EVENT_COMPLETED_KEY]: completed ? "true" : "false",
   };
 }
 
 function isCalTodoEvent(event: calendar_v3.Schema$Event): boolean {
-  const hasCompletedFlag = event.extendedProperties?.private?.[EVENT_COMPLETED_KEY] !== undefined;
-  if (hasCompletedFlag) return true;
-  const summary = event.summary || "";
-  if (summary.startsWith(EVENT_TITLE_PREFIX_COMPLETE) || summary.startsWith(EVENT_TITLE_PREFIX_INCOMPLETE)) {
-    return true;
-  }
-  const description = event.description || "";
-  return description.includes(APP_SIGNATURE);
+  return event.extendedProperties?.private?.[EVENT_MARKER_KEY] === "true";
 }
 
 function getEventCompletion(event: calendar_v3.Schema$Event): boolean | undefined {
   const rawValue = event.extendedProperties?.private?.[EVENT_COMPLETED_KEY];
   if (rawValue === "true") return true;
   if (rawValue === "false") return false;
-
-  const summary = event.summary || "";
-  if (summary.startsWith(EVENT_TITLE_PREFIX_COMPLETE)) return true;
-  if (summary.startsWith(EVENT_TITLE_PREFIX_INCOMPLETE)) return false;
-
   return undefined;
 }
 
