@@ -103,8 +103,8 @@ TOKEN_ENCRYPTION_KEY=32+_char_random_key_for_token_encryption
 # Install dependencies
 npm install
 
-# Push database schema
-npm run db:push
+# Run database migrations
+npm run db:migrate
 
 # Start development server
 npm run dev
@@ -115,7 +115,8 @@ The app will be available at `http://localhost:5000`.
 ### Development Scripts
 
 - `npm run dev` - Start development server (frontend + backend)
-- `npm run db:push` - Push schema changes to database
+- `npm run db:generate` - Create a new migration from schema changes
+- `npm run db:migrate` - Run pending migrations (also runs automatically on server start)
 - `npm run build` - Build for production
 - `npm run start` - Run production build
 
@@ -156,8 +157,8 @@ npm ci
 # Build the application
 npm run build
 
-# Push database schema (first deploy or schema changes)
-npm run db:push
+# Run database migrations (also runs automatically on server start)
+npm run db:migrate
 
 # Start the server
 npm start

@@ -65,7 +65,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Database
 - PostgreSQL with session table auto-creation
-- Drizzle Kit for schema migrations (`npm run db:push`)
+- Drizzle Kit migrations (`npm run db:generate` + `npm run db:migrate`; also runs on server start)
 
 ### Third-Party UI Libraries
 - Full shadcn/ui component set (40+ Radix-based components)

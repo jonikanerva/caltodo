@@ -87,4 +87,7 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
     },
   );
-})();
+})().catch((error) => {
+  console.error("Startup failed:", error);
+  process.exit(1);
+});
