@@ -105,21 +105,15 @@ export default function MainPage() {
 
   const completeTaskMutation = useMutation({
     mutationFn: async ({ id, completed }: { id: string; completed: boolean }) => {
-      // Add to completing set immediately for optimistic UI
-      setCompletingTaskIds(prev => new Set(prev).add(id));
       return apiRequest("PATCH", `/api/tasks/${id}`, { completed });
     },
-    onSuccess: (_, { id }) => {
+    onMutate: ({ id }) => {
+      setCompletingTaskIds(prev => new Set(prev).add(id));
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      // Remove from completing set after success
-      setCompletingTaskIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
     },
     onError: (_, { id }) => {
-      // Remove from completing set on error
       setCompletingTaskIds(prev => {
         const next = new Set(prev);
         next.delete(id);
@@ -127,6 +121,22 @@ export default function MainPage() {
       });
     },
   });
+  
+  useEffect(() => {
+    if (completingTaskIds.size === 0) return;
+    setCompletingTaskIds(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of Array.from(prev)) {
+        const task = tasks.find((item) => item.id === id);
+        if (!task || task.completed) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [tasks, completingTaskIds]);
 
   const reorderTasksMutation = useMutation({
     mutationFn: async (taskIds: string[]) => {
