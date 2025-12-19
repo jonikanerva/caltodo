@@ -4,18 +4,52 @@ import type { Task, UserSettings } from "@shared/schema";
 import { generateActionToken } from "./tokens";
 
 const APP_SIGNATURE = "Created by CalTodo";
-const EVENT_TITLE_PREFIX = "☑️ ";
+const EVENT_TITLE_PREFIX_INCOMPLETE = "☑️ ";
+const EVENT_TITLE_PREFIX_COMPLETE = "✅ ";
+const EVENT_TASK_ID_KEY = "caltodoTaskId";
+const EVENT_COMPLETED_KEY = "caltodoCompleted";
 
 // Helper to add/strip the emoji prefix from event titles
-function formatEventTitle(title: string): string {
-  return `${EVENT_TITLE_PREFIX}${title}`;
+function formatEventTitle(title: string, completed: boolean): string {
+  return `${completed ? EVENT_TITLE_PREFIX_COMPLETE : EVENT_TITLE_PREFIX_INCOMPLETE}${title}`;
 }
 
 export function stripEventTitlePrefix(summary: string): string {
-  if (summary.startsWith(EVENT_TITLE_PREFIX)) {
-    return summary.slice(EVENT_TITLE_PREFIX.length);
+  if (summary.startsWith(EVENT_TITLE_PREFIX_INCOMPLETE)) {
+    return summary.slice(EVENT_TITLE_PREFIX_INCOMPLETE.length);
+  }
+  if (summary.startsWith(EVENT_TITLE_PREFIX_COMPLETE)) {
+    return summary.slice(EVENT_TITLE_PREFIX_COMPLETE.length);
   }
   return summary;
+}
+
+function buildEventPrivateProperties(task: Task): Record<string, string> {
+  return {
+    [EVENT_TASK_ID_KEY]: task.id,
+    [EVENT_COMPLETED_KEY]: task.completed ? "true" : "false",
+  };
+}
+
+function isCalTodoEvent(event: calendar_v3.Schema$Event): boolean {
+  return Boolean(event.extendedProperties?.private?.[EVENT_TASK_ID_KEY]);
+}
+
+function getEventCompletion(event: calendar_v3.Schema$Event): boolean | undefined {
+  const rawValue = event.extendedProperties?.private?.[EVENT_COMPLETED_KEY];
+  if (rawValue === "true") return true;
+  if (rawValue === "false") return false;
+
+  const summary = event.summary || "";
+  if (summary.startsWith(EVENT_TITLE_PREFIX_COMPLETE)) return true;
+  if (summary.startsWith(EVENT_TITLE_PREFIX_INCOMPLETE)) return false;
+
+  return undefined;
+}
+
+function isCompletedCalTodoEvent(event: calendar_v3.Schema$Event): boolean {
+  if (!isCalTodoEvent(event)) return false;
+  return getEventCompletion(event) === true;
 }
 
 // Helper to build event description: details first (if any), then actions
@@ -180,12 +214,11 @@ export async function findFreeSlot(
         ? prefetchedEvents.events
         : await listCalendarEventsInRange(calendar, settings.calendarId, now, searchEndDate);
     
-    // When rescheduling, exclude CalTodo-managed events from conflict check
+    // When rescheduling, exclude all CalTodo-managed events. Otherwise ignore completed CalTodo events.
     if (excludeCalTodoEvents) {
-      events = events.filter(event => {
-        const caltodoTaskId = event.extendedProperties?.private?.caltodoTaskId;
-        return !caltodoTaskId;
-      });
+      events = events.filter(event => !isCalTodoEvent(event));
+    } else {
+      events = events.filter(event => !isCompletedCalTodoEvent(event));
     }
     
     let currentDate = new Date(now);
@@ -265,7 +298,7 @@ export async function createCalendarEvent(
 
   try {
     const requestBody: calendar_v3.Schema$Event = {
-      summary: formatEventTitle(task.title),
+      summary: formatEventTitle(task.title, task.completed),
       description,
       visibility: "private",
       start: {
@@ -278,9 +311,7 @@ export async function createCalendarEvent(
       },
       colorId: settings.eventColor,
       extendedProperties: {
-        private: {
-          caltodoTaskId: task.id,
-        },
+        private: buildEventPrivateProperties(task),
       },
     };
 
@@ -331,7 +362,7 @@ export async function updateCalendarEvent(
 
   try {
     const requestBody: calendar_v3.Schema$Event = {
-      summary: formatEventTitle(task.title),
+      summary: formatEventTitle(task.title, task.completed),
       description,
       visibility: "private",
       start: {
@@ -344,9 +375,7 @@ export async function updateCalendarEvent(
       },
       colorId: settings.eventColor,
       extendedProperties: {
-        private: {
-          caltodoTaskId: task.id,
-        },
+        private: buildEventPrivateProperties(task),
       },
     };
 
@@ -419,13 +448,11 @@ export async function updateCalendarEventContent(
       calendarId: settings.calendarId,
       eventId,
       requestBody: {
-        summary: formatEventTitle(task.title),
+        summary: formatEventTitle(task.title, task.completed),
         description,
         visibility: "private",
         extendedProperties: {
-          private: {
-            caltodoTaskId: task.id,
-          },
+          private: buildEventPrivateProperties(task),
         },
       },
     });
@@ -482,6 +509,8 @@ export interface CalendarEventData {
   start: Date;
   end: Date;
   summary?: string;
+  completed?: boolean;
+  updated?: Date;
 }
 
 // Special marker for deleted events (404/410 errors)
@@ -525,6 +554,8 @@ export async function getCalendarEventsForTasks(
             start: new Date(event.start.dateTime),
             end: new Date(event.end.dateTime),
             summary: event.summary || undefined,
+            completed: getEventCompletion(event),
+            updated: event.updated ? new Date(event.updated) : undefined,
           } as CalendarEventData,
         };
       }

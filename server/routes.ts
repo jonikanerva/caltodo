@@ -12,7 +12,6 @@ import {
   rescheduleAllUserTasks,
   updateCalendarEventContent,
   getCalendarEventsForTasks,
-  getCalendarEvent,
   EVENT_DELETED,
   stripEventTitlePrefix,
   type CalendarEventData
@@ -183,81 +182,97 @@ export async function registerRoutes(
     try {
       const tasks = await storage.getTasksByUserId(req.user!.id);
       const settings = await storage.getUserSettings(req.user!.id);
-      
-      // Get event IDs for tasks that have calendar events
+      const completedCutoff = new Date();
+      completedCutoff.setDate(completedCutoff.getDate() - 14);
+
       const eventIds = tasks
-        .filter(t => t.calendarEventId && !t.completed)
+        .filter(t => t.calendarEventId)
+        .filter(t => {
+          if (!t.completed) return true;
+          if (t.completedAt && new Date(t.completedAt) >= completedCutoff) return true;
+          if (t.scheduledStart && new Date(t.scheduledStart) >= completedCutoff) return true;
+          return false;
+        })
         .map(t => t.calendarEventId as string);
-      
-      // Fetch live event data from Google Calendar
+
       const calendarEvents = settings?.calendarId && eventIds.length > 0
         ? await getCalendarEventsForTasks(req.user!.id, settings.calendarId, eventIds)
         : new Map<string, CalendarEventData | typeof EVENT_DELETED | undefined>();
-      
-      // Track which task IDs had their events deleted - mark them as completed
-      const completedByDeletionIds = new Set<string>();
-      // Track title updates from calendar
+
+      const missingEventIds = new Set<string>();
       const titleUpdates = new Map<string, string>();
-      
-      // Sync tasks with calendar events
+      const completionUpdates = new Map<string, { completed: boolean; completedAt: Date | null }>();
+      const scheduleUpdates = new Map<string, { start: Date; end: Date }>();
+
       for (const task of tasks) {
-        if (task.calendarEventId) {
-          const eventData = calendarEvents.get(task.calendarEventId);
-          
-          // Mark as completed if calendar event was deleted
-          if (eventData === EVENT_DELETED) {
-            console.log(`Marking task ${task.id} as completed because its calendar event was deleted`);
-            await storage.updateTask(task.id, {
-              completed: true,
-              completedAt: new Date(),
-              calendarEventId: null,
-              scheduledStart: null,
-              scheduledEnd: null,
-            });
-            completedByDeletionIds.add(task.id);
-          } 
-          // Update title if it was changed in calendar
-          else if (eventData && eventData.summary) {
-            const calendarTitle = stripEventTitlePrefix(eventData.summary);
-            if (calendarTitle !== task.title) {
-              console.log(`Updating task ${task.id} title from calendar: "${task.title}" -> "${calendarTitle}"`);
-              await storage.updateTask(task.id, { title: calendarTitle });
-              titleUpdates.set(task.id, calendarTitle);
-            }
+        if (!task.calendarEventId) continue;
+        const eventData = calendarEvents.get(task.calendarEventId);
+        if (!eventData) continue;
+
+        if (eventData === EVENT_DELETED) {
+          await storage.updateTask(task.id, {
+            calendarEventId: null,
+            scheduledStart: null,
+            scheduledEnd: null,
+          });
+          missingEventIds.add(task.id);
+          continue;
+        }
+
+        if (eventData.summary) {
+          const calendarTitle = stripEventTitlePrefix(eventData.summary);
+          if (calendarTitle !== task.title) {
+            console.log(`Updating task ${task.id} title from calendar: "${task.title}" -> "${calendarTitle}"`);
+            await storage.updateTask(task.id, { title: calendarTitle });
+            titleUpdates.set(task.id, calendarTitle);
           }
         }
+
+        if (eventData.completed !== undefined) {
+          const completedAt = eventData.completed
+            ? (task.completedAt ? new Date(task.completedAt) : eventData.updated ?? new Date())
+            : null;
+          completionUpdates.set(task.id, { completed: eventData.completed, completedAt });
+
+          const shouldSyncCompletedAt =
+            (eventData.completed && !task.completedAt) ||
+            (!eventData.completed && task.completedAt);
+
+          if (eventData.completed !== task.completed || shouldSyncCompletedAt) {
+            await storage.updateTask(task.id, {
+              completed: eventData.completed,
+              completedAt,
+            });
+          }
+        }
+
+        if (eventData.start && eventData.end) {
+          scheduleUpdates.set(task.id, { start: eventData.start, end: eventData.end });
+        }
       }
-      
-      // Enrich tasks with live calendar data
+
       const enrichedTasks = tasks.map(task => {
-        // If event was deleted, return task as completed
-        if (completedByDeletionIds.has(task.id)) {
+        if (missingEventIds.has(task.id)) {
           return {
             ...task,
-            completed: true,
-            completedAt: new Date(),
             calendarEventId: null,
             scheduledStart: null,
             scheduledEnd: null,
           };
         }
-        
-        // Apply title update if changed in calendar
+
         const updatedTitle = titleUpdates.get(task.id);
-        
-        // Enrich with live calendar data if available
-        if (task.calendarEventId && !task.completed) {
-          const eventData = calendarEvents.get(task.calendarEventId);
-          if (eventData && eventData !== EVENT_DELETED) {
-            return {
-              ...task,
-              title: updatedTitle || task.title,
-              scheduledStart: eventData.start,
-              scheduledEnd: eventData.end,
-            };
-          }
-        }
-        return updatedTitle ? { ...task, title: updatedTitle } : task;
+        const completionUpdate = completionUpdates.get(task.id);
+        const scheduleUpdate = scheduleUpdates.get(task.id);
+
+        return {
+          ...task,
+          title: updatedTitle || task.title,
+          completed: completionUpdate?.completed ?? task.completed,
+          completedAt: completionUpdate?.completedAt ?? task.completedAt,
+          scheduledStart: scheduleUpdate?.start ?? task.scheduledStart,
+          scheduledEnd: scheduleUpdate?.end ?? task.scheduledEnd,
+        };
       });
       
       // Reorder priorities for uncompleted tasks based on calendar event order
@@ -269,7 +284,13 @@ export async function registerRoutes(
         .filter(t => !t.completed && !t.scheduledStart)
         .sort((a, b) => a.priority - b.priority);
       
-      const completedTasks = enrichedTasks.filter(t => t.completed);
+      const completedTasks = enrichedTasks.filter(t => {
+        if (!t.completed) return false;
+        if (t.completedAt && new Date(t.completedAt) >= completedCutoff) return true;
+        if (t.scheduledEnd && new Date(t.scheduledEnd) >= completedCutoff) return true;
+        if (t.scheduledStart && new Date(t.scheduledStart) >= completedCutoff) return true;
+        return false;
+      });
       
       // Update priorities based on calendar order (tasks with times first, sorted by time)
       let newPriority = 0;
@@ -435,17 +456,20 @@ export async function registerRoutes(
       const settings = await storage.getUserSettings(req.user!.id);
 
       if (data.completed === true && !task.completed) {
-        if (task.calendarEventId && settings?.calendarId) {
-          await deleteCalendarEvent(req.user!.id, task.calendarEventId, settings.calendarId);
-        }
-
         const updatedTask = await storage.updateTask(id, {
           completed: true,
           completedAt: new Date(),
-          calendarEventId: null,
-          scheduledStart: null,
-          scheduledEnd: null,
         });
+
+        if (updatedTask && task.calendarEventId && settings?.calendarId) {
+          await updateCalendarEventContent(
+            req.user!.id,
+            task.calendarEventId,
+            settings,
+            updatedTask,
+            getBaseUrl(req),
+          );
+        }
 
         return res.json(updatedTask);
       }
@@ -461,22 +485,47 @@ export async function registerRoutes(
         });
 
         if (settings?.calendarId) {
-          const slot = await findFreeSlot(req.user!.id, settings, settings.defaultDuration);
+          const taskDuration = updatedTask?.duration || settings.defaultDuration;
+          const slot = await findFreeSlot(req.user!.id, settings, taskDuration);
           
           if (slot) {
-            const eventId = await createCalendarEvent(
-              req.user!.id,
-              updatedTask!,
-              settings,
-              slot,
-              getBaseUrl(req)
-            );
+            if (updatedTask?.calendarEventId) {
+              await updateCalendarEvent(
+                req.user!.id,
+                updatedTask.calendarEventId,
+                settings,
+                slot,
+                updatedTask,
+                getBaseUrl(req)
+              );
 
-            updatedTask = await storage.updateTask(id, {
-              calendarEventId: eventId,
-              scheduledStart: slot.start,
-              scheduledEnd: slot.end,
-            });
+              updatedTask = await storage.updateTask(id, {
+                scheduledStart: slot.start,
+                scheduledEnd: slot.end,
+              });
+            } else {
+              const eventId = await createCalendarEvent(
+                req.user!.id,
+                updatedTask!,
+                settings,
+                slot,
+                getBaseUrl(req)
+              );
+
+              updatedTask = await storage.updateTask(id, {
+                calendarEventId: eventId,
+                scheduledStart: slot.start,
+                scheduledEnd: slot.end,
+              });
+            }
+          } else if (updatedTask?.calendarEventId) {
+            await updateCalendarEventContent(
+              req.user!.id,
+              updatedTask.calendarEventId,
+              settings,
+              updatedTask,
+              getBaseUrl(req),
+            );
           }
         }
 
@@ -626,17 +675,20 @@ export async function registerRoutes(
         const task = await storage.getTask(taskId);
         if (!task || task.userId !== req.user!.id) continue;
 
-        if (task.calendarEventId && settings?.calendarId) {
-          await deleteCalendarEvent(req.user!.id, task.calendarEventId, settings.calendarId);
-        }
-
-        await storage.updateTask(taskId, {
+        const updatedTask = await storage.updateTask(taskId, {
           completed: true,
           completedAt: new Date(),
-          calendarEventId: null,
-          scheduledStart: null,
-          scheduledEnd: null,
         });
+
+        if (updatedTask && task.calendarEventId && settings?.calendarId) {
+          await updateCalendarEventContent(
+            req.user!.id,
+            task.calendarEventId,
+            settings,
+            updatedTask,
+            getBaseUrl(req),
+          );
+        }
       }
 
       res.json({ success: true });
@@ -665,25 +717,51 @@ export async function registerRoutes(
       }
 
       const tasks = await storage.getTasksByUserId(req.user!.id);
-      const incompleteTasks = tasks.filter((t) => !t.completed && t.calendarEventId);
+      const eventIds = tasks
+        .filter((t) => t.calendarEventId)
+        .map((t) => t.calendarEventId as string);
 
-      for (const task of incompleteTasks) {
-        const event = await getCalendarEvent(req.user!.id, task.calendarEventId!, settings.calendarId);
-        if (event) {
+      const calendarEvents = eventIds.length > 0
+        ? await getCalendarEventsForTasks(req.user!.id, settings.calendarId, eventIds)
+        : new Map<string, CalendarEventData | typeof EVENT_DELETED | undefined>();
+
+      for (const task of tasks) {
+        if (!task.calendarEventId) continue;
+        const eventData = calendarEvents.get(task.calendarEventId);
+        if (!eventData) continue;
+
+        if (eventData === EVENT_DELETED) {
           await storage.updateTask(task.id, {
-            scheduledStart: event.start,
-            scheduledEnd: event.end,
-          });
-        } else {
-          // Event was deleted externally - mark task as completed
-          console.log(`Marking task ${task.id} as completed because calendar event was deleted`);
-          await storage.updateTask(task.id, {
-            completed: true,
-            completedAt: new Date(),
             calendarEventId: null,
             scheduledStart: null,
             scheduledEnd: null,
           });
+          continue;
+        }
+
+        const updates: Partial<Task> = {};
+
+        if (eventData.summary) {
+          const calendarTitle = stripEventTitlePrefix(eventData.summary);
+          if (calendarTitle !== task.title) {
+            updates.title = calendarTitle;
+          }
+        }
+
+        if (eventData.start && eventData.end) {
+          updates.scheduledStart = eventData.start;
+          updates.scheduledEnd = eventData.end;
+        }
+
+        if (eventData.completed !== undefined) {
+          updates.completed = eventData.completed;
+          updates.completedAt = eventData.completed
+            ? (task.completedAt ? new Date(task.completedAt) : eventData.updated ?? new Date())
+            : null;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await storage.updateTask(task.id, updates);
         }
       }
 
@@ -691,22 +769,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error reloading calendar data:", error);
       res.status(500).json({ error: "Failed to reload calendar data" });
-    }
-  });
-
-  app.delete("/api/tasks/completed", requireAuth, async (req, res) => {
-    try {
-      const tasks = await storage.getTasksByUserId(req.user!.id);
-      const completedTasks = tasks.filter((t) => t.completed);
-
-      for (const task of completedTasks) {
-        await storage.deleteTask(task.id);
-      }
-
-      res.json({ success: true, deleted: completedTasks.length });
-    } catch (error) {
-      console.error("Error deleting completed tasks:", error);
-      res.status(500).json({ error: "Failed to delete completed tasks" });
     }
   });
 
@@ -721,17 +783,20 @@ export async function registerRoutes(
 
       const settings = await storage.getUserSettings(req.user!.id);
 
-      if (task.calendarEventId && settings?.calendarId) {
-        await deleteCalendarEvent(req.user!.id, task.calendarEventId, settings.calendarId);
-      }
-
-      await storage.updateTask(id, {
+      const updatedTask = await storage.updateTask(id, {
         completed: true,
         completedAt: new Date(),
-        calendarEventId: null,
-        scheduledStart: null,
-        scheduledEnd: null,
       });
+
+      if (updatedTask && task.calendarEventId && settings?.calendarId) {
+        await updateCalendarEventContent(
+          req.user!.id,
+          task.calendarEventId,
+          settings,
+          updatedTask,
+          getBaseUrl(req),
+        );
+      }
 
       res.json({ success: true });
     } catch (error) {
@@ -821,17 +886,20 @@ export async function registerRoutes(
       const safeTitle = escapeHtml(task.title);
 
       if (payload.action === "complete") {
-        if (task.calendarEventId && settings?.calendarId) {
-          await deleteCalendarEvent(task.userId, task.calendarEventId, settings.calendarId);
-        }
-
-        await storage.updateTask(task.id, {
+        const updatedTask = await storage.updateTask(task.id, {
           completed: true,
           completedAt: new Date(),
-          calendarEventId: null,
-          scheduledStart: null,
-          scheduledEnd: null,
         });
+
+        if (updatedTask && task.calendarEventId && settings?.calendarId) {
+          await updateCalendarEventContent(
+            task.userId,
+            task.calendarEventId,
+            settings,
+            updatedTask,
+            getBaseUrl(req),
+          );
+        }
 
         return res.send(`
           <!DOCTYPE html>

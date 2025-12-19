@@ -27,7 +27,6 @@ import {
   Check,
   X,
   RefreshCw,
-  Trash2,
   Bell,
   RotateCw
 } from "lucide-react";
@@ -213,26 +212,6 @@ export default function MainPage() {
       toast({
         title: "Error",
         description: "Failed to reschedule tasks. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const deleteCompletedMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("DELETE", "/api/tasks/completed", {});
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      toast({
-        title: "Tasks deleted",
-        description: `${data.deleted} completed task(s) have been removed`,
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to delete tasks. Please try again.",
         variant: "destructive",
       });
     },
@@ -681,21 +660,6 @@ export default function MainPage() {
                 )}
               </Button>
             </CollapsibleTrigger>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => deleteCompletedMutation.mutate()}
-              disabled={deleteCompletedMutation.isPending}
-              className="text-muted-foreground"
-              data-testid="button-delete-completed"
-            >
-              {deleteCompletedMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-              ) : (
-                <Trash2 className="h-4 w-4 mr-1" />
-              )}
-              Delete All
-            </Button>
           </div>
           <CollapsibleContent className="space-y-2 mt-2">
             {completedTasks.map((task) => (
