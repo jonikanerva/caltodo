@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1766141785073,
+      "tag": "0000_gifted_zemo",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1766141785074,
+      "tag": "0001_task_indexes",
+      "breakpoints": true
+    }
+  ]
+}
