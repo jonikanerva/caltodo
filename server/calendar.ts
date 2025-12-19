@@ -1,13 +1,14 @@
 import { google, calendar_v3 } from "googleapis";
 import { storage } from "./storage";
-import type { Task, UserSettings } from "@shared/schema";
+import type { UserSettings } from "@shared/schema";
+import type { CalendarTask } from "@shared/types";
 import { generateActionToken } from "./tokens";
 
 const APP_SIGNATURE = "Created by CalTodo";
 const EVENT_TITLE_PREFIX_INCOMPLETE = "☑️ ";
 const EVENT_TITLE_PREFIX_COMPLETE = "✅ ";
-const EVENT_TASK_ID_KEY = "caltodoTaskId";
 const EVENT_COMPLETED_KEY = "caltodoCompleted";
+const EVENT_ACTIONS_MARKER = "Actions:\n- Mark Complete:";
 
 // Helper to add/strip the emoji prefix from event titles
 function formatEventTitle(title: string, completed: boolean): string {
@@ -24,15 +25,21 @@ export function stripEventTitlePrefix(summary: string): string {
   return summary;
 }
 
-function buildEventPrivateProperties(task: Task): Record<string, string> {
+function buildEventPrivateProperties(completed: boolean): Record<string, string> {
   return {
-    [EVENT_TASK_ID_KEY]: task.id,
-    [EVENT_COMPLETED_KEY]: task.completed ? "true" : "false",
+    [EVENT_COMPLETED_KEY]: completed ? "true" : "false",
   };
 }
 
 function isCalTodoEvent(event: calendar_v3.Schema$Event): boolean {
-  return Boolean(event.extendedProperties?.private?.[EVENT_TASK_ID_KEY]);
+  const hasCompletedFlag = event.extendedProperties?.private?.[EVENT_COMPLETED_KEY] !== undefined;
+  if (hasCompletedFlag) return true;
+  const summary = event.summary || "";
+  if (summary.startsWith(EVENT_TITLE_PREFIX_COMPLETE) || summary.startsWith(EVENT_TITLE_PREFIX_INCOMPLETE)) {
+    return true;
+  }
+  const description = event.description || "";
+  return description.includes(APP_SIGNATURE);
 }
 
 function getEventCompletion(event: calendar_v3.Schema$Event): boolean | undefined {
@@ -52,16 +59,74 @@ function isCompletedCalTodoEvent(event: calendar_v3.Schema$Event): boolean {
   return getEventCompletion(event) === true;
 }
 
+function extractDetailsFromDescription(description?: string | null): string | null {
+  if (!description) return null;
+  let content = description;
+  const signatureMarker = `---\n${APP_SIGNATURE}`;
+  const signatureIndex = content.indexOf(signatureMarker);
+  if (signatureIndex !== -1) {
+    content = content.slice(0, signatureIndex);
+  }
+  const actionsIndex = content.indexOf(EVENT_ACTIONS_MARKER);
+  if (actionsIndex !== -1) {
+    content = content.slice(0, actionsIndex);
+  }
+  const trimmed = content.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function extractReminderMinutes(event: calendar_v3.Schema$Event): number | null {
+  const reminders = event.reminders;
+  if (!reminders || reminders.useDefault) return null;
+  const overrides = reminders.overrides || [];
+  const minutes = overrides
+    .map((override) => (typeof override.minutes === "number" ? override.minutes : null))
+    .filter((value): value is number => value !== null);
+  if (minutes.length === 0) return null;
+  return Math.min(...minutes);
+}
+
+function getDurationMinutes(start: Date, end: Date): number | null {
+  const diffMs = end.getTime() - start.getTime();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) return null;
+  return Math.round(diffMs / 60000);
+}
+
+export function mapCalendarEventToTask(event: calendar_v3.Schema$Event): CalendarTask | null {
+  if (!event.id || !event.start?.dateTime || !event.end?.dateTime) return null;
+  if (!isCalTodoEvent(event)) return null;
+
+  const start = new Date(event.start.dateTime);
+  const end = new Date(event.end.dateTime);
+  const completed = getEventCompletion(event) === true;
+  const completedAt = completed
+    ? (event.updated ? new Date(event.updated).toISOString() : end.toISOString())
+    : null;
+
+  return {
+    id: event.id,
+    title: stripEventTitlePrefix(event.summary || ""),
+    details: extractDetailsFromDescription(event.description),
+    duration: getDurationMinutes(start, end),
+    reminderMinutes: extractReminderMinutes(event),
+    scheduledStart: start.toISOString(),
+    scheduledEnd: end.toISOString(),
+    completed,
+    completedAt,
+    priority: 0,
+  };
+}
+
 // Helper to build event description: details first (if any), then actions
-function buildEventDescription(task: Task, completeLink: string, rescheduleLink: string): string {
+function buildEventDescription(details: string | null, completeLink: string, rescheduleLink: string): string {
   const parts: string[] = [];
-  if (task.details) {
-    parts.push(task.details);
-    parts.push('');
+  if (details) {
+    parts.push(details);
+    parts.push("");
   }
   parts.push(`Actions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`);
   parts.push(`\n---\n${APP_SIGNATURE}`);
-  return parts.join('\n');
+  return parts.join("\n");
 }
 
 // Helper to get hours and minutes in a specific timezone
@@ -138,7 +203,7 @@ export async function getCalendarClient(userId: string): Promise<calendar_v3.Cal
   return google.calendar({ version: "v3", auth: oauth2Client });
 }
 
-async function listCalendarEventsInRange(
+export async function listCalendarEventsInRange(
   calendar: calendar_v3.Calendar,
   calendarId: string,
   timeMin: Date,
@@ -201,7 +266,7 @@ export async function findFreeSlot(
   const timezone = settings.timezone || 'UTC';
   const now = afterTime || new Date();
   const searchEndDate = new Date(now);
-  searchEndDate.setDate(searchEndDate.getDate() + 14);
+  searchEndDate.setDate(searchEndDate.getDate() + 90);
 
   try {
     const shouldUsePrefetched =
@@ -278,9 +343,53 @@ export async function findFreeSlot(
   }
 }
 
+interface CalendarEventInput {
+  title: string;
+  details: string | null;
+  reminderMinutes: number | null;
+}
+
+function buildBaseDescription(details: string | null): string {
+  if (details) {
+    return `${details}\n\n---\n${APP_SIGNATURE}`;
+  }
+  return `---\n${APP_SIGNATURE}`;
+}
+
+async function updateCalendarEventActions(
+  userId: string,
+  calendarId: string,
+  eventId: string,
+  details: string | null,
+  baseUrl: string
+): Promise<void> {
+  const calendar = await getCalendarClient(userId);
+  if (!calendar) return;
+
+  const completeToken = generateActionToken(userId, eventId, "complete");
+  const rescheduleToken = generateActionToken(userId, eventId, "reschedule");
+
+  const completeLink = `${baseUrl}/api/action/${completeToken}`;
+  const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
+
+  const description = buildEventDescription(details, completeLink, rescheduleLink);
+
+  try {
+    await calendar.events.patch({
+      calendarId,
+      eventId,
+      requestBody: {
+        description,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating calendar event actions:", error);
+  }
+}
+
 export async function createCalendarEvent(
   userId: string,
-  task: Task,
+  input: CalendarEventInput,
   settings: UserSettings,
   slot: { start: Date; end: Date },
   baseUrl: string
@@ -288,18 +397,10 @@ export async function createCalendarEvent(
   const calendar = await getCalendarClient(userId);
   if (!calendar || !settings.calendarId) return null;
 
-  const completeToken = generateActionToken(task.id, "complete");
-  const rescheduleToken = generateActionToken(task.id, "reschedule");
-  
-  const completeLink = `${baseUrl}/api/action/${completeToken}`;
-  const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
-
-  const description = buildEventDescription(task, completeLink, rescheduleLink);
-
   try {
     const requestBody: calendar_v3.Schema$Event = {
-      summary: formatEventTitle(task.title, task.completed),
-      description,
+      summary: formatEventTitle(input.title, false),
+      description: buildBaseDescription(input.details),
       visibility: "private",
       start: {
         dateTime: slot.start.toISOString(),
@@ -311,16 +412,14 @@ export async function createCalendarEvent(
       },
       colorId: settings.eventColor,
       extendedProperties: {
-        private: buildEventPrivateProperties(task),
+        private: buildEventPrivateProperties(false),
       },
     };
 
-    if (task.reminderMinutes !== null && task.reminderMinutes !== undefined) {
+    if (input.reminderMinutes !== null && input.reminderMinutes !== undefined) {
       requestBody.reminders = {
         useDefault: false,
-        overrides: [
-          { method: "popup", minutes: task.reminderMinutes },
-        ],
+        overrides: [{ method: "popup", minutes: input.reminderMinutes }],
       };
     } else {
       requestBody.reminders = {
@@ -334,73 +433,51 @@ export async function createCalendarEvent(
       requestBody,
     });
 
-    return response.data.id || null;
+    const eventId = response.data.id || null;
+    if (eventId) {
+      await updateCalendarEventActions(
+        userId,
+        settings.calendarId,
+        eventId,
+        input.details,
+        baseUrl
+      );
+    }
+
+    return eventId;
   } catch (error) {
     console.error("Error creating calendar event:", error);
     return null;
   }
 }
 
-export async function updateCalendarEvent(
+export async function updateCalendarEventTime(
   userId: string,
   eventId: string,
   settings: UserSettings,
-  slot: { start: Date; end: Date },
-  task: Task,
-  baseUrl: string
+  slot: { start: Date; end: Date }
 ): Promise<boolean> {
   const calendar = await getCalendarClient(userId);
   if (!calendar || !settings.calendarId) return false;
 
-  const completeToken = generateActionToken(task.id, "complete");
-  const rescheduleToken = generateActionToken(task.id, "reschedule");
-  
-  const completeLink = `${baseUrl}/api/action/${completeToken}`;
-  const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
-
-  const description = buildEventDescription(task, completeLink, rescheduleLink);
-
   try {
-    const requestBody: calendar_v3.Schema$Event = {
-      summary: formatEventTitle(task.title, task.completed),
-      description,
-      visibility: "private",
-      start: {
-        dateTime: slot.start.toISOString(),
-        timeZone: settings.timezone,
-      },
-      end: {
-        dateTime: slot.end.toISOString(),
-        timeZone: settings.timezone,
-      },
-      colorId: settings.eventColor,
-      extendedProperties: {
-        private: buildEventPrivateProperties(task),
-      },
-    };
-
-    if (task.reminderMinutes !== null && task.reminderMinutes !== undefined) {
-      requestBody.reminders = {
-        useDefault: false,
-        overrides: [
-          { method: "popup", minutes: task.reminderMinutes },
-        ],
-      };
-    } else {
-      requestBody.reminders = {
-        useDefault: false,
-        overrides: [],
-      };
-    }
-
-    await calendar.events.update({
+    await calendar.events.patch({
       calendarId: settings.calendarId,
       eventId,
-      requestBody,
+      requestBody: {
+        start: {
+          dateTime: slot.start.toISOString(),
+          timeZone: settings.timezone,
+        },
+        end: {
+          dateTime: slot.end.toISOString(),
+          timeZone: settings.timezone,
+        },
+      },
     });
     return true;
   } catch (error) {
-    console.error("Error updating calendar event:", error);
+    console.error("Error updating calendar event time:", error);
     return false;
   }
 }
@@ -425,41 +502,51 @@ export async function deleteCalendarEvent(
   }
 }
 
-export async function updateCalendarEventContent(
+export async function updateCalendarEventCompletion(
   userId: string,
   eventId: string,
   settings: UserSettings,
-  task: Task,
-  baseUrl: string
-): Promise<boolean> {
+  completed: boolean
+): Promise<calendar_v3.Schema$Event | null> {
   const calendar = await getCalendarClient(userId);
-  if (!calendar || !settings.calendarId) return false;
-
-  const completeToken = generateActionToken(task.id, "complete");
-  const rescheduleToken = generateActionToken(task.id, "reschedule");
-  
-  const completeLink = `${baseUrl}/api/action/${completeToken}`;
-  const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
-
-  const description = buildEventDescription(task, completeLink, rescheduleLink);
+  if (!calendar || !settings.calendarId) return null;
 
   try {
-    await calendar.events.patch({
+    const current = await calendar.events.get({
+      calendarId: settings.calendarId,
+      eventId,
+    });
+
+    const currentEvent = current.data;
+    if (currentEvent.status === "cancelled") {
+      return null;
+    }
+
+    const title = stripEventTitlePrefix(currentEvent.summary || "");
+    const existingPrivate = currentEvent.extendedProperties?.private || {};
+
+    const response = await calendar.events.patch({
       calendarId: settings.calendarId,
       eventId,
       requestBody: {
-        summary: formatEventTitle(task.title, task.completed),
-        description,
-        visibility: "private",
+        summary: formatEventTitle(title, completed),
         extendedProperties: {
-          private: buildEventPrivateProperties(task),
+          private: {
+            ...existingPrivate,
+            ...buildEventPrivateProperties(completed),
+          },
         },
       },
     });
-    return true;
-  } catch (error) {
-    console.error("Error updating calendar event content:", error);
-    return false;
+
+    return response.data;
+  } catch (error: any) {
+    const statusCode = error?.code || error?.response?.status || error?.status;
+    if (statusCode === 404 || statusCode === 410) {
+      return null;
+    }
+    console.error("Error updating calendar event completion:", error?.message || error);
+    return null;
   }
 }
 
@@ -467,7 +554,7 @@ export async function getCalendarEvent(
   userId: string,
   eventId: string,
   calendarId: string
-): Promise<{ start: Date; end: Date } | null> {
+): Promise<calendar_v3.Schema$Event | null> {
   const calendar = await getCalendarClient(userId);
   if (!calendar) return null;
 
@@ -478,23 +565,11 @@ export async function getCalendarEvent(
     });
 
     const event = response.data;
-    
-    // Check if event is cancelled/deleted
     if (event.status === "cancelled") {
-      console.log(`Event ${eventId} has status: cancelled (deleted)`);
       return null;
     }
-    
-    if (!event.start?.dateTime || !event.end?.dateTime) {
-      return null;
-    }
-
-    return {
-      start: new Date(event.start.dateTime),
-      end: new Date(event.end.dateTime),
-    };
+    return event;
   } catch (error: any) {
-    // Event might have been deleted from calendar
     const statusCode = error?.code || error?.response?.status || error?.status;
     if (statusCode === 404 || statusCode === 410) {
       return null;
@@ -509,6 +584,9 @@ export interface CalendarEventData {
   start: Date;
   end: Date;
   summary?: string;
+  details?: string | null;
+  reminderMinutes?: number | null;
+  durationMinutes?: number | null;
   completed?: boolean;
   updated?: Date;
 }
@@ -547,13 +625,18 @@ export async function getCalendarEventsForTasks(
       }
       
       if (event.start?.dateTime && event.end?.dateTime) {
+        const start = new Date(event.start.dateTime);
+        const end = new Date(event.end.dateTime);
         return {
           eventId,
           data: {
             eventId,
-            start: new Date(event.start.dateTime),
-            end: new Date(event.end.dateTime),
+            start,
+            end,
             summary: event.summary || undefined,
+            details: extractDetailsFromDescription(event.description),
+            reminderMinutes: extractReminderMinutes(event),
+            durationMinutes: getDurationMinutes(start, end),
             completed: getEventCompletion(event),
             updated: event.updated ? new Date(event.updated) : undefined,
           } as CalendarEventData,
@@ -583,7 +666,10 @@ export async function getCalendarEventsForTasks(
   return results;
 }
 
-export async function rescheduleAllUserTasks(userId: string, baseUrl: string): Promise<void> {
+export async function rescheduleAllUserTasks(
+  userId: string,
+  priorityEventIds?: string[]
+): Promise<void> {
   const settings = await storage.getUserSettings(userId);
   if (!settings?.calendarId) return;
 
@@ -592,55 +678,52 @@ export async function rescheduleAllUserTasks(userId: string, baseUrl: string): P
 
   const windowStart = new Date();
   const windowEnd = new Date(windowStart);
-  windowEnd.setDate(windowEnd.getDate() + 30);
+  windowEnd.setDate(windowEnd.getDate() + 90);
 
   const windowEvents = await listCalendarEventsInRange(calendar, settings.calendarId, windowStart, windowEnd);
 
-  const tasks = await storage.getUncompletedTasksByUser(userId);
-  const sortedTasks = tasks.sort((a, b) => a.priority - b.priority);
+  const caltodoEvents = windowEvents
+    .filter(isCalTodoEvent)
+    .filter((event) => getEventCompletion(event) !== true)
+    .filter((event) => event.id && event.start?.dateTime && event.end?.dateTime);
 
+  const prioritySet = new Set(priorityEventIds || []);
+  const prioritizedEvents = (priorityEventIds || [])
+    .map((id) => caltodoEvents.find((event) => event.id === id))
+    .filter((event): event is calendar_v3.Schema$Event => Boolean(event));
+
+  const remainingEvents = caltodoEvents
+    .filter((event) => !prioritySet.has(event.id!))
+    .sort(
+      (a, b) =>
+        new Date(a.start!.dateTime!).getTime() - new Date(b.start!.dateTime!).getTime()
+    );
+
+  const orderedEvents = [...prioritizedEvents, ...remainingEvents];
   let lastSlotEnd: Date | undefined;
 
-  for (const task of sortedTasks) {
-    const taskDuration = task.duration || settings.defaultDuration;
-    
-    // Find the optimal slot, excluding all CalTodo events from conflict check
+  for (const event of orderedEvents) {
+    const start = new Date(event.start!.dateTime!);
+    const end = new Date(event.end!.dateTime!);
+    const durationMinutes = getDurationMinutes(start, end) || settings.defaultDuration;
+
     const optimalSlot = await findFreeSlot(
       userId,
       settings,
-      taskDuration,
+      durationMinutes,
       lastSlotEnd,
       true,
       { events: windowEvents, timeMin: windowStart, timeMax: windowEnd }
     );
     if (!optimalSlot) continue;
-    
-    // Check if current slot matches the optimal slot (within 1 minute tolerance)
-    const currentStart = task.scheduledStart ? new Date(task.scheduledStart).getTime() : 0;
-    const optimalStart = optimalSlot.start.getTime();
-    const slotMatches = task.calendarEventId && Math.abs(currentStart - optimalStart) < 60000;
-    
+
+    const slotMatches = Math.abs(start.getTime() - optimalSlot.start.getTime()) < 60000;
     if (slotMatches) {
-      // Current slot is already optimal, keep it
-      lastSlotEnd = new Date(task.scheduledEnd!);
+      lastSlotEnd = new Date(event.end!.dateTime!);
       continue;
     }
-    
-    // Need to update to the optimal slot
-    if (task.calendarEventId) {
-      await updateCalendarEvent(userId, task.calendarEventId, settings, optimalSlot, task, baseUrl);
-    } else {
-      const eventId = await createCalendarEvent(userId, task, settings, optimalSlot, baseUrl);
-      if (eventId) {
-        await storage.updateTask(task.id, { calendarEventId: eventId });
-      }
-    }
 
-    await storage.updateTask(task.id, {
-      scheduledStart: optimalSlot.start,
-      scheduledEnd: optimalSlot.end,
-    });
-
+    await updateCalendarEventTime(userId, event.id!, settings, optimalSlot);
     lastSlotEnd = optimalSlot.end;
   }
 }

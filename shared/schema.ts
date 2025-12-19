@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, index, json } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -20,9 +20,8 @@ export const users = pgTable("users", {
   refreshToken: text("refresh_token"),
 });
 
-export const usersRelations = relations(users, ({ one, many }) => ({
+export const usersRelations = relations(users, ({ one }) => ({
   settings: one(userSettings),
-  tasks: many(tasks),
 }));
 
 export const userSettings = pgTable("user_settings", {
@@ -43,37 +42,8 @@ export const userSettingsRelations = relations(userSettings, ({ one }) => ({
   }),
 }));
 
-export const tasks = pgTable("tasks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  title: text("title").notNull(),
-  details: text("details"),
-  duration: integer("duration"),
-  reminderMinutes: integer("reminder_minutes"),
-  calendarEventId: text("calendar_event_id"),
-  scheduledStart: timestamp("scheduled_start"),
-  scheduledEnd: timestamp("scheduled_end"),
-  completed: boolean("completed").notNull().default(false),
-  completedAt: timestamp("completed_at"),
-  priority: integer("priority").notNull().default(0),
-  urgent: boolean("urgent").notNull().default(false),
-  createdAt: timestamp("created_at").notNull().default(sql`now()`),
-}, (table) => ({
-  tasksUserCompletedPriorityIdx: index("tasks_user_completed_priority_idx")
-    .on(table.userId, table.completed, table.priority),
-  tasksCalendarEventIdx: index("tasks_calendar_event_idx").on(table.calendarEventId),
-}));
-
-export const tasksRelations = relations(tasks, ({ one }) => ({
-  user: one(users, {
-    fields: [tasks.userId],
-    references: [users.id],
-  }),
-}));
-
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({ id: true });
-export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true });
 
 export const createTaskSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -81,13 +51,6 @@ export const createTaskSchema = z.object({
   urgent: z.boolean().optional().default(false),
   duration: z.number().min(15).max(480).optional(),
   reminderMinutes: z.number().min(0).max(60).optional(),
-});
-
-export const updateTaskSchema = z.object({
-  title: z.string().min(1, "Title is required").optional(),
-  details: z.string().optional(),
-  duration: z.number().min(15).max(480).nullable().optional(),
-  reminderMinutes: z.number().min(0).max(60).nullable().optional(),
 });
 
 export const updateSettingsSchema = z.object({
@@ -111,8 +74,5 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;
-export type InsertTask = z.infer<typeof insertTaskSchema>;
-export type Task = typeof tasks.$inferSelect;
 export type CreateTask = z.infer<typeof createTaskSchema>;
-export type UpdateTask = z.infer<typeof updateTaskSchema>;
 export type UpdateSettings = z.infer<typeof updateSettingsSchema>;

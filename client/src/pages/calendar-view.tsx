@@ -8,10 +8,10 @@ import {
   ChevronLeft, 
   ChevronRight, 
   CalendarDays,
-  AlertTriangle,
   Clock
 } from "lucide-react";
-import type { Task, UserSettings } from "@shared/schema";
+import type { UserSettings } from "@shared/schema";
+import type { CalendarTask } from "@shared/types";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addWeeks, subWeeks, addDays, subDays, startOfDay, isToday } from "date-fns";
 
 type ViewMode = "day" | "week";
@@ -22,7 +22,7 @@ export default function CalendarViewPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  const { data: tasks = [], isLoading } = useQuery<Task[]>({
+  const { data: tasks = [], isLoading } = useQuery<CalendarTask[]>({
     queryKey: ["/api/tasks"],
   });
 
@@ -67,7 +67,7 @@ export default function CalendarViewPage() {
     });
   };
 
-  const getTaskPosition = (task: Task) => {
+  const getTaskPosition = (task: CalendarTask) => {
     if (!task.scheduledStart || !task.scheduledEnd) return null;
     const start = new Date(task.scheduledStart);
     const end = new Date(task.scheduledEnd);
@@ -179,11 +179,7 @@ export default function CalendarViewPage() {
                         return (
                           <div
                             key={task.id}
-                            className={`absolute left-0.5 right-0.5 rounded-md p-1 text-xs overflow-hidden ${
-                              task.urgent 
-                                ? "bg-destructive/20 border border-destructive/40" 
-                                : "bg-primary/20 border border-primary/40"
-                            }`}
+                            className="absolute left-0.5 right-0.5 rounded-md p-1 text-xs overflow-hidden bg-primary/20 border border-primary/40"
                             style={position}
                             data-testid={`calendar-task-${task.id}`}
                           >
@@ -227,19 +223,12 @@ export default function CalendarViewPage() {
                     return (
                       <div
                         key={task.id}
-                        className={`absolute left-1 right-1 rounded-md p-2 overflow-hidden ${
-                          task.urgent 
-                            ? "bg-destructive/20 border border-destructive/40" 
-                            : "bg-primary/20 border border-primary/40"
-                        }`}
+                        className="absolute left-1 right-1 rounded-md p-2 overflow-hidden bg-primary/20 border border-primary/40"
                         style={position}
                         data-testid={`calendar-task-${task.id}`}
                       >
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{task.title}</span>
-                          {task.urgent && (
-                            <AlertTriangle className="h-3 w-3 text-destructive" />
-                          )}
                         </div>
                         {task.scheduledStart && task.scheduledEnd && (
                           <div className="text-sm text-muted-foreground flex items-center gap-1 mt-1">

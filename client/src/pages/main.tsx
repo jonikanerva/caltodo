@@ -23,16 +23,14 @@ import {
   AlertTriangle,
   Loader2,
   Settings,
-  Pencil,
-  Check,
-  X,
   RefreshCw,
   Bell,
   RotateCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Task, UserSettings } from "@shared/schema";
+import type { UserSettings } from "@shared/schema";
+import type { CalendarTask } from "@shared/types";
 import { format } from "date-fns";
 
 interface CreateTaskInput {
@@ -41,14 +39,6 @@ interface CreateTaskInput {
   urgent: boolean;
   duration?: number;
   reminderMinutes?: number;
-}
-
-interface EditingTask {
-  id: string;
-  title: string;
-  details: string;
-  duration: number | null;
-  reminderMinutes: number | null;
 }
 
 const REMINDER_OPTIONS = [
@@ -79,7 +69,6 @@ export default function MainPage() {
     urgent: false,
   });
   const [completedOpen, setCompletedOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<EditingTask | null>(null);
   const [completingTaskIds, setCompletingTaskIds] = useState<Set<string>>(new Set());
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -87,7 +76,7 @@ export default function MainPage() {
     titleInputRef.current?.focus();
   }, []);
 
-  const { data: tasks = [], isLoading } = useQuery<Task[]>({
+  const { data: tasks = [], isLoading } = useQuery<CalendarTask[]>({
     queryKey: ["/api/tasks"],
   });
 
@@ -111,10 +100,15 @@ export default function MainPage() {
           : "Task saved. Configure a calendar to enable scheduling.",
       });
     },
-    onError: () => {
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "";
+      const slotMessage = "No free time slots available in the next 90 days.";
+      const description = message.includes(slotMessage)
+        ? slotMessage
+        : "Failed to create task. Please try again.";
       toast({
         title: "Error",
-        description: "Failed to create task. Please try again.",
+        description,
         variant: "destructive",
       });
     },
@@ -151,29 +145,6 @@ export default function MainPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-    },
-  });
-
-  const editTaskMutation = useMutation({
-    mutationFn: async ({ id, title, details, duration, reminderMinutes }: { id: string; title: string; details: string; duration: number | null; reminderMinutes: number | null }) => {
-      return apiRequest("PUT", `/api/tasks/${id}`, { title, details, duration, reminderMinutes });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      setEditingTask(null);
-      toast({
-        title: "Task updated",
-        description: hasCalendar 
-          ? "Your task and calendar event have been updated"
-          : "Your task has been updated",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update task. Please try again.",
-        variant: "destructive",
-      });
     },
   });
 
@@ -217,28 +188,17 @@ export default function MainPage() {
     },
   });
 
-  const startEditing = (task: Task) => {
-    setEditingTask({
-      id: task.id,
-      title: task.title,
-      details: task.details || "",
-      duration: task.duration,
-      reminderMinutes: task.reminderMinutes,
-    });
-  };
-
-  const cancelEditing = () => {
-    setEditingTask(null);
-  };
-
-  const saveEditing = () => {
-    if (!editingTask || !editingTask.title.trim()) return;
-    editTaskMutation.mutate(editingTask);
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.title.trim()) return;
+    if (!hasCalendar) {
+      toast({
+        title: "Calendar required",
+        description: "Select a calendar in settings before creating tasks.",
+        variant: "destructive",
+      });
+      return;
+    }
     createTaskMutation.mutate(newTask);
   };
 
@@ -369,7 +329,7 @@ export default function MainPage() {
               </div>
               <Button 
                 type="submit" 
-                disabled={!newTask.title.trim() || createTaskMutation.isPending}
+                disabled={!newTask.title.trim() || createTaskMutation.isPending || !hasCalendar}
                 data-testid="button-create-task"
               >
                 {createTaskMutation.isPending ? (
@@ -471,160 +431,57 @@ export default function MainPage() {
                           data-testid={`card-task-${task.id}`}
                         >
                           <CardContent className="p-4">
-                            {editingTask?.id === task.id ? (
-                              <div className="space-y-3">
-                                <Input
-                                  value={editingTask.title}
-                                  onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
-                                  placeholder="Task title"
-                                  className="font-medium"
-                                  data-testid={`input-edit-title-${task.id}`}
-                                />
-                                <Textarea
-                                  value={editingTask.details}
-                                  onChange={(e) => setEditingTask({ ...editingTask, details: e.target.value })}
-                                  placeholder="Task details (optional)"
-                                  rows={2}
-                                  data-testid={`textarea-edit-details-${task.id}`}
-                                />
-                                <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <div className="flex items-center gap-4 flex-wrap">
-                                    <div className="flex items-center gap-2">
-                                      <Label className="text-sm text-muted-foreground">Duration:</Label>
-                                      <Select
-                                        value={editingTask.duration?.toString() || "default"}
-                                        onValueChange={(val) => 
-                                          setEditingTask({ ...editingTask, duration: val === "default" ? null : parseInt(val) })
-                                        }
-                                      >
-                                        <SelectTrigger className="w-28" data-testid={`select-edit-duration-${task.id}`}>
-                                          <SelectValue placeholder="Default" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="default">Default</SelectItem>
-                                          {DURATION_OPTIONS.map((opt) => (
-                                            <SelectItem key={opt.value} value={opt.value}>
-                                              {opt.label}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Label className="text-sm text-muted-foreground">Reminder:</Label>
-                                      <Select
-                                        value={editingTask.reminderMinutes?.toString() || "none"}
-                                        onValueChange={(val) => 
-                                          setEditingTask({ ...editingTask, reminderMinutes: val === "none" ? null : parseInt(val) })
-                                        }
-                                      >
-                                        <SelectTrigger className="w-32" data-testid={`select-edit-reminder-${task.id}`}>
-                                          <SelectValue placeholder="None" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="none">No reminder</SelectItem>
-                                          {REMINDER_OPTIONS.map((opt) => (
-                                            <SelectItem key={opt.value} value={opt.value}>
-                                              {opt.label}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={cancelEditing}
-                                      data-testid={`button-cancel-edit-${task.id}`}
-                                    >
-                                      <X className="h-4 w-4 mr-1" />
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      onClick={saveEditing}
-                                      disabled={!editingTask.title.trim() || editTaskMutation.isPending}
-                                      data-testid={`button-save-edit-${task.id}`}
-                                    >
-                                      {editTaskMutation.isPending ? (
-                                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                                      ) : (
-                                        <Check className="h-4 w-4 mr-1" />
-                                      )}
-                                      Save
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className={`flex items-start gap-3 transition-opacity ${
+                            <div
+                              className={`flex items-start gap-3 transition-opacity ${
                                 completingTaskIds.has(task.id) ? "opacity-50 pointer-events-none" : ""
-                              }`}>
-                                <div
-                                  {...provided.dragHandleProps}
-                                  className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground"
-                                >
-                                  <GripVertical className="h-5 w-5" />
-                                </div>
-                                <Checkbox
-                                  checked={completingTaskIds.has(task.id)}
-                                  disabled={completingTaskIds.has(task.id)}
-                                  onCheckedChange={() =>
-                                    completeTaskMutation.mutate({
-                                      id: task.id,
-                                      completed: true,
-                                    })
-                                  }
-                                  className="mt-0.5"
-                                  data-testid={`checkbox-complete-${task.id}`}
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-medium">{task.title}</span>
-                                    {task.urgent && (
-                                      <Badge variant="destructive" className="text-xs">
-                                        <AlertTriangle className="h-3 w-3 mr-1" />
-                                        Urgent
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  {task.details && (
-                                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                      {task.details}
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                  {task.duration && (
-                                    <Badge variant="outline" className="gap-1 text-xs">
-                                      {task.duration >= 60 ? `${task.duration / 60}h` : `${task.duration}m`}
-                                    </Badge>
-                                  )}
-                                  {task.reminderMinutes !== null && task.reminderMinutes !== undefined && (
-                                    <Badge variant="outline" className="gap-1 text-xs">
-                                      <Bell className="h-3 w-3" />
-                                      {task.reminderMinutes === 0 ? "At start" : `${task.reminderMinutes}m`}
-                                    </Badge>
-                                  )}
-                                  {task.scheduledStart && (
-                                    <Badge variant="secondary" className="gap-1">
-                                      <Clock className="h-3 w-3" />
-                                      {format(new Date(task.scheduledStart), "EEE dd.MM. HH:mm")}
-                                    </Badge>
-                                  )}
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => startEditing(task)}
-                                    data-testid={`button-edit-${task.id}`}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                </div>
+                              }`}
+                            >
+                              <div
+                                {...provided.dragHandleProps}
+                                className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground"
+                              >
+                                <GripVertical className="h-5 w-5" />
                               </div>
-                            )}
+                              <Checkbox
+                                checked={completingTaskIds.has(task.id)}
+                                disabled={completingTaskIds.has(task.id)}
+                                onCheckedChange={() =>
+                                  completeTaskMutation.mutate({
+                                    id: task.id,
+                                    completed: true,
+                                  })
+                                }
+                                className="mt-0.5"
+                                data-testid={`checkbox-complete-${task.id}`}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium">{task.title}</span>
+                                {task.details && (
+                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                    {task.details}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {task.duration && (
+                                  <Badge variant="outline" className="gap-1 text-xs">
+                                    {task.duration >= 60 ? `${task.duration / 60}h` : `${task.duration}m`}
+                                  </Badge>
+                                )}
+                                {task.reminderMinutes !== null && task.reminderMinutes !== undefined && (
+                                  <Badge variant="outline" className="gap-1 text-xs">
+                                    <Bell className="h-3 w-3" />
+                                    {task.reminderMinutes === 0 ? "At start" : `${task.reminderMinutes}m`}
+                                  </Badge>
+                                )}
+                                {task.scheduledStart && (
+                                  <Badge variant="secondary" className="gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {format(new Date(task.scheduledStart), "EEE dd.MM. HH:mm")}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
                           </CardContent>
                         </Card>
                       )}

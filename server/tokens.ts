@@ -2,9 +2,14 @@ import crypto from "crypto";
 import { actionTokenSecret } from "./config";
 const TOKEN_EXPIRY = 7 * 24 * 60 * 60 * 1000;
 
-export function generateActionToken(taskId: string, action: "complete" | "reschedule"): string {
+export function generateActionToken(
+  userId: string,
+  eventId: string,
+  action: "complete" | "reschedule"
+): string {
   const payload = {
-    taskId,
+    userId,
+    eventId,
     action,
     exp: Date.now() + TOKEN_EXPIRY,
   };
@@ -19,7 +24,9 @@ export function generateActionToken(taskId: string, action: "complete" | "resche
   return `${encoded}.${signature}`;
 }
 
-export function verifyActionToken(token: string): { taskId: string; action: "complete" | "reschedule" } | null {
+export function verifyActionToken(
+  token: string
+): { userId: string; eventId: string; action: "complete" | "reschedule" } | null {
   try {
     const [encoded, signature] = token.split(".");
     if (!encoded || !signature) return null;
@@ -35,7 +42,7 @@ export function verifyActionToken(token: string): { taskId: string; action: "com
     
     if (data.exp < Date.now()) return null;
     
-    return { taskId: data.taskId, action: data.action };
+    return { userId: data.userId, eventId: data.eventId, action: data.action };
   } catch {
     return null;
   }

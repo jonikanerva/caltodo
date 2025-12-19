@@ -7,20 +7,24 @@ import {
   listCalendars, 
   findFreeSlot, 
   createCalendarEvent, 
-  updateCalendarEvent,
-  deleteCalendarEvent,
+  updateCalendarEventTime,
+  updateCalendarEventCompletion,
   rescheduleAllUserTasks,
-  updateCalendarEventContent,
+  getCalendarClient,
+  listCalendarEventsInRange,
+  mapCalendarEventToTask,
   getCalendarEventsForTasks,
+  getCalendarEvent,
   EVENT_DELETED,
   stripEventTitlePrefix,
   type CalendarEventData
 } from "./calendar";
 import { setupCronJobs } from "./cron";
-import { createTaskSchema, updateSettingsSchema, updateTaskSchema, type Task } from "@shared/schema";
+import { createTaskSchema, updateSettingsSchema } from "@shared/schema";
 import { verifyActionToken } from "./tokens";
 import { z } from "zod";
 import { ensureCsrfToken, requireCsrfToken } from "./csrf";
+import type { CalendarTask } from "@shared/types";
 
 function escapeHtml(input: string): string {
   return input
@@ -55,8 +59,8 @@ function getBaseUrl(req: any): string {
   return "http://localhost:5000";
 }
 
-const patchTaskSchema = updateTaskSchema.extend({
-  completed: z.boolean().optional(),
+const patchTaskSchema = z.object({
+  completed: z.boolean(),
 });
 
 const isProduction = process.env.NODE_ENV === "production" || !!process.env.PRODUCTION_APP_URL;
@@ -180,153 +184,41 @@ export async function registerRoutes(
 
   app.get("/api/tasks", requireAuth, async (req, res) => {
     try {
-      const tasks = await storage.getTasksByUserId(req.user!.id);
       const settings = await storage.getUserSettings(req.user!.id);
-      const completedCutoff = new Date();
-      completedCutoff.setDate(completedCutoff.getDate() - 14);
-
-      const eventIds = tasks
-        .filter(t => t.calendarEventId)
-        .filter(t => {
-          if (!t.completed) return true;
-          if (t.completedAt && new Date(t.completedAt) >= completedCutoff) return true;
-          if (t.scheduledStart && new Date(t.scheduledStart) >= completedCutoff) return true;
-          return false;
-        })
-        .map(t => t.calendarEventId as string);
-
-      const calendarEvents = settings?.calendarId && eventIds.length > 0
-        ? await getCalendarEventsForTasks(req.user!.id, settings.calendarId, eventIds)
-        : new Map<string, CalendarEventData | typeof EVENT_DELETED | undefined>();
-
-      const missingEventIds = new Set<string>();
-      const titleUpdates = new Map<string, string>();
-      const completionUpdates = new Map<string, { completed: boolean; completedAt: Date | null }>();
-      const scheduleUpdates = new Map<string, { start: Date; end: Date }>();
-
-      for (const task of tasks) {
-        if (!task.calendarEventId) continue;
-        const eventData = calendarEvents.get(task.calendarEventId);
-        if (!eventData) continue;
-
-        if (eventData === EVENT_DELETED) {
-          await storage.updateTask(task.id, {
-            calendarEventId: null,
-            scheduledStart: null,
-            scheduledEnd: null,
-          });
-          missingEventIds.add(task.id);
-          continue;
-        }
-
-        if (eventData.summary) {
-          const calendarTitle = stripEventTitlePrefix(eventData.summary);
-          if (calendarTitle !== task.title) {
-            console.log(`Updating task ${task.id} title from calendar: "${task.title}" -> "${calendarTitle}"`);
-            await storage.updateTask(task.id, { title: calendarTitle });
-            titleUpdates.set(task.id, calendarTitle);
-          }
-        }
-
-        if (eventData.completed !== undefined) {
-          const completedAt = eventData.completed
-            ? (task.completedAt ? new Date(task.completedAt) : eventData.updated ?? new Date())
-            : null;
-          completionUpdates.set(task.id, { completed: eventData.completed, completedAt });
-
-          const shouldSyncCompletedAt =
-            (eventData.completed && !task.completedAt) ||
-            (!eventData.completed && task.completedAt);
-
-          if (eventData.completed !== task.completed || shouldSyncCompletedAt) {
-            await storage.updateTask(task.id, {
-              completed: eventData.completed,
-              completedAt,
-            });
-          }
-        }
-
-        if (eventData.start && eventData.end) {
-          scheduleUpdates.set(task.id, { start: eventData.start, end: eventData.end });
-        }
+      if (!settings?.calendarId) {
+        return res.json([]);
       }
 
-      const enrichedTasks = tasks.map(task => {
-        if (missingEventIds.has(task.id)) {
-          return {
-            ...task,
-            calendarEventId: null,
-            scheduledStart: null,
-            scheduledEnd: null,
-          };
-        }
+      const calendar = await getCalendarClient(req.user!.id);
+      if (!calendar) {
+        return res.status(500).json({ error: "Failed to access calendar" });
+      }
 
-        const updatedTitle = titleUpdates.get(task.id);
-        const completionUpdate = completionUpdates.get(task.id);
-        const scheduleUpdate = scheduleUpdates.get(task.id);
+      const now = new Date();
+      const timeMin = new Date(now);
+      timeMin.setDate(timeMin.getDate() - 14);
+      const timeMax = new Date(now);
+      timeMax.setDate(timeMax.getDate() + 90);
 
-        return {
-          ...task,
-          title: updatedTitle || task.title,
-          completed: completionUpdate?.completed ?? task.completed,
-          completedAt: completionUpdate?.completedAt ?? task.completedAt,
-          scheduledStart: scheduleUpdate?.start ?? task.scheduledStart,
-          scheduledEnd: scheduleUpdate?.end ?? task.scheduledEnd,
-        };
-      });
-      
-      // Reorder priorities for uncompleted tasks based on calendar event order
-      const uncompletedWithTimes = enrichedTasks
-        .filter(t => !t.completed && t.scheduledStart)
-        .sort((a, b) => new Date(a.scheduledStart!).getTime() - new Date(b.scheduledStart!).getTime());
-      
-      const uncompletedWithoutTimes = enrichedTasks
-        .filter(t => !t.completed && !t.scheduledStart)
-        .sort((a, b) => a.priority - b.priority);
-      
-      const completedTasks = enrichedTasks.filter(t => {
-        if (!t.completed) return false;
-        if (t.completedAt && new Date(t.completedAt) >= completedCutoff) return true;
-        if (t.scheduledEnd && new Date(t.scheduledEnd) >= completedCutoff) return true;
-        if (t.scheduledStart && new Date(t.scheduledStart) >= completedCutoff) return true;
-        return false;
-      });
-      
-      // Update priorities based on calendar order (tasks with times first, sorted by time)
-      let newPriority = 0;
-      const priorityUpdates: { id: string; newPriority: number; currentPriority: number }[] = [];
-      
-      for (const task of uncompletedWithTimes) {
-        if (task.priority !== newPriority) {
-          priorityUpdates.push({ id: task.id, newPriority, currentPriority: task.priority });
-        }
-        newPriority++;
-      }
-      
-      for (const task of uncompletedWithoutTimes) {
-        if (task.priority !== newPriority) {
-          priorityUpdates.push({ id: task.id, newPriority, currentPriority: task.priority });
-        }
-        newPriority++;
-      }
-      
-      // Apply priority updates to database (in background, don't block response)
-      if (priorityUpdates.length > 0) {
-        Promise.all(
-          priorityUpdates.map(update => 
-            storage.updateTask(update.id, { priority: update.newPriority })
-          )
-        ).catch(err => console.error("Error updating priorities:", err));
-      }
-      
-      // Return tasks sorted by new priority order
-      const finalTasks = [
-        ...uncompletedWithTimes.map((t, i) => ({ ...t, priority: i })),
-        ...uncompletedWithoutTimes.map((t, i) => ({ ...t, priority: uncompletedWithTimes.length + i })),
-        ...completedTasks,
-      ];
-      
-      res.json(finalTasks);
+      const events = await listCalendarEventsInRange(calendar, settings.calendarId, timeMin, timeMax);
+      const tasks = events
+        .map(mapCalendarEventToTask)
+        .filter((task): task is CalendarTask => Boolean(task));
+
+      const uncompletedTasks = tasks
+        .filter((task) => !task.completed)
+        .sort((a, b) => new Date(a.scheduledStart || 0).getTime() - new Date(b.scheduledStart || 0).getTime())
+        .map((task, index) => ({ ...task, priority: index }));
+
+      const completedTasks = tasks
+        .filter((task) => task.completed)
+        .sort((a, b) => {
+          const dateA = new Date(a.completedAt || a.scheduledEnd || 0).getTime();
+          const dateB = new Date(b.completedAt || b.scheduledEnd || 0).getTime();
+          return dateB - dateA;
+        });
+
+      res.json([...uncompletedTasks, ...completedTasks]);
     } catch (error) {
       console.error("Error fetching tasks:", error);
       res.status(500).json({ error: "Failed to get tasks" });
@@ -337,51 +229,46 @@ export async function registerRoutes(
     try {
       const data = createTaskSchema.parse(req.body);
       const settings = await storage.getUserSettings(req.user!.id);
-      
-      const existingTasks = await storage.getUncompletedTasksByUser(req.user!.id);
-      let priority = existingTasks.length;
-      
-      if (data.urgent) {
-        for (const task of existingTasks) {
-          await storage.updateTask(task.id, { priority: task.priority + 1 });
-        }
-        priority = 0;
+
+      if (!settings?.calendarId) {
+        return res.status(400).json({ error: "No calendar configured" });
       }
 
-      let task = await storage.createTask({
-        userId: req.user!.id,
-        title: data.title,
-        details: data.details || null,
-        duration: data.duration || null,
-        reminderMinutes: data.reminderMinutes ?? null,
-        urgent: data.urgent,
-        priority,
-        completed: false,
-      });
+      const taskDuration = data.duration || settings.defaultDuration;
+      const slot = await findFreeSlot(req.user!.id, settings, taskDuration);
 
-      if (settings?.calendarId) {
-        const taskDuration = task.duration || settings.defaultDuration;
-        const slot = await findFreeSlot(req.user!.id, settings, taskDuration);
-        
-        if (slot) {
-          const eventId = await createCalendarEvent(
-            req.user!.id,
-            task,
-            settings,
-            slot,
-            getBaseUrl(req)
-          );
+      if (!slot) {
+        return res.status(409).json({ error: "No free time slots available in the next 90 days." });
+      }
 
-          task = (await storage.updateTask(task.id, {
-            calendarEventId: eventId,
-            scheduledStart: slot.start,
-            scheduledEnd: slot.end,
-          }))!;
-        }
+      const eventId = await createCalendarEvent(
+        req.user!.id,
+        {
+          title: data.title,
+          details: data.details || null,
+          reminderMinutes: data.reminderMinutes ?? null,
+        },
+        settings,
+        slot,
+        getBaseUrl(req)
+      );
 
-        if (data.urgent) {
-          await rescheduleAllUserTasks(req.user!.id, getBaseUrl(req));
-        }
+      if (!eventId) {
+        return res.status(500).json({ error: "Failed to create calendar event" });
+      }
+
+      if (data.urgent) {
+        await rescheduleAllUserTasks(req.user!.id, [eventId]);
+      }
+
+      const createdEvent = await getCalendarEvent(req.user!.id, eventId, settings.calendarId);
+      if (!createdEvent) {
+        return res.status(500).json({ error: "Failed to load created event" });
+      }
+
+      const task = mapCalendarEventToTask(createdEvent);
+      if (!task) {
+        return res.status(500).json({ error: "Failed to map created event" });
       }
 
       res.json(task);
@@ -391,192 +278,32 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/tasks/:id", requireAuth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const data = updateTaskSchema.parse(req.body);
-      const task = await storage.getTask(id);
-      
-      if (!task || task.userId !== req.user!.id) {
-        return res.status(404).json({ error: "Task not found" });
-      }
-
-      const durationChanged = data.duration !== undefined && data.duration !== task.duration;
-      const reminderChanged = data.reminderMinutes !== undefined && data.reminderMinutes !== task.reminderMinutes;
-      
-      const updatedTask = await storage.updateTask(id, {
-        title: data.title || task.title,
-        details: data.details !== undefined ? data.details : task.details,
-        duration: data.duration !== undefined ? data.duration : task.duration,
-        reminderMinutes: data.reminderMinutes !== undefined ? data.reminderMinutes : task.reminderMinutes,
-      });
-
-      const settings = await storage.getUserSettings(req.user!.id);
-      
-      if (task.calendarEventId && settings?.calendarId && updatedTask) {
-        if (durationChanged) {
-          await rescheduleAllUserTasks(req.user!.id, getBaseUrl(req));
-        } else if (reminderChanged && task.scheduledStart && task.scheduledEnd) {
-          await updateCalendarEvent(
-            req.user!.id,
-            task.calendarEventId,
-            settings,
-            { start: task.scheduledStart, end: task.scheduledEnd },
-            updatedTask,
-            getBaseUrl(req)
-          );
-        } else {
-          await updateCalendarEventContent(
-            req.user!.id,
-            task.calendarEventId,
-            settings,
-            updatedTask,
-            getBaseUrl(req)
-          );
-        }
-      }
-
-      res.json(updatedTask);
-    } catch (error) {
-      console.error("Error updating task:", error);
-      res.status(400).json({ error: "Failed to update task" });
-    }
-  });
-
   app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const task = await storage.getTask(id);
-      
-      if (!task || task.userId !== req.user!.id) {
+      const data = patchTaskSchema.parse(req.body);
+      const settings = await storage.getUserSettings(req.user!.id);
+      if (!settings?.calendarId) {
+        return res.status(400).json({ error: "No calendar configured" });
+      }
+
+      const updatedEvent = await updateCalendarEventCompletion(
+        req.user!.id,
+        id,
+        settings,
+        data.completed
+      );
+
+      if (!updatedEvent) {
         return res.status(404).json({ error: "Task not found" });
       }
 
-      const data = patchTaskSchema.parse(req.body);
-      const settings = await storage.getUserSettings(req.user!.id);
-
-      if (data.completed === true && !task.completed) {
-        const updatedTask = await storage.updateTask(id, {
-          completed: true,
-          completedAt: new Date(),
-        });
-
-        if (updatedTask && task.calendarEventId && settings?.calendarId) {
-          await updateCalendarEventContent(
-            req.user!.id,
-            task.calendarEventId,
-            settings,
-            updatedTask,
-            getBaseUrl(req),
-          );
-        }
-
-        return res.json(updatedTask);
+      const task = mapCalendarEventToTask(updatedEvent);
+      if (!task) {
+        return res.status(500).json({ error: "Failed to map updated task" });
       }
 
-      if (data.completed === false && task.completed) {
-        const existingTasks = await storage.getUncompletedTasksByUser(req.user!.id);
-        const priority = existingTasks.length;
-
-        let updatedTask = await storage.updateTask(id, {
-          completed: false,
-          completedAt: null,
-          priority,
-        });
-
-        if (settings?.calendarId) {
-          const taskDuration = updatedTask?.duration || settings.defaultDuration;
-          const slot = await findFreeSlot(req.user!.id, settings, taskDuration);
-          
-          if (slot) {
-            if (updatedTask?.calendarEventId) {
-              await updateCalendarEvent(
-                req.user!.id,
-                updatedTask.calendarEventId,
-                settings,
-                slot,
-                updatedTask,
-                getBaseUrl(req)
-              );
-
-              updatedTask = await storage.updateTask(id, {
-                scheduledStart: slot.start,
-                scheduledEnd: slot.end,
-              });
-            } else {
-              const eventId = await createCalendarEvent(
-                req.user!.id,
-                updatedTask!,
-                settings,
-                slot,
-                getBaseUrl(req)
-              );
-
-              updatedTask = await storage.updateTask(id, {
-                calendarEventId: eventId,
-                scheduledStart: slot.start,
-                scheduledEnd: slot.end,
-              });
-            }
-          } else if (updatedTask?.calendarEventId) {
-            await updateCalendarEventContent(
-              req.user!.id,
-              updatedTask.calendarEventId,
-              settings,
-              updatedTask,
-              getBaseUrl(req),
-            );
-          }
-        }
-
-        return res.json(updatedTask);
-      }
-
-      if (
-        data.title === undefined &&
-        data.details === undefined &&
-        data.duration === undefined &&
-        data.reminderMinutes === undefined
-      ) {
-        return res.json(task);
-      }
-
-      const durationChanged = data.duration !== undefined && data.duration !== task.duration;
-      const reminderChanged =
-        data.reminderMinutes !== undefined && data.reminderMinutes !== task.reminderMinutes;
-
-      const updatedTask = await storage.updateTask(id, {
-        title: data.title ?? task.title,
-        details: data.details !== undefined ? data.details : task.details,
-        duration: data.duration !== undefined ? data.duration : task.duration,
-        reminderMinutes:
-          data.reminderMinutes !== undefined ? data.reminderMinutes : task.reminderMinutes,
-      });
-
-      if (task.calendarEventId && settings?.calendarId && updatedTask) {
-        if (durationChanged) {
-          await rescheduleAllUserTasks(req.user!.id, getBaseUrl(req));
-        } else if (reminderChanged && task.scheduledStart && task.scheduledEnd) {
-          await updateCalendarEvent(
-            req.user!.id,
-            task.calendarEventId,
-            settings,
-            { start: task.scheduledStart, end: task.scheduledEnd },
-            updatedTask,
-            getBaseUrl(req),
-          );
-        } else {
-          await updateCalendarEventContent(
-            req.user!.id,
-            task.calendarEventId,
-            settings,
-            updatedTask,
-            getBaseUrl(req),
-          );
-        }
-      }
-
-      res.json(updatedTask);
+      res.json(task);
     } catch (error) {
       console.error("Error updating task:", error);
       res.status(500).json({ error: "Failed to update task" });
@@ -592,66 +319,64 @@ export async function registerRoutes(
       }
 
       const settings = await storage.getUserSettings(req.user!.id);
-      
-      // Get all tasks being reordered
-      const tasks = await Promise.all(taskIds.map(id => storage.getTask(id)));
-      const validTasks = tasks.filter(t => t && t.userId === req.user!.id) as Task[];
-      if (validTasks.length !== taskIds.length) {
-        return res.status(403).json({ error: "One or more tasks do not belong to the user" });
+
+      if (!settings?.calendarId) {
+        return res.status(400).json({ error: "No calendar configured" });
       }
-      
-      // Collect existing time slots (sorted by start time)
-      const existingSlots = validTasks
-        .filter(t => t.scheduledStart && t.scheduledEnd && t.calendarEventId)
-        .map(t => ({
-          start: new Date(t.scheduledStart!),
-          end: new Date(t.scheduledEnd!),
-          duration: new Date(t.scheduledEnd!).getTime() - new Date(t.scheduledStart!).getTime(),
+
+      const calendarEvents = await getCalendarEventsForTasks(
+        req.user!.id,
+        settings.calendarId,
+        taskIds
+      );
+
+      const eventDataList = taskIds
+        .map((id) => calendarEvents.get(id))
+        .filter(
+          (eventData): eventData is CalendarEventData =>
+            Boolean(eventData && eventData !== EVENT_DELETED && eventData.start && eventData.end)
+        );
+
+      if (eventDataList.length === 0) {
+        return res.status(404).json({ error: "No tasks found to reorder" });
+      }
+
+      const existingSlots = eventDataList
+        .map((eventData) => ({
+          start: eventData.start,
+          end: eventData.end,
         }))
         .sort((a, b) => a.start.getTime() - b.start.getTime());
-      
-      // Update priorities first
-      for (let i = 0; i < taskIds.length; i++) {
-        await storage.updateTask(taskIds[i], { priority: i });
-      }
-      
-      // Reassign slots to tasks in new priority order
-      // Tasks are now in priority order (taskIds array), slots are in time order
-      if (settings?.calendarId && existingSlots.length > 0) {
-        const tasksNeedingSlots = validTasks
-          .filter(t => t.calendarEventId && t.scheduledStart)
-          .sort((a, b) => taskIds.indexOf(a.id) - taskIds.indexOf(b.id));
-        
-        for (let i = 0; i < Math.min(tasksNeedingSlots.length, existingSlots.length); i++) {
-          const task = tasksNeedingSlots[i];
-          const slot = existingSlots[i];
-          
-          // Check if this task already has this slot
-          const currentStart = new Date(task.scheduledStart!).getTime();
-          if (currentStart === slot.start.getTime()) {
-            continue; // No change needed
-          }
-          
-          // Adjust slot end time based on task's duration preference
-          const taskDuration = task.duration || settings.defaultDuration;
-          const adjustedEnd = new Date(slot.start.getTime() + taskDuration * 60 * 1000);
-          
-          // Update calendar event with new time
-          await updateCalendarEvent(
-            req.user!.id,
-            task.calendarEventId!,
-            settings,
-            { start: slot.start, end: adjustedEnd },
-            task,
-            getBaseUrl(req)
-          );
-          
-          // Update task in database
-          await storage.updateTask(task.id, {
-            scheduledStart: slot.start,
-            scheduledEnd: adjustedEnd,
-          });
+
+      const orderedEvents = taskIds
+        .map((id) => ({ id, data: calendarEvents.get(id) }))
+        .filter(
+          (entry): entry is { id: string; data: CalendarEventData } =>
+            Boolean(entry.data && entry.data !== EVENT_DELETED && entry.data.start && entry.data.end)
+        );
+
+      for (let i = 0; i < Math.min(orderedEvents.length, existingSlots.length); i++) {
+        const eventEntry = orderedEvents[i];
+        const slot = existingSlots[i];
+        const eventData = eventEntry.data;
+
+        const currentStart = eventData.start.getTime();
+        if (currentStart === slot.start.getTime()) {
+          continue;
         }
+
+        const durationMinutes =
+          eventData.durationMinutes ||
+          Math.round((eventData.end.getTime() - eventData.start.getTime()) / 60000) ||
+          settings.defaultDuration;
+        const adjustedEnd = new Date(slot.start.getTime() + durationMinutes * 60 * 1000);
+
+        await updateCalendarEventTime(
+          req.user!.id,
+          eventEntry.id,
+          settings,
+          { start: slot.start, end: adjustedEnd }
+        );
       }
 
       res.json({ success: true });
@@ -671,24 +396,12 @@ export async function registerRoutes(
 
       const settings = await storage.getUserSettings(req.user!.id);
 
+      if (!settings?.calendarId) {
+        return res.status(400).json({ error: "No calendar configured" });
+      }
+
       for (const taskId of taskIds) {
-        const task = await storage.getTask(taskId);
-        if (!task || task.userId !== req.user!.id) continue;
-
-        const updatedTask = await storage.updateTask(taskId, {
-          completed: true,
-          completedAt: new Date(),
-        });
-
-        if (updatedTask && task.calendarEventId && settings?.calendarId) {
-          await updateCalendarEventContent(
-            req.user!.id,
-            task.calendarEventId,
-            settings,
-            updatedTask,
-            getBaseUrl(req),
-          );
-        }
+        await updateCalendarEventCompletion(req.user!.id, taskId, settings, true);
       }
 
       res.json({ success: true });
@@ -700,7 +413,7 @@ export async function registerRoutes(
 
   app.post("/api/tasks/reschedule-all", requireAuth, async (req, res) => {
     try {
-      await rescheduleAllUserTasks(req.user!.id, getBaseUrl(req));
+      await rescheduleAllUserTasks(req.user!.id);
       res.json({ success: true });
     } catch (error) {
       console.error("Error rescheduling all tasks:", error);
@@ -716,55 +429,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No calendar configured" });
       }
 
-      const tasks = await storage.getTasksByUserId(req.user!.id);
-      const eventIds = tasks
-        .filter((t) => t.calendarEventId)
-        .map((t) => t.calendarEventId as string);
-
-      const calendarEvents = eventIds.length > 0
-        ? await getCalendarEventsForTasks(req.user!.id, settings.calendarId, eventIds)
-        : new Map<string, CalendarEventData | typeof EVENT_DELETED | undefined>();
-
-      for (const task of tasks) {
-        if (!task.calendarEventId) continue;
-        const eventData = calendarEvents.get(task.calendarEventId);
-        if (!eventData) continue;
-
-        if (eventData === EVENT_DELETED) {
-          await storage.updateTask(task.id, {
-            calendarEventId: null,
-            scheduledStart: null,
-            scheduledEnd: null,
-          });
-          continue;
-        }
-
-        const updates: Partial<Task> = {};
-
-        if (eventData.summary) {
-          const calendarTitle = stripEventTitlePrefix(eventData.summary);
-          if (calendarTitle !== task.title) {
-            updates.title = calendarTitle;
-          }
-        }
-
-        if (eventData.start && eventData.end) {
-          updates.scheduledStart = eventData.start;
-          updates.scheduledEnd = eventData.end;
-        }
-
-        if (eventData.completed !== undefined) {
-          updates.completed = eventData.completed;
-          updates.completedAt = eventData.completed
-            ? (task.completedAt ? new Date(task.completedAt) : eventData.updated ?? new Date())
-            : null;
-        }
-
-        if (Object.keys(updates).length > 0) {
-          await storage.updateTask(task.id, updates);
-        }
-      }
-
       res.json({ success: true });
     } catch (error) {
       console.error("Error reloading calendar data:", error);
@@ -775,27 +439,14 @@ export async function registerRoutes(
   app.post("/api/tasks/:id/complete", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const task = await storage.getTask(id);
-      
-      if (!task || task.userId !== req.user!.id) {
-        return res.status(404).json({ error: "Task not found" });
+      const settings = await storage.getUserSettings(req.user!.id);
+      if (!settings?.calendarId) {
+        return res.status(400).json({ error: "No calendar configured" });
       }
 
-      const settings = await storage.getUserSettings(req.user!.id);
-
-      const updatedTask = await storage.updateTask(id, {
-        completed: true,
-        completedAt: new Date(),
-      });
-
-      if (updatedTask && task.calendarEventId && settings?.calendarId) {
-        await updateCalendarEventContent(
-          req.user!.id,
-          task.calendarEventId,
-          settings,
-          updatedTask,
-          getBaseUrl(req),
-        );
+      const updatedEvent = await updateCalendarEventCompletion(req.user!.id, id, settings, true);
+      if (!updatedEvent) {
+        return res.status(404).json({ error: "Task not found" });
       }
 
       res.json({ success: true });
@@ -808,38 +459,29 @@ export async function registerRoutes(
   app.post("/api/tasks/:id/reschedule", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const task = await storage.getTask(id);
-      
-      if (!task || task.userId !== req.user!.id) {
-        return res.status(404).json({ error: "Task not found" });
-      }
-
       const settings = await storage.getUserSettings(req.user!.id);
       if (!settings?.calendarId) {
         return res.status(400).json({ error: "No calendar configured" });
       }
 
-      if (task.calendarEventId) {
-        await deleteCalendarEvent(req.user!.id, task.calendarEventId, settings.calendarId);
+      const event = await getCalendarEvent(req.user!.id, id, settings.calendarId);
+      if (!event || !event.start?.dateTime || !event.end?.dateTime) {
+        return res.status(404).json({ error: "Task not found" });
       }
 
-      const slot = await findFreeSlot(req.user!.id, settings, settings.defaultDuration);
-      
-      if (slot) {
-        const eventId = await createCalendarEvent(
-          req.user!.id,
-          task,
-          settings,
-          slot,
-          getBaseUrl(req)
-        );
+      const start = new Date(event.start.dateTime);
+      const end = new Date(event.end.dateTime);
+      const durationMinutes = Math.max(
+        1,
+        Math.round((end.getTime() - start.getTime()) / 60000)
+      );
+      const slot = await findFreeSlot(req.user!.id, settings, durationMinutes);
 
-        await storage.updateTask(id, {
-          calendarEventId: eventId,
-          scheduledStart: slot.start,
-          scheduledEnd: slot.end,
-        });
+      if (!slot) {
+        return res.status(409).json({ error: "No free time slots available in the next 90 days." });
       }
+
+      await updateCalendarEventTime(req.user!.id, id, settings, slot);
 
       res.json({ success: true });
     } catch (error) {
@@ -867,8 +509,23 @@ export async function registerRoutes(
         `);
       }
 
-      const task = await storage.getTask(payload.taskId);
-      if (!task) {
+      const settings = await storage.getUserSettings(payload.userId);
+      if (!settings?.calendarId) {
+        return res.status(400).send(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>No Calendar</title></head>
+          <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+            <h1>No Calendar Configured</h1>
+            <p>Please configure a calendar in settings first.</p>
+            <a href="/settings">Go to Settings</a>
+          </body>
+          </html>
+        `);
+      }
+
+      const event = await getCalendarEvent(payload.userId, payload.eventId, settings.calendarId);
+      if (!event) {
         return res.status(404).send(`
           <!DOCTYPE html>
           <html>
@@ -881,24 +538,27 @@ export async function registerRoutes(
           </html>
         `);
       }
-
-      const settings = await storage.getUserSettings(task.userId);
-      const safeTitle = escapeHtml(task.title);
+      const safeTitle = escapeHtml(stripEventTitlePrefix(event.summary || "Task"));
 
       if (payload.action === "complete") {
-        const updatedTask = await storage.updateTask(task.id, {
-          completed: true,
-          completedAt: new Date(),
-        });
-
-        if (updatedTask && task.calendarEventId && settings?.calendarId) {
-          await updateCalendarEventContent(
-            task.userId,
-            task.calendarEventId,
-            settings,
-            updatedTask,
-            getBaseUrl(req),
-          );
+        const updatedEvent = await updateCalendarEventCompletion(
+          payload.userId,
+          payload.eventId,
+          settings,
+          true
+        );
+        if (!updatedEvent) {
+          return res.status(404).send(`
+            <!DOCTYPE html>
+            <html>
+            <head><title>Task Not Found</title></head>
+            <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+              <h1>Task Not Found</h1>
+              <p>This task may have been deleted.</p>
+              <a href="/">Go to CalTodo</a>
+            </body>
+            </html>
+          `);
         }
 
         return res.send(`
@@ -915,42 +575,43 @@ export async function registerRoutes(
       }
 
       if (payload.action === "reschedule") {
-        if (!settings?.calendarId) {
+        if (!event.start?.dateTime || !event.end?.dateTime) {
           return res.status(400).send(`
             <!DOCTYPE html>
             <html>
-            <head><title>No Calendar</title></head>
+            <head><title>Invalid Event</title></head>
             <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-              <h1>No Calendar Configured</h1>
-              <p>Please configure a calendar in settings first.</p>
-              <a href="/settings">Go to Settings</a>
+              <h1>Invalid Event</h1>
+              <p>This event does not have a valid time range.</p>
+              <a href="/">Go to CalTodo</a>
             </body>
             </html>
           `);
         }
 
-        if (task.calendarEventId) {
-          await deleteCalendarEvent(task.userId, task.calendarEventId, settings.calendarId);
+        const start = new Date(event.start.dateTime);
+        const end = new Date(event.end.dateTime);
+        const durationMinutes = Math.max(
+          1,
+          Math.round((end.getTime() - start.getTime()) / 60000)
+        );
+        const slot = await findFreeSlot(payload.userId, settings, durationMinutes);
+
+        if (!slot) {
+          return res.status(409).send(`
+            <!DOCTYPE html>
+            <html>
+            <head><title>No Free Slots</title></head>
+            <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+              <h1>No Free Time Slots</h1>
+              <p>No free time slots are available in the next 90 days.</p>
+              <a href="/">Go to CalTodo</a>
+            </body>
+            </html>
+          `);
         }
 
-        const taskDuration = task.duration || settings.defaultDuration;
-        const slot = await findFreeSlot(task.userId, settings, taskDuration);
-        
-        if (slot) {
-          const eventId = await createCalendarEvent(
-            task.userId,
-            task,
-            settings,
-            slot,
-            getBaseUrl(req)
-          );
-
-          await storage.updateTask(task.id, {
-            calendarEventId: eventId,
-            scheduledStart: slot.start,
-            scheduledEnd: slot.end,
-          });
-        }
+        await updateCalendarEventTime(payload.userId, payload.eventId, settings, slot);
 
         return res.send(`
           <!DOCTYPE html>

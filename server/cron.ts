@@ -4,7 +4,7 @@ import { rescheduleAllUserTasks } from "./calendar";
 import { db } from "./db";
 import { users } from "@shared/schema";
 
-export function setupCronJobs(baseUrl: string): void {
+export function setupCronJobs(_baseUrl: string): void {
   cron.schedule("0 0 * * *", async () => {
     console.log("Running midnight reschedule job...");
     
@@ -15,7 +15,7 @@ export function setupCronJobs(baseUrl: string): void {
         const settings = await storage.getUserSettings(user.id);
         if (settings?.calendarId) {
           console.log(`Rescheduling tasks for user ${user.id}`);
-          await rescheduleAllUserTasks(user.id, baseUrl);
+          await rescheduleAllUserTasks(user.id);
         }
       }
       
