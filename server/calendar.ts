@@ -65,17 +65,6 @@ function extractDetailsFromDescription(description?: string | null): string | nu
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function extractReminderMinutes(event: calendar_v3.Schema$Event): number | null {
-  const reminders = event.reminders;
-  if (!reminders || reminders.useDefault) return null;
-  const overrides = reminders.overrides || [];
-  const minutes = overrides
-    .map((override) => (typeof override.minutes === "number" ? override.minutes : null))
-    .filter((value): value is number => value !== null);
-  if (minutes.length === 0) return null;
-  return Math.min(...minutes);
-}
-
 function getDurationMinutes(start: Date, end: Date): number | null {
   const diffMs = end.getTime() - start.getTime();
   if (!Number.isFinite(diffMs) || diffMs <= 0) return null;
@@ -98,7 +87,6 @@ export function mapCalendarEventToTask(event: calendar_v3.Schema$Event): Calenda
     title: stripEventTitlePrefix(event.summary || ""),
     details: extractDetailsFromDescription(event.description),
     duration: getDurationMinutes(start, end),
-    reminderMinutes: extractReminderMinutes(event),
     scheduledStart: start.toISOString(),
     scheduledEnd: end.toISOString(),
     completed,
@@ -336,7 +324,6 @@ export async function findFreeSlot(
 interface CalendarEventInput {
   title: string;
   details: string | null;
-  reminderMinutes: number | null;
 }
 
 function buildBaseDescription(details: string | null): string {
@@ -405,18 +392,6 @@ export async function createCalendarEvent(
         private: buildEventPrivateProperties(false),
       },
     };
-
-    if (input.reminderMinutes !== null && input.reminderMinutes !== undefined) {
-      requestBody.reminders = {
-        useDefault: false,
-        overrides: [{ method: "popup", minutes: input.reminderMinutes }],
-      };
-    } else {
-      requestBody.reminders = {
-        useDefault: false,
-        overrides: [],
-      };
-    }
 
     const response = await calendar.events.insert({
       calendarId: settings.calendarId,
@@ -575,7 +550,6 @@ export interface CalendarEventData {
   end: Date;
   summary?: string;
   details?: string | null;
-  reminderMinutes?: number | null;
   durationMinutes?: number | null;
   completed?: boolean;
   updated?: Date;
@@ -625,7 +599,6 @@ export async function getCalendarEventsForTasks(
             end,
             summary: event.summary || undefined,
             details: extractDetailsFromDescription(event.description),
-            reminderMinutes: extractReminderMinutes(event),
             durationMinutes: getDurationMinutes(start, end),
             completed: getEventCompletion(event),
             updated: event.updated ? new Date(event.updated) : undefined,

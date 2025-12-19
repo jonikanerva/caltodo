@@ -50,7 +50,6 @@ export const createTaskSchema = z.object({
   details: z.string().optional(),
   urgent: z.boolean().optional().default(false),
   duration: z.number().min(15).max(480).optional(),
-  reminderMinutes: z.number().min(0).max(60).optional(),
 });
 
 export const updateSettingsSchema = z.object({

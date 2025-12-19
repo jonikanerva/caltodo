@@ -9,7 +9,6 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 - **Drag-and-Drop Reordering** - Prioritize tasks by dragging them; the app swaps their calendar time slots
 - **Task Editing** - Update task titles, descriptions, durations, and reminders
 - **Bulk Operations** - Reschedule all tasks to optimize your calendar
-- **Notifications** - Set reminders via Google Calendar's built-in notification system
 - **Settings** - Configure your preferred calendar, work hours, timezone, and default task duration
 - **Midnight Rescheduling** - Automatic cron job reschedules incomplete tasks with calendar events to new time slots
 

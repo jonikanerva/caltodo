@@ -246,7 +246,6 @@ export async function registerRoutes(
         {
           title: data.title,
           details: data.details || null,
-          reminderMinutes: data.reminderMinutes ?? null,
         },
         settings,
         slot,

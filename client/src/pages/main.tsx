@@ -24,7 +24,6 @@ import {
   Loader2,
   Settings,
   RefreshCw,
-  Bell,
   RotateCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -38,17 +37,7 @@ interface CreateTaskInput {
   details: string;
   urgent: boolean;
   duration?: number;
-  reminderMinutes?: number;
 }
-
-const REMINDER_OPTIONS = [
-  { value: "0", label: "At time of event" },
-  { value: "5", label: "5 min before" },
-  { value: "10", label: "10 min before" },
-  { value: "15", label: "15 min before" },
-  { value: "30", label: "30 min before" },
-  { value: "60", label: "1 hour before" },
-];
 
 const DURATION_OPTIONS = [
   { value: "15", label: "15 min" },
@@ -305,27 +294,6 @@ export default function MainPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm text-muted-foreground">Reminder:</Label>
-                  <Select
-                    value={newTask.reminderMinutes?.toString() || "none"}
-                    onValueChange={(val) => 
-                      setNewTask({ ...newTask, reminderMinutes: val === "none" ? undefined : parseInt(val) })
-                    }
-                  >
-                    <SelectTrigger className="w-32" data-testid="select-reminder">
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No reminder</SelectItem>
-                      {REMINDER_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
               <Button 
                 type="submit" 
@@ -466,12 +434,6 @@ export default function MainPage() {
                                 {task.duration && (
                                   <Badge variant="outline" className="gap-1 text-xs">
                                     {task.duration >= 60 ? `${task.duration / 60}h` : `${task.duration}m`}
-                                  </Badge>
-                                )}
-                                {task.reminderMinutes !== null && task.reminderMinutes !== undefined && (
-                                  <Badge variant="outline" className="gap-1 text-xs">
-                                    <Bell className="h-3 w-3" />
-                                    {task.reminderMinutes === 0 ? "At start" : `${task.reminderMinutes}m`}
                                   </Badge>
                                 )}
                                 {task.scheduledStart && (
