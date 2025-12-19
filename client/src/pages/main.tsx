@@ -505,7 +505,7 @@ export default function MainPage() {
                       className="mt-0.5"
                     />
                     <div className="flex-1 min-w-0">
-                      <span className="font-medium line-through text-muted-foreground">
+                      <span className="font-medium text-muted-foreground">
                         {task.title}
                       </span>
                       {task.completedAt && (
