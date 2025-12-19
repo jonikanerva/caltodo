@@ -49,6 +49,10 @@ function isCompletedCalTodoEvent(event: calendar_v3.Schema$Event): boolean {
   return getEventCompletion(event) === true;
 }
 
+function isBusyEvent(event: calendar_v3.Schema$Event): boolean {
+  return event.transparency !== "transparent";
+}
+
 function extractDetailsFromDescription(description?: string | null): string | null {
   if (!description) return null;
   let content = description;
@@ -263,6 +267,7 @@ export async function findFreeSlot(
     } else {
       events = events.filter(event => !isCompletedCalTodoEvent(event));
     }
+    events = events.filter(isBusyEvent);
     
     let currentDate = new Date(now);
     // Round up to next 15-minute interval
