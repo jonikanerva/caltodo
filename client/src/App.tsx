@@ -28,13 +28,13 @@ function Footer() {
   return (
     <footer className="border-t bg-background">
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-center text-xs text-muted-foreground/70">
           Copyright donut <span aria-hidden="true">&copy;</span> {year}.{" "}
-          <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground">
+          <Link href="/privacy" className="hover:text-muted-foreground">
             Privacy Policy
           </Link>
           .{" "}
-          <Link href="/tos" className="underline underline-offset-4 hover:text-foreground">
+          <Link href="/tos" className="hover:text-muted-foreground">
             TOS
           </Link>
           .
