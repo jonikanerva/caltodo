@@ -500,6 +500,7 @@ export async function updateCalendarEventCompletion(
       eventId,
       requestBody: {
         summary: formatEventTitle(title, completed),
+        transparency: completed ? "transparent" : "opaque",
         extendedProperties: {
           private: {
             ...existingPrivate,
