@@ -58,25 +58,44 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 - **Database**: PostgreSQL with Drizzle ORM
 - **APIs**: Google Calendar API, Google OAuth 2.0
 
+### Architecture Notes
+
+- **Frontend**: Wouter for routing, TanStack React Query for server state, shadcn/ui (Radix UI), Tailwind CSS with theme variables, @hello-pangea/dnd for reordering, React Hook Form + Zod for validation.
+- **Backend**: TypeScript (ESM), tsx in development, esbuild for production bundling, express-session with PostgreSQL store (connect-pg-simple), node-cron for midnight rescheduling.
+- **Data**: Drizzle ORM with schema in `shared/schema.ts`; shared types in `shared/` are used by both frontend and backend; tasks live in Google Calendar and are mapped to `CalendarTask` on read; tables include `users`, `user_settings`, `user_sessions`.
+- **Security**: OAuth tokens are encrypted at rest; action tokens expire after 7 days.
+- **Event handling**: App-created calendar events are marked with `[CalTodo]` to avoid touching unrelated events.
+- **Google access**: OAuth scopes include `profile`, `email`, `calendar`, and `calendar.events`.
+
+### API Overview
+
+- Auth: `/api/auth/google`, `/api/auth/google/callback`, `/api/auth/logout`, `/api/auth/user`
+- Tasks: `/api/tasks` (list + create), `/api/tasks/:id` (complete/redo), `/api/tasks/reorder`, `/api/tasks/reschedule-all`, `/api/tasks/reload`, `/api/tasks/:id/complete`, `/api/tasks/:id/reschedule`, `/api/tasks/bulk-complete`
+- Settings: `/api/settings`, `/api/calendars`
+- Action links: `/api/action/:token` (complete/reschedule)
+- CSRF: send `X-CSRF-Token` from `/api/auth/user` on non-GET requests
+
 ## Local Development Setup (macOS)
 
 ### Prerequisites
 
 1. **Node.js** (v20 or later)
+
    ```bash
    # Using Homebrew
    brew install node
-   
+
    # Or using nvm
    nvm install 20
    nvm use 20
    ```
 
 2. **PostgreSQL**
+
    ```bash
    brew install postgresql@15
    brew services start postgresql@15
-   
+
    # Create a database
    createdb caltodo
    ```
@@ -104,6 +123,7 @@ TOKEN_ENCRYPTION_KEY=32+_char_random_key_for_token_encryption
 ```
 
 Notes:
+
 - `SESSION_SECRET` and `ACTION_TOKEN_SECRET` must be different values and at least 32 characters long.
 
 ### Installation
@@ -134,9 +154,9 @@ The app will be available at `http://localhost:5000`.
 ### Requirements
 
 1. **Node.js Runtime** - Node.js 20+ environment
-2. **PostgreSQL Database** - Managed PostgreSQL instance (e.g., Neon, Supabase, AWS RDS, or self-hosted)
+2. **PostgreSQL Database** - Managed instance or self-hosted
 3. **HTTPS** - Required for OAuth security and session cookies
-4. **Persistent Process Manager** - PM2, systemd, or container orchestration
+4. **Persistent Process Manager** - configured for automatic restarts
 
 ### Environment Variables (Production)
 
@@ -182,13 +202,37 @@ npm start
 - [ ] Process manager configured for automatic restarts
 - [ ] Cron job runs at midnight server time for task rescheduling (set TZ if needed)
 
-### Platform-Specific Notes
+## Contributing
 
-**Replit**: Use built-in PostgreSQL, Secrets for environment variables, and Deployments for hosting.
+See `CONTRIBUTING.md` for development workflow and design guidelines.
 
-**Railway/Render/Fly.io**: Add PostgreSQL addon, configure environment variables, and deploy via Git push.
+## Privacy Statement
 
-**VPS/Self-hosted**: Use Nginx as reverse proxy with SSL (Let's Encrypt), PM2 for process management, and systemd for service management.
+Information I Collect
+
+- Google account info: Google ID, email address, and display name (from Google OAuth).
+- OAuth tokens: access and refresh tokens used to access your Google Calendar (stored encrypted).
+- Calendar settings: the calendar ID you select for scheduling.
+- Session data: a session ID cookie and CSRF token to keep you signed in.
+
+Calendar Data
+
+- CalTodo reads and writes events in your Google Calendar to create, update, and reschedule tasks.
+- Tasks are stored in your Google Calendar, not in the app database.
+
+How I Use Information
+
+- Authenticate you and maintain your session.
+- Read and update calendar events to schedule tasks.
+- Operate and secure the service.
+
+Sharing
+
+- I share data only with Google APIs to perform calendar operations.
+
+Google API Limited Use
+
+- CalTodo's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements.
 
 ## License
 

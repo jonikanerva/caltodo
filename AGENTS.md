@@ -1,10 +1,9 @@
-# CalTodo – Agent Guide
+# CalTodo - Agent Guide
 
-This repository contains CalTodo, a web-based todo app that stores tasks in Google Calendar and auto-schedules them into free time slots. Use the documents below for fuller details and platform-specific notes.
+This repository contains CalTodo, a web-based todo app that stores tasks in Google Calendar and auto-schedules them into free time slots. Use the documents below for fuller details.
 
 - [README.md](README.md) — project overview, features, architecture, and local setup instructions.
-- [replit.md](replit.md) — Replit-oriented architecture notes and environment expectations.
-- [design_guidelines.md](design_guidelines.md) — UI/UX design system, layout, and component standards.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development workflow, commit expectations, and UI/UX design guidelines.
 
 Quick start:
 - Install dependencies: `npm install`

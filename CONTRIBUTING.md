@@ -1,12 +1,38 @@
-# Design Guidelines: Google Calendar Todo App
+# Contributing
 
-## Design Approach
+## Communication
+
+Preferred communication style: simple, everyday language.
+
+## Development Workflow
+
+- Install dependencies: `npm install`
+- Create `.env` in the project root (see `README.md`)
+- Run migrations: `npm run db:migrate`
+- Start the dev server: `npm run dev`
+
+## Scripts
+
+- `npm run dev` - Start development server (frontend + backend)
+- `npm run db:generate` - Create a new migration from schema changes
+- `npm run db:migrate` - Run pending migrations (also runs automatically on server start)
+- `npm run build` - Build for production
+- `npm run start` - Run production build
+
+## Before Committing
+
+- Run `npm run check` and `npm run build`
+- Keep commits focused: one holistic change per commit; split unrelated fixes
+
+## Design Guidelines
+
+### Design Approach
 
 **Selected Approach:** Design System (Productivity-focused)  
 **Primary Inspiration:** Linear, Todoist, Notion  
 **Justification:** This is a utility-focused productivity tool where efficiency, clarity, and consistent patterns drive user success. The interface should minimize cognitive load and maximize task completion speed.
 
-## Typography
+### Typography
 
 **Font Family:**
 - Primary: Inter (Google Fonts) - clean, readable, modern
@@ -20,7 +46,7 @@
 - Labels/metadata: text-xs (12px)
 - All text maintains consistent line-height for scanability
 
-## Layout System
+### Layout System
 
 **Spacing Primitives:** Use Tailwind units of 2, 4, 6, and 8 consistently throughout  
 - Component padding: p-4, p-6  
@@ -33,15 +59,15 @@
 - Two-view layout: Settings and Main view as separate full-page experiences
 - Mobile-first responsive: stack all elements on mobile, optimize spacing for desktop
 
-## Core Components
+### Core Components
 
-### Authentication Screen
+#### Authentication Screen
 - Centered card layout (max-w-md)
 - Google Sign-in button prominently displayed with Google icon
 - Brief value proposition text above button
 - Clean, minimal presentation
 
-### Main View Structure
+#### Main View Structure
 
 **Top Section:**
 - Task creation input spanning full width
@@ -69,7 +95,7 @@
 - Completed timestamp shown
 - Slightly reduced opacity for completed items
 
-### Settings View
+#### Settings View
 
 **Layout:**
 - Full-width form with sections
@@ -87,7 +113,7 @@
 - Sticky top header with icon buttons for Tasks and Settings
 - Theme toggle in the header
 
-## Component Library
+### Component Library
 
 **Buttons:**
 - Primary: Solid fill, rounded corners (rounded-lg), px-6 py-2
@@ -120,7 +146,7 @@
 **Badges:**
 - Time/duration indicators: rounded-full, px-3 py-1, text-xs
 
-## Interaction Patterns
+### Interaction Patterns
 
 **Drag-and-Drop:**
 - Clear visual grab cursor on hover
@@ -141,7 +167,7 @@
 - Spinner for button actions
 - Disabled state styling during processing
 
-## Responsive Behavior
+### Responsive Behavior
 
 **Desktop (lg and up):**
 - Full max-w-4xl container
@@ -154,7 +180,7 @@
 - Larger touch targets (min 44px height)
 - Simplified task cards with essential info only
 
-## Accessibility
+### Accessibility
 
 - All form inputs have associated labels
 - Focus visible on all interactive elements
@@ -163,7 +189,7 @@
 - Screen reader announcements for dynamic changes
 - Color contrast meets WCAG AA standards
 
-## Animation Guidelines
+### Animation Guidelines
 
 Use animations sparingly:
 - Task reordering: transform with duration-200
