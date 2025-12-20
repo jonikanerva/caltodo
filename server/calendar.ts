@@ -2,14 +2,15 @@ import { google, calendar_v3 } from "googleapis";
 import { storage } from "./storage";
 import type { UserSettings } from "@shared/schema";
 import type { CalendarTask } from "@shared/types";
-import { generateActionToken } from "./tokens";
+import { createActionToken } from "./tokens";
 
 const APP_SIGNATURE = "Created by CalTodo";
 const EVENT_TITLE_PREFIX_INCOMPLETE = "☑️ ";
 const EVENT_TITLE_PREFIX_COMPLETE = "✅ ";
 const EVENT_MARKER_KEY = "caltodo";
 const EVENT_COMPLETED_KEY = "caltodoCompleted";
-const EVENT_ACTIONS_MARKER = "Actions:\n- Mark Complete:";
+const EVENT_ACTIONS_MARKER = "Actions:\n- Manage:";
+const LEGACY_EVENT_ACTIONS_MARKER = "Actions:\n- Mark Complete:";
 
 // Helper to add/strip the emoji prefix from event titles
 function formatEventTitle(title: string, completed: boolean): string {
@@ -61,7 +62,10 @@ function extractDetailsFromDescription(description?: string | null): string | nu
   if (signatureIndex !== -1) {
     content = content.slice(0, signatureIndex);
   }
-  const actionsIndex = content.indexOf(EVENT_ACTIONS_MARKER);
+  let actionsIndex = content.indexOf(EVENT_ACTIONS_MARKER);
+  if (actionsIndex === -1) {
+    actionsIndex = content.indexOf(LEGACY_EVENT_ACTIONS_MARKER);
+  }
   if (actionsIndex !== -1) {
     content = content.slice(0, actionsIndex);
   }
@@ -100,13 +104,13 @@ export function mapCalendarEventToTask(event: calendar_v3.Schema$Event): Calenda
 }
 
 // Helper to build event description: details first (if any), then actions
-function buildEventDescription(details: string | null, completeLink: string, rescheduleLink: string): string {
+function buildEventDescription(details: string | null, manageLink: string): string {
   const parts: string[] = [];
   if (details) {
     parts.push(details);
     parts.push("");
   }
-  parts.push(`Actions:\n- Mark Complete: ${completeLink}\n- Reschedule: ${rescheduleLink}`);
+  parts.push(`Actions:\n- Manage: ${manageLink}`);
   parts.push(`\n---\n${APP_SIGNATURE}`);
   return parts.join("\n");
 }
@@ -348,13 +352,9 @@ async function updateCalendarEventActions(
   const calendar = await getCalendarClient(userId);
   if (!calendar) return;
 
-  const completeToken = generateActionToken(userId, eventId, "complete");
-  const rescheduleToken = generateActionToken(userId, eventId, "reschedule");
-
-  const completeLink = `${baseUrl}/api/action/${completeToken}`;
-  const rescheduleLink = `${baseUrl}/api/action/${rescheduleToken}`;
-
-  const description = buildEventDescription(details, completeLink, rescheduleLink);
+  const createdToken = await createActionToken(userId, eventId, calendarId);
+  const manageLink = `${baseUrl}/action/${createdToken.token}`;
+  const description = buildEventDescription(details, manageLink);
 
   try {
     await calendar.events.patch({
@@ -365,8 +365,31 @@ async function updateCalendarEventActions(
       },
     });
   } catch (error) {
+    await storage.markActionTokenUsed(createdToken.id);
     console.error("Error updating calendar event actions:", error);
+    return;
   }
+
+  try {
+    await storage.invalidateActionTokensForEvent(
+      userId,
+      eventId,
+      calendarId,
+      createdToken.tokenHash
+    );
+  } catch (error) {
+    console.error("Error invalidating previous action tokens:", error);
+  }
+}
+
+export async function refreshCalendarEventActions(
+  userId: string,
+  calendarId: string,
+  eventId: string,
+  details: string | null,
+  baseUrl: string
+): Promise<void> {
+  await updateCalendarEventActions(userId, calendarId, eventId, details, baseUrl);
 }
 
 export async function createCalendarEvent(
@@ -431,6 +454,18 @@ export async function updateCalendarEventTime(
   if (!calendar || !settings.calendarId) return false;
 
   try {
+    const current = await calendar.events.get({
+      calendarId: settings.calendarId,
+      eventId,
+    });
+    const currentEvent = current.data;
+    if (currentEvent.status === "cancelled") {
+      return false;
+    }
+    if (!isCalTodoEvent(currentEvent)) {
+      return false;
+    }
+
     await calendar.events.patch({
       calendarId: settings.calendarId,
       eventId,
@@ -489,6 +524,9 @@ export async function updateCalendarEventCompletion(
 
     const currentEvent = current.data;
     if (currentEvent.status === "cancelled") {
+      return null;
+    }
+    if (!isCalTodoEvent(currentEvent)) {
       return null;
     }
 

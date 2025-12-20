@@ -42,6 +42,17 @@ export const userSettingsRelations = relations(userSettings, ({ one }) => ({
   }),
 }));
 
+export const actionTokens = pgTable("action_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tokenHash: text("token_hash").notNull().unique(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  eventId: text("event_id").notNull(),
+  calendarId: text("calendar_id").notNull(),
+  expiresAt: timestamp("expires_at", { precision: 6 }).notNull(),
+  usedAt: timestamp("used_at", { precision: 6 }),
+  createdAt: timestamp("created_at", { precision: 6 }).notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({ id: true });
 
@@ -73,5 +84,7 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;
+export type ActionToken = typeof actionTokens.$inferSelect;
+export type InsertActionToken = typeof actionTokens.$inferInsert;
 export type CreateTask = z.infer<typeof createTaskSchema>;
 export type UpdateSettings = z.infer<typeof updateSettingsSchema>;

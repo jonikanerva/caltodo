@@ -25,6 +25,7 @@ declare global {
 declare module "express-session" {
   interface SessionData {
     csrfToken?: string;
+    pendingActionToken?: string;
   }
 }
 
@@ -85,12 +86,16 @@ export function setupAuth(app: Express): void {
       },
       async (req, accessToken, refreshToken, profile, done) => {
         try {
+          const pendingActionToken = req.session?.pendingActionToken;
           await new Promise<void>((resolve, reject) => {
             if (!req.session) {
               return reject(new Error("Session not initialized"));
             }
             req.session.regenerate((err) => (err ? reject(err) : resolve()));
           });
+          if (pendingActionToken && req.session) {
+            req.session.pendingActionToken = pendingActionToken;
+          }
 
           let user = await storage.getUserByGoogleId(profile.id);
 

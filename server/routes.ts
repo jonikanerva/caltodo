@@ -15,13 +15,13 @@ import {
   mapCalendarEventToTask,
   getCalendarEventsForTasks,
   getCalendarEvent,
+  refreshCalendarEventActions,
   EVENT_DELETED,
-  stripEventTitlePrefix,
   type CalendarEventData
 } from "./calendar";
 import { setupCronJobs } from "./cron";
 import { createTaskSchema, updateSettingsSchema } from "@shared/schema";
-import { verifyActionToken } from "./tokens";
+import { getActionToken } from "./tokens";
 import { z } from "zod";
 import { ensureCsrfToken, requireCsrfToken } from "./csrf";
 import type { CalendarTask } from "@shared/types";
@@ -33,6 +33,36 @@ function escapeHtml(input: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function renderActionShell(title: string, body: string): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${escapeHtml(title)}</title>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }
+        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }
+        h1 { font-size: 20px; margin: 0 0 12px; }
+        p { margin: 0 0 16px; color: #334155; }
+        .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }
+        button.secondary { background: #0f172a; }
+        button:disabled { background: #94a3b8; cursor: not-allowed; }
+        .status { margin-top: 16px; font-size: 14px; color: #475569; }
+        .muted { color: #64748b; font-size: 13px; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        ${body}
+      </div>
+    </body>
+    </html>
+  `;
 }
 
 function getBaseUrl(req: any): string {
@@ -61,6 +91,10 @@ function getBaseUrl(req: any): string {
 
 const patchTaskSchema = z.object({
   completed: z.boolean(),
+});
+
+const actionRequestSchema = z.object({
+  action: z.enum(["complete", "reschedule"]),
 });
 
 const isProduction = process.env.NODE_ENV === "production" || !!process.env.PRODUCTION_APP_URL;
@@ -96,21 +130,34 @@ export async function registerRoutes(
         : "http://localhost:5000/api/auth/google/callback"
   );
   
-  app.get("/api/auth/google", passport.authenticate("google", {
-    scope: [
-      "profile",
-      "email",
-      "https://www.googleapis.com/auth/calendar",
-      "https://www.googleapis.com/auth/calendar.events",
-    ],
-    accessType: "offline",
-    prompt: "consent",
-  }));
+  app.get("/api/auth/google", (req, res, next) => {
+    const actionToken =
+      typeof req.query.actionToken === "string" ? req.query.actionToken : null;
+    if (actionToken && req.session) {
+      req.session.pendingActionToken = actionToken;
+    }
+
+    return passport.authenticate("google", {
+      scope: [
+        "profile",
+        "email",
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/calendar.events",
+      ],
+      accessType: "offline",
+      prompt: "consent",
+    })(req, res, next);
+  });
 
   app.get(
     "/api/auth/google/callback",
     passport.authenticate("google", { failureRedirect: "/" }),
     (req, res) => {
+      const pendingActionToken = req.session?.pendingActionToken;
+      if (pendingActionToken) {
+        delete req.session.pendingActionToken;
+        return res.redirect(`/action/${encodeURIComponent(pendingActionToken)}`);
+      }
       res.redirect("/");
     }
   );
@@ -489,103 +536,199 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/action/:token", async (req, res) => {
+  app.get("/action/:token", async (req, res) => {
     try {
       const { token } = req.params;
-      const payload = verifyActionToken(token);
-      
-      if (!payload) {
-        return res.status(400).send(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>Invalid Link</title></head>
-          <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-            <h1>Invalid or Expired Link</h1>
-            <p>This action link is no longer valid. Please use the app to manage your tasks.</p>
-            <a href="/">Go to CalTodo</a>
-          </body>
-          </html>
-        `);
+
+      if (!req.isAuthenticated() || !req.user) {
+        const loginUrl = `/api/auth/google?actionToken=${encodeURIComponent(token)}`;
+        const body = `
+          <h1>Sign in required</h1>
+          <p>Sign in to manage this task with your CalTodo account.</p>
+          <a class="button-link" href="${escapeHtml(loginUrl)}">Sign in with Google</a>
+        `;
+        return res.status(200).send(renderActionShell("Sign in required", body));
       }
 
-      const settings = await storage.getUserSettings(payload.userId);
-      if (!settings?.calendarId) {
-        return res.status(400).send(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>No Calendar</title></head>
-          <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-            <h1>No Calendar Configured</h1>
-            <p>Please configure a calendar in settings first.</p>
-            <a href="/settings">Go to Settings</a>
-          </body>
-          </html>
-        `);
+      const actionToken = await getActionToken(token);
+      if (!actionToken) {
+        const body = `
+          <h1>Invalid or expired link</h1>
+          <p>This action link is no longer valid. Please use the app to manage your tasks.</p>
+          <a class="button-link" href="/">Go to CalTodo</a>
+        `;
+        return res.status(400).send(renderActionShell("Invalid Link", body));
       }
 
-      const event = await getCalendarEvent(payload.userId, payload.eventId, settings.calendarId);
+      if (actionToken.userId !== req.user.id) {
+        const body = `
+          <h1>Not authorized</h1>
+          <p>This action link belongs to a different account.</p>
+          <a class="button-link" href="/">Go to CalTodo</a>
+        `;
+        return res.status(403).send(renderActionShell("Not authorized", body));
+      }
+
+      const event = await getCalendarEvent(
+        req.user.id,
+        actionToken.eventId,
+        actionToken.calendarId
+      );
       if (!event) {
-        return res.status(404).send(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>Task Not Found</title></head>
-          <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-            <h1>Task Not Found</h1>
-            <p>This task may have been deleted.</p>
-            <a href="/">Go to CalTodo</a>
-          </body>
-          </html>
-        `);
+        const body = `
+          <h1>Task not found</h1>
+          <p>This task may have been deleted.</p>
+          <a class="button-link" href="/">Go to CalTodo</a>
+        `;
+        return res.status(404).send(renderActionShell("Task not found", body));
       }
-      const safeTitle = escapeHtml(stripEventTitlePrefix(event.summary || "Task"));
 
-      if (payload.action === "complete") {
+      const task = mapCalendarEventToTask(event);
+      if (!task) {
+        const body = `
+          <h1>Task not found</h1>
+          <p>This link is no longer valid for that task.</p>
+          <a class="button-link" href="/">Go to CalTodo</a>
+        `;
+        return res.status(404).send(renderActionShell("Task not found", body));
+      }
+
+      const csrfToken = req.session?.csrfToken || "";
+      const completedNote = task.completed
+        ? `<p class="muted">This task is already marked complete.</p>`
+        : "";
+
+      const body = `
+        <h1>Manage task</h1>
+        <p>"${escapeHtml(task.title || "Task")}"</p>
+        ${completedNote}
+        <div class="actions">
+          <button type="button" data-action="complete" ${task.completed ? "disabled" : ""}>Mark complete</button>
+          <button type="button" class="secondary" data-action="reschedule">Reschedule</button>
+        </div>
+        <div class="status" id="status"></div>
+        <script>
+          const actionToken = ${JSON.stringify(token)};
+          const csrfToken = ${JSON.stringify(csrfToken)};
+          const statusEl = document.getElementById("status");
+          const buttons = Array.from(document.querySelectorAll("button[data-action]"));
+
+          function setStatus(message) {
+            if (statusEl) statusEl.textContent = message;
+          }
+
+          function setBusy(busy) {
+            buttons.forEach((button) => {
+              if (button.dataset.action === "complete" && button.disabled) return;
+              button.disabled = busy;
+            });
+          }
+
+          buttons.forEach((button) => {
+            button.addEventListener("click", async () => {
+              const action = button.dataset.action;
+              if (!action) return;
+
+              setBusy(true);
+              setStatus("Working...");
+
+              try {
+                const response = await fetch("/api/action/" + encodeURIComponent(actionToken), {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRF-Token": csrfToken
+                  },
+                  credentials: "include",
+                  body: JSON.stringify({ action })
+                });
+
+                const text = await response.text();
+                if (!response.ok) {
+                  let message = text;
+                  try {
+                    const parsed = JSON.parse(text);
+                    message = parsed.error || message;
+                  } catch {
+                    // ignore parse failures
+                  }
+                  throw new Error(message || "Request failed");
+                }
+
+                setStatus(action === "complete" ? "Task marked complete." : "Task rescheduled.");
+                if (action === "complete") {
+                  button.disabled = true;
+                }
+              } catch (error) {
+                const message = error instanceof Error ? error.message : "Something went wrong.";
+                setStatus(message);
+              } finally {
+                setBusy(false);
+              }
+            });
+          });
+        </script>
+      `;
+
+      return res.status(200).send(renderActionShell("Manage task", body));
+    } catch (error) {
+      console.error("Error rendering action page:", error);
+      const body = `
+        <h1>Something went wrong</h1>
+        <p>Please try again or use the app to manage your tasks.</p>
+        <a class="button-link" href="/">Go to CalTodo</a>
+      `;
+      return res.status(500).send(renderActionShell("Error", body));
+    }
+  });
+
+  app.post("/api/action/:token", requireAuth, async (req, res) => {
+    try {
+      const { token } = req.params;
+      const parsed = actionRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid action" });
+      }
+
+      const actionToken = await getActionToken(token);
+      if (!actionToken) {
+        return res.status(400).json({ error: "Invalid or expired link" });
+      }
+
+      if (actionToken.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const settings = await storage.getUserSettings(req.user!.id);
+      if (!settings) {
+        return res.status(400).json({ error: "No settings configured" });
+      }
+
+      const calendarId = actionToken.calendarId;
+      const event = await getCalendarEvent(req.user!.id, actionToken.eventId, calendarId);
+      if (!event) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+
+      const task = mapCalendarEventToTask(event);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+
+      const actionSettings = { ...settings, calendarId };
+      if (parsed.data.action === "complete") {
         const updatedEvent = await updateCalendarEventCompletion(
-          payload.userId,
-          payload.eventId,
-          settings,
+          req.user!.id,
+          actionToken.eventId,
+          actionSettings,
           true
         );
         if (!updatedEvent) {
-          return res.status(404).send(`
-            <!DOCTYPE html>
-            <html>
-            <head><title>Task Not Found</title></head>
-            <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-              <h1>Task Not Found</h1>
-              <p>This task may have been deleted.</p>
-              <a href="/">Go to CalTodo</a>
-            </body>
-            </html>
-          `);
+          return res.status(404).json({ error: "Task not found" });
         }
-
-        return res.send(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>Task Completed</title></head>
-          <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-            <h1>Task Completed!</h1>
-            <p>"${safeTitle}" has been marked as done.</p>
-            <a href="/">Go to CalTodo</a>
-          </body>
-          </html>
-        `);
-      }
-
-      if (payload.action === "reschedule") {
+      } else {
         if (!event.start?.dateTime || !event.end?.dateTime) {
-          return res.status(400).send(`
-            <!DOCTYPE html>
-            <html>
-            <head><title>Invalid Event</title></head>
-            <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-              <h1>Invalid Event</h1>
-              <p>This event does not have a valid time range.</p>
-              <a href="/">Go to CalTodo</a>
-            </body>
-            </html>
-          `);
+          return res.status(400).json({ error: "Invalid event time range" });
         }
 
         const start = new Date(event.start.dateTime);
@@ -594,51 +737,35 @@ export async function registerRoutes(
           1,
           Math.round((end.getTime() - start.getTime()) / 60000)
         );
-        const slot = await findFreeSlot(payload.userId, settings, durationMinutes);
+        const slot = await findFreeSlot(req.user!.id, actionSettings, durationMinutes);
 
         if (!slot) {
-          return res.status(409).send(`
-            <!DOCTYPE html>
-            <html>
-            <head><title>No Free Slots</title></head>
-            <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-              <h1>No Free Time Slots</h1>
-              <p>No free time slots are available in the next 90 days.</p>
-              <a href="/">Go to CalTodo</a>
-            </body>
-            </html>
-          `);
+          return res.status(409).json({ error: "No free time slots available in the next 90 days." });
         }
 
-        await updateCalendarEventTime(payload.userId, payload.eventId, settings, slot);
-
-        return res.send(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>Task Rescheduled</title></head>
-          <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-            <h1>Task Rescheduled!</h1>
-            <p>"${safeTitle}" has been moved to the next available time slot.</p>
-            <a href="/">Go to CalTodo</a>
-          </body>
-          </html>
-        `);
+        const updated = await updateCalendarEventTime(
+          req.user!.id,
+          actionToken.eventId,
+          actionSettings,
+          slot
+        );
+        if (!updated) {
+          return res.status(404).json({ error: "Task not found" });
+        }
       }
 
-      res.status(400).send("Invalid action");
+      await refreshCalendarEventActions(
+        req.user!.id,
+        calendarId,
+        actionToken.eventId,
+        task.details,
+        getBaseUrl(req)
+      );
+
+      res.json({ success: true });
     } catch (error) {
       console.error("Error processing action:", error);
-      res.status(500).send(`
-        <!DOCTYPE html>
-        <html>
-        <head><title>Error</title></head>
-        <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-          <h1>Something went wrong</h1>
-          <p>Please try again or use the app to manage your tasks.</p>
-          <a href="/">Go to CalTodo</a>
-        </body>
-        </html>
-      `);
+      res.status(500).json({ error: "Failed to process action" });
     }
   });
 

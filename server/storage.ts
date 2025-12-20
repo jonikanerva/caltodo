@@ -1,13 +1,16 @@
 import {
   users,
   userSettings,
+  actionTokens,
   type User,
   type InsertUser,
   type UserSettings,
   type InsertUserSettings,
+  type ActionToken,
+  type InsertActionToken,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { decryptToken, encryptToken } from "./crypto";
 
 export interface IStorage {
@@ -19,6 +22,16 @@ export interface IStorage {
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
   createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
   updateUserSettings(userId: string, data: Partial<InsertUserSettings>): Promise<UserSettings | undefined>;
+
+  createActionToken(token: InsertActionToken): Promise<ActionToken>;
+  getActionTokenByHash(tokenHash: string): Promise<ActionToken | undefined>;
+  markActionTokenUsed(id: string): Promise<ActionToken | undefined>;
+  invalidateActionTokensForEvent(
+    userId: string,
+    eventId: string,
+    calendarId: string,
+    keepTokenHash?: string
+  ): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -83,6 +96,49 @@ export class DatabaseStorage implements IStorage {
       .where(eq(userSettings.userId, userId))
       .returning();
     return result || undefined;
+  }
+
+  async createActionToken(token: InsertActionToken): Promise<ActionToken> {
+    const [result] = await db.insert(actionTokens).values(token).returning();
+    return result;
+  }
+
+  async getActionTokenByHash(tokenHash: string): Promise<ActionToken | undefined> {
+    const [result] = await db
+      .select()
+      .from(actionTokens)
+      .where(eq(actionTokens.tokenHash, tokenHash));
+    return result || undefined;
+  }
+
+  async markActionTokenUsed(id: string): Promise<ActionToken | undefined> {
+    const [result] = await db
+      .update(actionTokens)
+      .set({ usedAt: new Date() })
+      .where(and(eq(actionTokens.id, id), isNull(actionTokens.usedAt)))
+      .returning();
+    return result || undefined;
+  }
+
+  async invalidateActionTokensForEvent(
+    userId: string,
+    eventId: string,
+    calendarId: string,
+    keepTokenHash?: string
+  ): Promise<void> {
+    const conditions = [
+      eq(actionTokens.userId, userId),
+      eq(actionTokens.eventId, eventId),
+      eq(actionTokens.calendarId, calendarId),
+      isNull(actionTokens.usedAt),
+    ];
+    if (keepTokenHash) {
+      conditions.push(ne(actionTokens.tokenHash, keepTokenHash));
+    }
+    await db
+      .update(actionTokens)
+      .set({ usedAt: new Date() })
+      .where(and(...conditions));
   }
 }
 
