@@ -206,33 +206,9 @@ npm start
 
 See `CONTRIBUTING.md` for development workflow and design guidelines.
 
-## Privacy Statement
+## Legal
 
-Information I Collect
-
-- Google account info: Google ID, email address, and display name (from Google OAuth).
-- OAuth tokens: access and refresh tokens used to access your Google Calendar (stored encrypted).
-- Calendar settings: the calendar ID you select for scheduling.
-- Session data: a session ID cookie and CSRF token to keep you signed in.
-
-Calendar Data
-
-- CalTodo reads and writes events in your Google Calendar to create, update, and reschedule tasks.
-- Tasks are stored in your Google Calendar, not in the app database.
-
-How I Use Information
-
-- Authenticate you and maintain your session.
-- Read and update calendar events to schedule tasks.
-- Operate and secure the service.
-
-Sharing
-
-- I share data only with Google APIs to perform calendar operations.
-
-Google API Limited Use
-
-- CalTodo's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements.
+Privacy Policy and Terms of Service are available on the deployed site at `/privacy` and `/tos`.
 
 ## License
 

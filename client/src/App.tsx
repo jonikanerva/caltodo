@@ -13,11 +13,44 @@ import AuthPage from "@/pages/auth";
 import MainPage from "@/pages/main";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
+import PrivacyPage from "@/pages/privacy";
+import TermsPage from "@/pages/tos";
 import { logout } from "@/lib/auth";
 import type { User, UserSettings } from "@shared/schema";
 
 interface AuthUser extends User {
   settings?: UserSettings;
+}
+
+function Footer() {
+  const year = new Date().getFullYear();
+
+  return (
+    <footer className="border-t bg-background">
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        <p className="text-xs text-muted-foreground">
+          Copyright donut <span aria-hidden="true">&copy;</span> {year}.{" "}
+          <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground">
+            Privacy Policy
+          </Link>
+          .{" "}
+          <Link href="/tos" className="underline underline-offset-4 hover:text-foreground">
+            TOS
+          </Link>
+          .
+        </p>
+      </div>
+    </footer>
+  );
+}
+
+function PublicLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <main className="flex-1 flex flex-col">{children}</main>
+      <Footer />
+    </div>
+  );
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -31,7 +64,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -88,7 +121,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main>{children}</main>
+      <main className="flex-1">{children}</main>
+      <Footer />
     </div>
   );
 }
@@ -106,10 +140,25 @@ function AuthenticatedRoutes() {
 }
 
 function Router() {
+  const [location] = useLocation();
+  const isPublicRoute = location === "/privacy" || location === "/tos";
   const { data: user, isLoading, error } = useQuery<AuthUser>({
     queryKey: ["/api/auth/user"],
     retry: false,
+    enabled: !isPublicRoute,
   });
+
+  if (isPublicRoute) {
+    return (
+      <PublicLayout>
+        <Switch>
+          <Route path="/privacy" component={PrivacyPage} />
+          <Route path="/tos" component={TermsPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </PublicLayout>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -123,7 +172,11 @@ function Router() {
   }
 
   if (!user || error) {
-    return <AuthPage />;
+    return (
+      <PublicLayout>
+        <AuthPage />
+      </PublicLayout>
+    );
   }
 
   return <AuthenticatedRoutes />;
