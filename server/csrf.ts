@@ -21,9 +21,15 @@ export function requireCsrfToken(req: Request, res: Response, next: NextFunction
   }
 
   const headerToken = req.get("x-csrf-token");
+  const bodyToken =
+    typeof (req.body as { csrfToken?: unknown } | undefined)?.csrfToken === "string"
+      ? (req.body as { csrfToken: string }).csrfToken
+      : undefined;
   const sessionToken = req.session?.csrfToken;
 
-  if (headerToken && sessionToken && headerToken === sessionToken) {
+  const tokenToCheck = headerToken || bodyToken;
+
+  if (tokenToCheck && sessionToken && tokenToCheck === sessionToken) {
     return next();
   }
 

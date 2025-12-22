@@ -49,6 +49,7 @@ function renderActionShell(title: string, body: string): string {
         h1 { font-size: 20px; margin: 0 0 12px; }
         p { margin: 0 0 16px; color: #334155; }
         .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+        .actions form { margin: 0; }
         button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }
         button.secondary { background: #0f172a; }
         button:disabled { background: #94a3b8; cursor: not-allowed; }
@@ -594,6 +595,8 @@ export async function registerRoutes(
       }
 
       const csrfToken = req.session?.csrfToken || "";
+      const actionUrl = escapeHtml(`/api/action/${encodeURIComponent(token)}`);
+      const csrfInput = `<input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />`;
       const completedNote = task.completed
         ? `<p class="muted">This task is already marked complete.</p>`
         : "";
@@ -603,71 +606,17 @@ export async function registerRoutes(
         <p>"${escapeHtml(task.title || "Task")}"</p>
         ${completedNote}
         <div class="actions">
-          <button type="button" data-action="complete" ${task.completed ? "disabled" : ""}>Mark complete</button>
-          <button type="button" class="secondary" data-action="reschedule">Reschedule</button>
+          <form method="POST" action="${actionUrl}">
+            ${csrfInput}
+            <input type="hidden" name="action" value="complete" />
+            <button type="submit" ${task.completed ? "disabled" : ""}>Mark complete</button>
+          </form>
+          <form method="POST" action="${actionUrl}">
+            ${csrfInput}
+            <input type="hidden" name="action" value="reschedule" />
+            <button type="submit" class="secondary">Reschedule</button>
+          </form>
         </div>
-        <div class="status" id="status"></div>
-        <script>
-          const actionToken = ${JSON.stringify(token)};
-          const csrfToken = ${JSON.stringify(csrfToken)};
-          const statusEl = document.getElementById("status");
-          const buttons = Array.from(document.querySelectorAll("button[data-action]"));
-
-          function setStatus(message) {
-            if (statusEl) statusEl.textContent = message;
-          }
-
-          function setBusy(busy) {
-            buttons.forEach((button) => {
-              if (button.dataset.action === "complete" && button.disabled) return;
-              button.disabled = busy;
-            });
-          }
-
-          buttons.forEach((button) => {
-            button.addEventListener("click", async () => {
-              const action = button.dataset.action;
-              if (!action) return;
-
-              setBusy(true);
-              setStatus("Working...");
-
-              try {
-                const response = await fetch("/api/action/" + encodeURIComponent(actionToken), {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRF-Token": csrfToken
-                  },
-                  credentials: "include",
-                  body: JSON.stringify({ action })
-                });
-
-                const text = await response.text();
-                if (!response.ok) {
-                  let message = text;
-                  try {
-                    const parsed = JSON.parse(text);
-                    message = parsed.error || message;
-                  } catch {
-                    // ignore parse failures
-                  }
-                  throw new Error(message || "Request failed");
-                }
-
-                setStatus(action === "complete" ? "Task marked complete." : "Task rescheduled.");
-                if (action === "complete") {
-                  button.disabled = true;
-                }
-              } catch (error) {
-                const message = error instanceof Error ? error.message : "Something went wrong.";
-                setStatus(message);
-              } finally {
-                setBusy(false);
-              }
-            });
-          });
-        </script>
       `;
 
       return res.status(200).send(renderActionShell("Manage task", body));
@@ -685,34 +634,47 @@ export async function registerRoutes(
   app.post("/api/action/:token", requireAuth, async (req, res) => {
     try {
       const { token } = req.params;
+      const wantsHtml = req.headers.accept?.includes("text/html");
+      const respondError = (status: number, title: string, message: string) => {
+        if (wantsHtml) {
+          const body = `
+            <h1>${escapeHtml(title)}</h1>
+            <p>${escapeHtml(message)}</p>
+            <a class="button-link" href="/">Go to CalTodo</a>
+          `;
+          return res.status(status).send(renderActionShell(title, body));
+        }
+        return res.status(status).json({ error: message });
+      };
+
       const parsed = actionRequestSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid action" });
+        return respondError(400, "Invalid action", "Invalid action.");
       }
 
       const actionToken = await getActionToken(token);
       if (!actionToken) {
-        return res.status(400).json({ error: "Invalid or expired link" });
+        return respondError(400, "Invalid link", "Invalid or expired link.");
       }
 
       if (actionToken.userId !== req.user!.id) {
-        return res.status(403).json({ error: "Unauthorized" });
+        return respondError(403, "Not authorized", "Unauthorized.");
       }
 
       const settings = await storage.getUserSettings(req.user!.id);
       if (!settings) {
-        return res.status(400).json({ error: "No settings configured" });
+        return respondError(400, "Missing settings", "No settings configured.");
       }
 
       const calendarId = actionToken.calendarId;
       const event = await getCalendarEvent(req.user!.id, actionToken.eventId, calendarId);
       if (!event) {
-        return res.status(404).json({ error: "Task not found" });
+        return respondError(404, "Task not found", "Task not found.");
       }
 
       const task = mapCalendarEventToTask(event);
       if (!task) {
-        return res.status(404).json({ error: "Task not found" });
+        return respondError(404, "Task not found", "Task not found.");
       }
 
       const actionSettings = { ...settings, calendarId };
@@ -724,11 +686,11 @@ export async function registerRoutes(
           true
         );
         if (!updatedEvent) {
-          return res.status(404).json({ error: "Task not found" });
+          return respondError(404, "Task not found", "Task not found.");
         }
       } else {
         if (!event.start?.dateTime || !event.end?.dateTime) {
-          return res.status(400).json({ error: "Invalid event time range" });
+          return respondError(400, "Invalid event", "Invalid event time range.");
         }
 
         const start = new Date(event.start.dateTime);
@@ -740,7 +702,11 @@ export async function registerRoutes(
         const slot = await findFreeSlot(req.user!.id, actionSettings, durationMinutes);
 
         if (!slot) {
-          return res.status(409).json({ error: "No free time slots available in the next 90 days." });
+          return respondError(
+            409,
+            "No free time slots",
+            "No free time slots available in the next 90 days."
+          );
         }
 
         const updated = await updateCalendarEventTime(
@@ -750,7 +716,7 @@ export async function registerRoutes(
           slot
         );
         if (!updated) {
-          return res.status(404).json({ error: "Task not found" });
+          return respondError(404, "Task not found", "Task not found.");
         }
       }
 
@@ -762,10 +728,23 @@ export async function registerRoutes(
         getBaseUrl(req)
       );
 
-      res.json({ success: true });
+      if (wantsHtml) {
+        const actionLabel =
+          parsed.data.action === "complete"
+            ? "Task completed"
+            : "Task rescheduled";
+        const body = `
+          <h1>${escapeHtml(actionLabel)}</h1>
+          <p>${escapeHtml(task.title || "Task")} has been updated.</p>
+          <a class="button-link" href="/">Go to CalTodo</a>
+        `;
+        return res.status(200).send(renderActionShell(actionLabel, body));
+      }
+
+      return res.json({ success: true });
     } catch (error) {
       console.error("Error processing action:", error);
-      res.status(500).json({ error: "Failed to process action" });
+      return res.status(500).json({ error: "Failed to process action" });
     }
   });
 

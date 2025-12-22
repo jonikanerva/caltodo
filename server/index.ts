@@ -23,6 +23,31 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+app.use((req, res, next) => {
+  const isDevelopment = process.env.NODE_ENV !== "production";
+  const scriptSrc = ["'self'"];
+  if (isDevelopment) {
+    scriptSrc.push("'unsafe-eval'");
+  }
+
+  const csp = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
+    `script-src ${scriptSrc.join(" ")}`,
+    "connect-src 'self' ws: wss:",
+  ].join("; ");
+
+  res.setHeader("Content-Security-Policy", csp);
+  res.setHeader("X-Frame-Options", "DENY");
+  next();
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
