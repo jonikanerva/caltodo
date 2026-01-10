@@ -725,7 +725,8 @@ export async function rescheduleAllUserTasks(
   if (!calendar) return
 
   const windowStart = new Date()
-  const windowEnd = new Date(windowStart)
+  windowStart.setDate(windowStart.getDate() - 7)
+  const windowEnd = new Date()
   windowEnd.setDate(windowEnd.getDate() + 90)
 
   const windowEvents = await listCalendarEventsInRange(
