@@ -1,9 +1,9 @@
-let csrfToken: string | undefined;
+let csrfToken: string | undefined
 
 export function setCsrfToken(token?: string | null) {
-  csrfToken = token ?? undefined;
+  csrfToken = token ?? undefined
 }
 
 export function getCsrfToken(): string | undefined {
-  return csrfToken;
+  return csrfToken
 }

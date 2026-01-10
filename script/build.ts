@@ -1,6 +1,6 @@
-import { build as esbuild } from "esbuild";
-import { build as viteBuild } from "vite";
-import { rm, readFile, copyFile, mkdir, cp } from "fs/promises";
+import { build as esbuild } from "esbuild"
+import { build as viteBuild } from "vite"
+import { rm, readFile, copyFile, mkdir, cp } from "fs/promises"
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -30,21 +30,21 @@ const allowlist = [
   "xlsx",
   "zod",
   "zod-validation-error",
-];
+]
 
 async function buildAll() {
-  await rm("dist", { recursive: true, force: true });
+  await rm("dist", { recursive: true, force: true })
 
-  console.log("building client...");
-  await viteBuild();
+  console.log("building client...")
+  await viteBuild()
 
-  console.log("building server...");
-  const pkg = JSON.parse(await readFile("package.json", "utf-8"));
+  console.log("building server...")
+  const pkg = JSON.parse(await readFile("package.json", "utf-8"))
   const allDeps = [
     ...Object.keys(pkg.dependencies || {}),
     ...Object.keys(pkg.devDependencies || {}),
-  ];
-  const externals = allDeps.filter((dep) => !allowlist.includes(dep));
+  ]
+  const externals = allDeps.filter((dep) => !allowlist.includes(dep))
 
   await esbuild({
     entryPoints: ["server/index.ts"],
@@ -58,21 +58,18 @@ async function buildAll() {
     minify: true,
     external: externals,
     logLevel: "info",
-  });
+  })
 
   // Copy connect-pg-simple's table.sql file needed at runtime
-  console.log("copying connect-pg-simple table.sql...");
-  await copyFile(
-    "node_modules/connect-pg-simple/table.sql",
-    "dist/table.sql"
-  );
+  console.log("copying connect-pg-simple table.sql...")
+  await copyFile("node_modules/connect-pg-simple/table.sql", "dist/table.sql")
 
   // Copy migrations folder for production database migrations
-  console.log("copying migrations folder...");
-  await cp("migrations", "dist/migrations", { recursive: true });
+  console.log("copying migrations folder...")
+  await cp("migrations", "dist/migrations", { recursive: true })
 }
 
 buildAll().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+  console.error(err)
+  process.exit(1)
+})

@@ -1,10 +1,10 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { getCsrfToken, setCsrfToken } from "./csrf";
+import { QueryClient, QueryFunction } from "@tanstack/react-query"
+import { getCsrfToken, setCsrfToken } from "./csrf"
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    const text = (await res.text()) || res.statusText
+    throw new Error(`${res.status}: ${text}`)
   }
 }
 
@@ -13,7 +13,7 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const csrfToken = getCsrfToken();
+  const csrfToken = getCsrfToken()
   const res = await fetch(url, {
     method,
     headers: {
@@ -22,33 +22,33 @@ export async function apiRequest(
     },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
-  });
+  })
 
-  await throwIfResNotOk(res);
-  return res;
+  await throwIfResNotOk(res)
+  return res
 }
 
-type UnauthorizedBehavior = "returnNull" | "throw";
+type UnauthorizedBehavior = "returnNull" | "throw"
 export const getQueryFn: <T>(options: {
-  on401: UnauthorizedBehavior;
+  on401: UnauthorizedBehavior
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
-    });
+    })
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+      return null
     }
 
-    await throwIfResNotOk(res);
-    const json = await res.json();
+    await throwIfResNotOk(res)
+    const json = await res.json()
     if ((queryKey[0] as string) === "/api/auth/user" && json?.csrfToken) {
-      setCsrfToken(json.csrfToken);
+      setCsrfToken(json.csrfToken)
     }
-    return json;
-  };
+    return json
+  }
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,4 +63,4 @@ export const queryClient = new QueryClient({
       retry: false,
     },
   },
-});
+})

@@ -1,85 +1,109 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Settings, Calendar, Clock, Palette, Loader2, Save } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { updateSettingsSchema, type UpdateSettings, type UserSettings } from "@shared/schema";
-import { z } from "zod";
+import { useQuery, useMutation } from "@tanstack/react-query"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Settings, Calendar, Clock, Palette, Loader2, Save } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { queryClient, apiRequest } from "@/lib/queryClient"
+import {
+  updateSettingsSchema,
+  type UpdateSettings,
+  type UserSettings,
+} from "@shared/schema"
+import { z } from "zod"
 
 interface CalendarListItem {
-  id: string;
-  summary: string;
-  primary?: boolean;
+  id: string
+  summary: string
+  primary?: boolean
 }
 
 const getTimezoneOffset = (tz: string): string => {
   try {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', {
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat("en-US", {
       timeZone: tz,
-      timeZoneName: 'shortOffset',
-    });
-    const parts = formatter.formatToParts(now);
-    const offsetPart = parts.find(p => p.type === 'timeZoneName');
-    const gmtOffset = offsetPart?.value || '';
+      timeZoneName: "shortOffset",
+    })
+    const parts = formatter.formatToParts(now)
+    const offsetPart = parts.find((p) => p.type === "timeZoneName")
+    const gmtOffset = offsetPart?.value || ""
     // Convert GMT+02:00 to UTC+2, GMT-05:30 to UTC-5:30, GMT+0 to UTC+0
-    const match = gmtOffset.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+    const match = gmtOffset.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/)
     if (match) {
-      const sign = match[1];
-      const hours = parseInt(match[2], 10);
-      const mins = match[3];
+      const sign = match[1]
+      const hours = parseInt(match[2], 10)
+      const mins = match[3]
       // Only show minutes if they are non-zero (e.g., :30, :45)
-      const minutes = mins && mins !== '00' ? `:${mins}` : '';
-      return `UTC${sign}${hours}${minutes}`;
+      const minutes = mins && mins !== "00" ? `:${mins}` : ""
+      return `UTC${sign}${hours}${minutes}`
     }
-    return gmtOffset.replace('GMT', 'UTC');
+    return gmtOffset.replace("GMT", "UTC")
   } catch {
-    return '';
+    return ""
   }
-};
+}
 
 // Get numeric offset in minutes for sorting
 const getOffsetMinutes = (tz: string): number => {
   try {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', {
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat("en-US", {
       timeZone: tz,
-      timeZoneName: 'shortOffset',
-    });
-    const parts = formatter.formatToParts(now);
-    const offsetPart = parts.find(p => p.type === 'timeZoneName');
-    const gmtOffset = offsetPart?.value || 'GMT+0';
-    const match = gmtOffset.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+      timeZoneName: "shortOffset",
+    })
+    const parts = formatter.formatToParts(now)
+    const offsetPart = parts.find((p) => p.type === "timeZoneName")
+    const gmtOffset = offsetPart?.value || "GMT+0"
+    const match = gmtOffset.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/)
     if (match) {
-      const sign = match[1] === '+' ? 1 : -1;
-      const hours = parseInt(match[2], 10);
-      const mins = parseInt(match[3] || '0', 10);
-      return sign * (hours * 60 + mins);
+      const sign = match[1] === "+" ? 1 : -1
+      const hours = parseInt(match[2], 10)
+      const mins = parseInt(match[3] || "0", 10)
+      return sign * (hours * 60 + mins)
     }
-    return 0;
+    return 0
   } catch {
-    return 0;
+    return 0
   }
-};
+}
 
-const TIMEZONES = Intl.supportedValuesOf('timeZone').sort((a, b) => {
-  const offsetA = getOffsetMinutes(a);
-  const offsetB = getOffsetMinutes(b);
+const TIMEZONES = Intl.supportedValuesOf("timeZone").sort((a, b) => {
+  const offsetA = getOffsetMinutes(a)
+  const offsetB = getOffsetMinutes(b)
   // Sort by offset first, then alphabetically by name
   if (offsetA !== offsetB) {
-    return offsetA - offsetB;
+    return offsetA - offsetB
   }
-  return a.localeCompare(b);
-});
+  return a.localeCompare(b)
+})
 
 const GOOGLE_CALENDAR_COLORS: { id: string; name: string; hex: string }[] = [
   { id: "1", name: "Lavender", hex: "#7986cb" },
@@ -93,27 +117,29 @@ const GOOGLE_CALENDAR_COLORS: { id: string; name: string; hex: string }[] = [
   { id: "9", name: "Blueberry", hex: "#3f51b5" },
   { id: "10", name: "Basil", hex: "#0b8043" },
   { id: "11", name: "Tomato", hex: "#d60000" },
-];
+]
 
 type FormValues = {
-  calendarId?: string;
-  workStartHour: number;
-  workEndHour: number;
-  timezone: string;
-  defaultDuration: number;
-  eventColor: string;
-};
+  calendarId?: string
+  workStartHour: number
+  workEndHour: number
+  timezone: string
+  defaultDuration: number
+  eventColor: string
+}
 
 export default function SettingsPage() {
-  const { toast } = useToast();
+  const { toast } = useToast()
 
   const { data: settings, isLoading: settingsLoading } = useQuery<UserSettings>({
     queryKey: ["/api/settings"],
-  });
+  })
 
-  const { data: calendars = [], isLoading: calendarsLoading } = useQuery<CalendarListItem[]>({
+  const { data: calendars = [], isLoading: calendarsLoading } = useQuery<
+    CalendarListItem[]
+  >({
     queryKey: ["/api/calendars"],
-  });
+  })
 
   const form = useForm<FormValues>({
     resolver: zodResolver(updateSettingsSchema),
@@ -125,44 +151,46 @@ export default function SettingsPage() {
       defaultDuration: settings?.defaultDuration ?? 60,
       eventColor: settings?.eventColor || "1",
     },
-    values: settings ? {
-      calendarId: settings.calendarId || "",
-      workStartHour: settings.workStartHour,
-      workEndHour: settings.workEndHour,
-      timezone: settings.timezone,
-      defaultDuration: settings.defaultDuration,
-      eventColor: settings.eventColor,
-    } : undefined,
-  });
+    values: settings
+      ? {
+          calendarId: settings.calendarId || "",
+          workStartHour: settings.workStartHour,
+          workEndHour: settings.workEndHour,
+          timezone: settings.timezone,
+          defaultDuration: settings.defaultDuration,
+          eventColor: settings.eventColor,
+        }
+      : undefined,
+  })
 
   const updateMutation = useMutation({
     mutationFn: async (data: FormValues) => {
-      return apiRequest("PATCH", "/api/settings", data);
+      return apiRequest("PATCH", "/api/settings", data)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] })
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] })
       toast({
         title: "Settings saved",
         description: "Your preferences have been updated",
-      });
+      })
     },
     onError: () => {
       toast({
         title: "Error",
         description: "Failed to save settings. Please try again.",
         variant: "destructive",
-      });
+      })
     },
-  });
+  })
 
   const onSubmit = (data: FormValues) => {
-    updateMutation.mutate(data);
-  };
+    updateMutation.mutate(data)
+  }
 
   const formatHour = (hour: number) => {
-    return `${hour.toString().padStart(2, '0')}:00`;
-  };
+    return `${hour.toString().padStart(2, "0")}:00`
+  }
 
   if (settingsLoading) {
     return (
@@ -182,7 +210,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
-    );
+    )
   }
 
   return (
@@ -349,7 +377,10 @@ export default function SettingsPage() {
                               id={`duration-${option.value}`}
                               data-testid={`radio-duration-${option.value}`}
                             />
-                            <Label htmlFor={`duration-${option.value}`} className="cursor-pointer">
+                            <Label
+                              htmlFor={`duration-${option.value}`}
+                              className="cursor-pointer"
+                            >
                               {option.label}
                             </Label>
                           </div>
@@ -425,5 +456,5 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

@@ -5,7 +5,8 @@ export default function TermsPage() {
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold">Terms of Service</h1>
           <p className="text-sm text-muted-foreground">
-            CalTodo is a personal project that connects to your Google Calendar to create and manage tasks.
+            CalTodo is a personal project that connects to your Google Calendar to create
+            and manage tasks.
           </p>
         </header>
 
@@ -24,5 +25,5 @@ export default function TermsPage() {
         </section>
       </div>
     </div>
-  );
+  )
 }

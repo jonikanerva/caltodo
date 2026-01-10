@@ -1,29 +1,29 @@
-import { Switch, Route, Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { CheckSquare, Settings, ListTodo, LogOut } from "lucide-react";
-import AuthPage from "@/pages/auth";
-import MainPage from "@/pages/main";
-import SettingsPage from "@/pages/settings";
-import NotFound from "@/pages/not-found";
-import PrivacyPage from "@/pages/privacy";
-import TermsPage from "@/pages/tos";
-import { logout } from "@/lib/auth";
-import type { User, UserSettings } from "@shared/schema";
+import { Switch, Route, Link, useLocation } from "wouter"
+import { useQuery } from "@tanstack/react-query"
+import { queryClient } from "./lib/queryClient"
+import { QueryClientProvider } from "@tanstack/react-query"
+import { Toaster } from "@/components/ui/toaster"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { CheckSquare, Settings, ListTodo, LogOut } from "lucide-react"
+import AuthPage from "@/pages/auth"
+import MainPage from "@/pages/main"
+import SettingsPage from "@/pages/settings"
+import NotFound from "@/pages/not-found"
+import PrivacyPage from "@/pages/privacy"
+import TermsPage from "@/pages/tos"
+import { logout } from "@/lib/auth"
+import type { User, UserSettings } from "@shared/schema"
 
 interface AuthUser extends User {
-  settings?: UserSettings;
+  settings?: UserSettings
 }
 
 function Footer() {
-  const year = new Date().getFullYear();
+  const year = new Date().getFullYear()
 
   return (
     <footer className="border-t bg-background">
@@ -41,7 +41,7 @@ function Footer() {
         </p>
       </div>
     </footer>
-  );
+  )
 }
 
 function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -50,18 +50,18 @@ function PublicLayout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col">{children}</main>
       <Footer />
     </div>
-  );
+  )
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location] = useLocation()
   const { data: user } = useQuery<AuthUser>({
     queryKey: ["/api/auth/user"],
-  });
+  })
 
   const handleLogout = async () => {
-    await logout();
-  };
+    await logout()
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -124,7 +124,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       <main className="flex-1">{children}</main>
       <Footer />
     </div>
-  );
+  )
 }
 
 function AuthenticatedRoutes() {
@@ -136,17 +136,21 @@ function AuthenticatedRoutes() {
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
-  );
+  )
 }
 
 function Router() {
-  const [location] = useLocation();
-  const isPublicRoute = location === "/privacy" || location === "/tos";
-  const { data: user, isLoading, error } = useQuery<AuthUser>({
+  const [location] = useLocation()
+  const isPublicRoute = location === "/privacy" || location === "/tos"
+  const {
+    data: user,
+    isLoading,
+    error,
+  } = useQuery<AuthUser>({
     queryKey: ["/api/auth/user"],
     retry: false,
     enabled: !isPublicRoute,
-  });
+  })
 
   if (isPublicRoute) {
     return (
@@ -157,7 +161,7 @@ function Router() {
           <Route component={NotFound} />
         </Switch>
       </PublicLayout>
-    );
+    )
   }
 
   if (isLoading) {
@@ -168,7 +172,7 @@ function Router() {
           <Skeleton className="h-4 w-32" />
         </div>
       </div>
-    );
+    )
   }
 
   if (!user || error) {
@@ -176,10 +180,10 @@ function Router() {
       <PublicLayout>
         <AuthPage />
       </PublicLayout>
-    );
+    )
   }
 
-  return <AuthenticatedRoutes />;
+  return <AuthenticatedRoutes />
 }
 
 function App() {
@@ -190,7 +194,7 @@ function App() {
         <Router />
       </TooltipProvider>
     </QueryClientProvider>
-  );
+  )
 }
 
-export default App;
+export default App

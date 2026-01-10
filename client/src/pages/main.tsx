@@ -1,42 +1,52 @@
-import { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Plus, 
-  GripVertical, 
-  ChevronDown, 
-  ChevronUp, 
-  RotateCcw, 
+import { useState, useRef, useEffect } from "react"
+import { useQuery, useMutation } from "@tanstack/react-query"
+import { Link } from "wouter"
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Plus,
+  GripVertical,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
   Clock,
   AlertTriangle,
   Loader2,
   Settings,
   RefreshCw,
-  RotateCw
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { UserSettings } from "@shared/schema";
-import type { CalendarTask } from "@shared/types";
-import { format } from "date-fns";
+  RotateCw,
+} from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { queryClient, apiRequest } from "@/lib/queryClient"
+import type { UserSettings } from "@shared/schema"
+import type { CalendarTask } from "@shared/types"
+import { format } from "date-fns"
 
 interface CreateTaskInput {
-  title: string;
-  details: string;
-  urgent: boolean;
-  duration?: number;
+  title: string
+  details: string
+  urgent: boolean
+  duration?: number
 }
 
 const DURATION_OPTIONS = [
@@ -48,179 +58,181 @@ const DURATION_OPTIONS = [
   { value: "120", label: "2 hours" },
   { value: "180", label: "3 hours" },
   { value: "240", label: "4 hours" },
-];
+]
 
 export default function MainPage() {
-  const { toast } = useToast();
+  const { toast } = useToast()
   const [newTask, setNewTask] = useState<CreateTaskInput>({
     title: "",
     details: "",
     urgent: false,
-  });
-  const [completedOpen, setCompletedOpen] = useState(false);
-  const [completingTaskIds, setCompletingTaskIds] = useState<Set<string>>(new Set());
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  })
+  const [completedOpen, setCompletedOpen] = useState(false)
+  const [completingTaskIds, setCompletingTaskIds] = useState<Set<string>>(new Set())
+  const titleInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    titleInputRef.current?.focus();
-  }, []);
+    titleInputRef.current?.focus()
+  }, [])
 
   const { data: tasks = [], isLoading } = useQuery<CalendarTask[]>({
     queryKey: ["/api/tasks"],
-  });
+  })
 
   const { data: settings } = useQuery<UserSettings | null>({
     queryKey: ["/api/settings"],
-  });
+  })
 
-  const hasCalendar = !!settings?.calendarId;
+  const hasCalendar = !!settings?.calendarId
 
   const createTaskMutation = useMutation({
     mutationFn: async (data: CreateTaskInput) => {
-      return apiRequest("POST", "/api/tasks", data);
+      return apiRequest("POST", "/api/tasks", data)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      setNewTask({ title: "", details: "", urgent: false, duration: undefined });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
+      setNewTask({ title: "", details: "", urgent: false, duration: undefined })
       toast({
         title: "Task created",
-        description: hasCalendar 
+        description: hasCalendar
           ? "Your task has been scheduled in your calendar"
           : "Task saved. Configure a calendar to enable scheduling.",
-      });
+      })
     },
     onError: (error) => {
-      const message = error instanceof Error ? error.message : "";
-      const slotMessage = "No free time slots available in the next 90 days.";
+      const message = error instanceof Error ? error.message : ""
+      const slotMessage = "No free time slots available in the next 90 days."
       const description = message.includes(slotMessage)
         ? slotMessage
-        : "Failed to create task. Please try again.";
+        : "Failed to create task. Please try again."
       toast({
         title: "Error",
         description,
         variant: "destructive",
-      });
+      })
     },
-  });
+  })
 
   const completeTaskMutation = useMutation({
     mutationFn: async ({ id, completed }: { id: string; completed: boolean }) => {
-      return apiRequest("PATCH", `/api/tasks/${id}`, { completed });
+      return apiRequest("PATCH", `/api/tasks/${id}`, { completed })
     },
     onMutate: ({ id }) => {
-      setCompletingTaskIds(prev => new Set(prev).add(id));
+      setCompletingTaskIds((prev) => new Set(prev).add(id))
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
     },
     onError: (_, { id }) => {
-      setCompletingTaskIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      setCompletingTaskIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
     },
-  });
-  
+  })
+
   useEffect(() => {
-    if (completingTaskIds.size === 0) return;
-    setCompletingTaskIds(prev => {
-      let changed = false;
-      const next = new Set(prev);
+    if (completingTaskIds.size === 0) return
+    setCompletingTaskIds((prev) => {
+      let changed = false
+      const next = new Set(prev)
       for (const id of Array.from(prev)) {
-        const task = tasks.find((item) => item.id === id);
+        const task = tasks.find((item) => item.id === id)
         if (!task || task.completed) {
-          next.delete(id);
-          changed = true;
+          next.delete(id)
+          changed = true
         }
       }
-      return changed ? next : prev;
-    });
-  }, [tasks, completingTaskIds]);
+      return changed ? next : prev
+    })
+  }, [tasks, completingTaskIds])
 
   const reorderTasksMutation = useMutation({
     mutationFn: async (taskIds: string[]) => {
-      return apiRequest("POST", "/api/tasks/reorder", { taskIds });
+      return apiRequest("POST", "/api/tasks/reorder", { taskIds })
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
     },
-  });
+  })
 
   const reloadCalendarMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/tasks/reload", {});
+      return apiRequest("POST", "/api/tasks/reload", {})
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
       toast({
         title: "Calendar synced",
         description: "Task times have been updated from Google Calendar",
-      });
+      })
     },
     onError: () => {
       toast({
         title: "Error",
         description: "Failed to sync calendar. Please try again.",
         variant: "destructive",
-      });
+      })
     },
-  });
+  })
 
   const rescheduleAllMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/tasks/reschedule-all", {});
+      return apiRequest("POST", "/api/tasks/reschedule-all", {})
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
       toast({
         title: "Tasks rescheduled",
         description: "All incomplete tasks have been rescheduled",
-      });
+      })
     },
     onError: () => {
       toast({
         title: "Error",
         description: "Failed to reschedule tasks. Please try again.",
         variant: "destructive",
-      });
+      })
     },
-  });
+  })
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTask.title.trim()) return;
+    e.preventDefault()
+    if (!newTask.title.trim()) return
     if (!hasCalendar) {
       toast({
         title: "Calendar required",
         description: "Select a calendar in settings before creating tasks.",
         variant: "destructive",
-      });
-      return;
+      })
+      return
     }
-    createTaskMutation.mutate(newTask);
-  };
+    createTaskMutation.mutate(newTask)
+  }
 
   const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-    
-    const uncompletedTasks = tasks.filter((t) => !t.completed);
-    const items = Array.from(uncompletedTasks);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-    
-    const newOrder = items.map((t) => t.id);
-    reorderTasksMutation.mutate(newOrder);
-  };
+    if (!result.destination) return
 
-  const uncompletedTasks = tasks.filter((t) => !t.completed).sort((a, b) => a.priority - b.priority);
+    const uncompletedTasks = tasks.filter((t) => !t.completed)
+    const items = Array.from(uncompletedTasks)
+    const [reorderedItem] = items.splice(result.source.index, 1)
+    items.splice(result.destination.index, 0, reorderedItem)
+
+    const newOrder = items.map((t) => t.id)
+    reorderTasksMutation.mutate(newOrder)
+  }
+
+  const uncompletedTasks = tasks
+    .filter((t) => !t.completed)
+    .sort((a, b) => a.priority - b.priority)
   const completedTasks = tasks
     .filter((t) => t.completed)
     .sort((a, b) => {
-      const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-      const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
-      return dateB - dateA;
-    });
+      const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0
+      const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0
+      return dateB - dateA
+    })
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
@@ -229,7 +241,9 @@ export default function MainPage() {
           <Settings className="h-4 w-4" />
           <AlertTitle>No calendar selected</AlertTitle>
           <AlertDescription className="flex items-center justify-between gap-4 flex-wrap">
-            <span>Select a calendar in settings to enable automatic task scheduling.</span>
+            <span>
+              Select a calendar in settings to enable automatic task scheduling.
+            </span>
             <Link href="/settings">
               <Button variant="outline" size="sm">
                 Go to Settings
@@ -273,12 +287,15 @@ export default function MainPage() {
                   <Checkbox
                     id="urgent"
                     checked={newTask.urgent}
-                    onCheckedChange={(checked) => 
+                    onCheckedChange={(checked) =>
                       setNewTask({ ...newTask, urgent: checked === true })
                     }
                     data-testid="checkbox-urgent"
                   />
-                  <Label htmlFor="urgent" className="flex items-center gap-1 text-sm cursor-pointer">
+                  <Label
+                    htmlFor="urgent"
+                    className="flex items-center gap-1 text-sm cursor-pointer"
+                  >
                     <AlertTriangle className="h-4 w-4 text-destructive" />
                     Urgent
                   </Label>
@@ -287,8 +304,11 @@ export default function MainPage() {
                   <Label className="text-sm text-muted-foreground">Duration:</Label>
                   <Select
                     value={newTask.duration?.toString() || "default"}
-                    onValueChange={(val) => 
-                      setNewTask({ ...newTask, duration: val === "default" ? undefined : parseInt(val) })
+                    onValueChange={(val) =>
+                      setNewTask({
+                        ...newTask,
+                        duration: val === "default" ? undefined : parseInt(val),
+                      })
                     }
                   >
                     <SelectTrigger className="w-28" data-testid="select-duration">
@@ -305,9 +325,11 @@ export default function MainPage() {
                   </Select>
                 </div>
               </div>
-              <Button 
-                type="submit" 
-                disabled={!newTask.title.trim() || createTaskMutation.isPending || !hasCalendar}
+              <Button
+                type="submit"
+                disabled={
+                  !newTask.title.trim() || createTaskMutation.isPending || !hasCalendar
+                }
                 data-testid="button-create-task"
               >
                 {createTaskMutation.isPending ? (
@@ -360,7 +382,7 @@ export default function MainPage() {
             )}
           </div>
         </div>
-        
+
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => (
@@ -378,26 +400,43 @@ export default function MainPage() {
         ) : uncompletedTasks.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
-              <p className="text-muted-foreground">No tasks yet. Create one above to get started!</p>
+              <p className="text-muted-foreground">
+                No tasks yet. Create one above to get started!
+              </p>
             </CardContent>
           </Card>
         ) : (
           <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="tasks" isDropDisabled={reloadCalendarMutation.isPending || rescheduleAllMutation.isPending || reorderTasksMutation.isPending}>
+            <Droppable
+              droppableId="tasks"
+              isDropDisabled={
+                reloadCalendarMutation.isPending ||
+                rescheduleAllMutation.isPending ||
+                reorderTasksMutation.isPending
+              }
+            >
               {(provided) => (
                 <div
                   {...provided.droppableProps}
                   ref={provided.innerRef}
                   className={`space-y-2 transition-opacity ${
-                    reloadCalendarMutation.isPending || rescheduleAllMutation.isPending || reorderTasksMutation.isPending ? "opacity-50 pointer-events-none" : ""
+                    reloadCalendarMutation.isPending ||
+                    rescheduleAllMutation.isPending ||
+                    reorderTasksMutation.isPending
+                      ? "opacity-50 pointer-events-none"
+                      : ""
                   }`}
                 >
                   {uncompletedTasks.map((task, index) => (
-                    <Draggable 
-                      key={task.id} 
-                      draggableId={task.id} 
+                    <Draggable
+                      key={task.id}
+                      draggableId={task.id}
                       index={index}
-                      isDragDisabled={reloadCalendarMutation.isPending || rescheduleAllMutation.isPending || reorderTasksMutation.isPending}
+                      isDragDisabled={
+                        reloadCalendarMutation.isPending ||
+                        rescheduleAllMutation.isPending ||
+                        reorderTasksMutation.isPending
+                      }
                     >
                       {(provided, snapshot) => (
                         <Card
@@ -411,7 +450,9 @@ export default function MainPage() {
                           <CardContent className="p-4">
                             <div
                               className={`flex items-start gap-3 transition-opacity ${
-                                completingTaskIds.has(task.id) ? "opacity-50 pointer-events-none" : ""
+                                completingTaskIds.has(task.id)
+                                  ? "opacity-50 pointer-events-none"
+                                  : ""
                               }`}
                             >
                               <div
@@ -443,13 +484,18 @@ export default function MainPage() {
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 {task.duration && (
                                   <Badge variant="outline" className="gap-1 text-xs">
-                                    {task.duration >= 60 ? `${task.duration / 60}h` : `${task.duration}m`}
+                                    {task.duration >= 60
+                                      ? `${task.duration / 60}h`
+                                      : `${task.duration}m`}
                                   </Badge>
                                 )}
                                 {task.scheduledStart && (
                                   <Badge variant="secondary" className="gap-1">
                                     <Clock className="h-3 w-3" />
-                                    {format(new Date(task.scheduledStart), "EEE dd.MM. HH:mm")}
+                                    {format(
+                                      new Date(task.scheduledStart),
+                                      "EEE dd.MM. HH:mm",
+                                    )}
                                   </Badge>
                                 )}
                               </div>
@@ -471,8 +517,8 @@ export default function MainPage() {
         <Collapsible open={completedOpen} onOpenChange={setCompletedOpen}>
           <div className="flex items-center gap-2">
             <CollapsibleTrigger asChild>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 className="flex-1 justify-between px-4"
                 data-testid="button-toggle-completed"
               >
@@ -492,25 +538,22 @@ export default function MainPage() {
           </div>
           <CollapsibleContent className="space-y-2 mt-2">
             {completedTasks.map((task) => (
-              <Card 
-                key={task.id} 
+              <Card
+                key={task.id}
                 className="opacity-70"
                 data-testid={`card-completed-${task.id}`}
               >
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={true}
-                      disabled
-                      className="mt-0.5"
-                    />
+                    <Checkbox checked={true} disabled className="mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <span className="font-medium text-muted-foreground">
                         {task.title}
                       </span>
                       {task.completedAt && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          Completed {format(new Date(task.completedAt), "EEE dd.MM. HH:mm")}
+                          Completed{" "}
+                          {format(new Date(task.completedAt), "EEE dd.MM. HH:mm")}
                         </p>
                       )}
                     </div>
@@ -536,5 +579,5 @@ export default function MainPage() {
         </Collapsible>
       )}
     </div>
-  );
+  )
 }

@@ -6,6 +6,7 @@ This repository contains CalTodo, a web-based todo app that stores tasks in Goog
 - [CONTRIBUTING.md](CONTRIBUTING.md) — development workflow, commit expectations, and UI/UX design guidelines.
 
 Quick start:
+
 - Install dependencies: `npm install`
 - Create `.env` with database and Google OAuth secrets (see `README.md`)
 - Develop: `npm run dev`

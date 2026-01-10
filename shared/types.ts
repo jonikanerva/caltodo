@@ -1,11 +1,11 @@
 export interface CalendarTask {
-  id: string;
-  title: string;
-  details: string | null;
-  duration: number | null;
-  scheduledStart: string | null;
-  scheduledEnd: string | null;
-  completed: boolean;
-  completedAt: string | null;
-  priority: number;
+  id: string
+  title: string
+  details: string | null
+  duration: number | null
+  scheduledStart: string | null
+  scheduledEnd: string | null
+  completed: boolean
+  completedAt: string | null
+  priority: number
 }

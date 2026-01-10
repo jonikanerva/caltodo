@@ -1,8 +1,14 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Calendar, CheckSquare, Clock } from "lucide-react";
-import { SiGoogle } from "react-icons/si";
-import { loginWithGoogle } from "@/lib/auth";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Calendar, CheckSquare, Clock } from "lucide-react"
+import { SiGoogle } from "react-icons/si"
+import { loginWithGoogle } from "@/lib/auth"
 
 export default function AuthPage() {
   return (
@@ -18,7 +24,8 @@ export default function AuthPage() {
             </div>
             <CardTitle className="text-2xl font-semibold">Welcome to CalTodo</CardTitle>
             <CardDescription className="text-base">
-              Smart task management that automatically schedules your todos into your Google Calendar
+              Smart task management that automatically schedules your todos into your
+              Google Calendar
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -51,7 +58,7 @@ export default function AuthPage() {
                 </div>
               </div>
             </div>
-            
+
             <Button
               className="w-full gap-2"
               size="lg"
@@ -61,7 +68,7 @@ export default function AuthPage() {
               <SiGoogle className="h-4 w-4" />
               Sign in with Google
             </Button>
-            
+
             <p className="text-xs text-muted-foreground text-center">
               We'll request access to your Google Calendar to schedule and manage tasks
             </p>
@@ -69,5 +76,5 @@ export default function AuthPage() {
         </Card>
       </div>
     </div>
-  );
+  )
 }
