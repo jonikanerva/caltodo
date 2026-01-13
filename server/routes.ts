@@ -574,7 +574,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const loginUrl = `/api/auth/google?actionToken=${encodeURIComponent(token)}`
         const body = `
           <h1>Sign in required</h1>
-          <p>Sign in to manage this task with your CalTodo account.</p>
+          <p>Sign in to manage this task with your Todo account.</p>
           <a class="button-link" href="${escapeHtml(loginUrl)}">Sign in with Google</a>
         `
         return res.status(200).send(renderActionShell("Sign in required", body))
@@ -585,7 +585,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const body = `
           <h1>Invalid or expired link</h1>
           <p>This action link is no longer valid. Please use the app to manage your tasks.</p>
-          <a class="button-link" href="/">Go to CalTodo</a>
+          <a class="button-link" href="/">Go to Todo</a>
         `
         return res.status(400).send(renderActionShell("Invalid Link", body))
       }
@@ -594,7 +594,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const body = `
           <h1>Not authorized</h1>
           <p>This action link belongs to a different account.</p>
-          <a class="button-link" href="/">Go to CalTodo</a>
+          <a class="button-link" href="/">Go to Todo</a>
         `
         return res.status(403).send(renderActionShell("Not authorized", body))
       }
@@ -608,7 +608,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const body = `
           <h1>Task not found</h1>
           <p>This task may have been deleted.</p>
-          <a class="button-link" href="/">Go to CalTodo</a>
+          <a class="button-link" href="/">Go to Todo</a>
         `
         return res.status(404).send(renderActionShell("Task not found", body))
       }
@@ -618,7 +618,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const body = `
           <h1>Task not found</h1>
           <p>This link is no longer valid for that task.</p>
-          <a class="button-link" href="/">Go to CalTodo</a>
+          <a class="button-link" href="/">Go to Todo</a>
         `
         return res.status(404).send(renderActionShell("Task not found", body))
       }
@@ -654,7 +654,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const body = `
         <h1>Something went wrong</h1>
         <p>Please try again or use the app to manage your tasks.</p>
-        <a class="button-link" href="/">Go to CalTodo</a>
+        <a class="button-link" href="/">Go to Todo</a>
       `
       return res.status(500).send(renderActionShell("Error", body))
     }
@@ -669,7 +669,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const body = `
             <h1>${escapeHtml(title)}</h1>
             <p>${escapeHtml(message)}</p>
-            <a class="button-link" href="/">Go to CalTodo</a>
+            <a class="button-link" href="/">Go to Todo</a>
           `
           return res.status(status).send(renderActionShell(title, body))
         }
@@ -763,7 +763,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const body = `
           <h1>${escapeHtml(actionLabel)}</h1>
           <p>${escapeHtml(task.title || "Task")} has been updated.</p>
-          <a class="button-link" href="/">Go to CalTodo</a>
+          <a class="button-link" href="/">Go to Todo</a>
         `
         return res.status(200).send(renderActionShell(actionLabel, body))
       }

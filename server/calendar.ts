@@ -4,7 +4,7 @@ import type { UserSettings } from "@shared/schema"
 import type { CalendarTask } from "@shared/types"
 import { createActionToken } from "./tokens"
 
-const APP_SIGNATURE = "Created by CalTodo"
+const APP_SIGNATURE = "Created by Todo"
 const EVENT_TITLE_PREFIX_INCOMPLETE = "☑️ "
 const EVENT_TITLE_PREFIX_COMPLETE = "✅ "
 const EVENT_MARKER_KEY = "caltodo"
@@ -34,7 +34,7 @@ function buildEventPrivateProperties(completed: boolean): Record<string, string>
   }
 }
 
-function isCalTodoEvent(event: calendar_v3.Schema$Event): boolean {
+function isTodoEvent(event: calendar_v3.Schema$Event): boolean {
   return event.extendedProperties?.private?.[EVENT_MARKER_KEY] === "true"
 }
 
@@ -45,8 +45,8 @@ function getEventCompletion(event: calendar_v3.Schema$Event): boolean | undefine
   return undefined
 }
 
-function isCompletedCalTodoEvent(event: calendar_v3.Schema$Event): boolean {
-  if (!isCalTodoEvent(event)) return false
+function isCompletedTodoEvent(event: calendar_v3.Schema$Event): boolean {
+  if (!isTodoEvent(event)) return false
   return getEventCompletion(event) === true
 }
 
@@ -83,7 +83,7 @@ export function mapCalendarEventToTask(
   event: calendar_v3.Schema$Event,
 ): CalendarTask | null {
   if (!event.id || !event.start?.dateTime || !event.end?.dateTime) return null
-  if (!isCalTodoEvent(event)) return null
+  if (!isTodoEvent(event)) return null
 
   const start = new Date(event.start.dateTime)
   const end = new Date(event.end.dateTime)
@@ -261,7 +261,7 @@ export async function findFreeSlot(
   settings: UserSettings,
   durationMinutes: number,
   afterTime?: Date,
-  excludeCalTodoEvents: boolean = false,
+  excludeTodoEvents: boolean = false,
   prefetchedEvents?: {
     events: calendar_v3.Schema$Event[]
     timeMin: Date
@@ -292,11 +292,11 @@ export async function findFreeSlot(
             searchEndDate,
           )
 
-    // When rescheduling, exclude all CalTodo-managed events. Otherwise ignore completed CalTodo events.
-    if (excludeCalTodoEvents) {
-      events = events.filter((event) => !isCalTodoEvent(event))
+    // When rescheduling, exclude all Todo-managed events. Otherwise ignore completed Todo events.
+    if (excludeTodoEvents) {
+      events = events.filter((event) => !isTodoEvent(event))
     } else {
-      events = events.filter((event) => !isCompletedCalTodoEvent(event))
+      events = events.filter((event) => !isCompletedTodoEvent(event))
     }
     events = events.filter(isBusyEvent)
 
@@ -501,7 +501,7 @@ export async function updateCalendarEventTime(
     if (currentEvent.status === "cancelled") {
       return false
     }
-    if (!isCalTodoEvent(currentEvent)) {
+    if (!isTodoEvent(currentEvent)) {
       return false
     }
 
@@ -565,7 +565,7 @@ export async function updateCalendarEventCompletion(
     if (currentEvent.status === "cancelled") {
       return null
     }
-    if (!isCalTodoEvent(currentEvent)) {
+    if (!isTodoEvent(currentEvent)) {
       return null
     }
 
@@ -736,17 +736,17 @@ export async function rescheduleAllUserTasks(
     windowEnd,
   )
 
-  const caltodoEvents = windowEvents
-    .filter(isCalTodoEvent)
+  const todoEvents = windowEvents
+    .filter(isTodoEvent)
     .filter((event) => getEventCompletion(event) !== true)
     .filter((event) => event.id && event.start?.dateTime && event.end?.dateTime)
 
   const prioritySet = new Set(priorityEventIds || [])
   const prioritizedEvents = (priorityEventIds || [])
-    .map((id) => caltodoEvents.find((event) => event.id === id))
+    .map((id) => todoEvents.find((event) => event.id === id))
     .filter((event): event is calendar_v3.Schema$Event => Boolean(event))
 
-  const remainingEvents = caltodoEvents
+  const remainingEvents = todoEvents
     .filter((event) => !prioritySet.has(event.id!))
     .sort(
       (a, b) =>

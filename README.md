@@ -1,4 +1,4 @@
-# CalTodo
+# Todo
 
 A web-based todo application that uses Google Calendar as its backend storage. Tasks are automatically scheduled to free time slots on your calendar, making it easy to manage what you need to do and when you'll do it.
 
@@ -64,7 +64,7 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 - **Backend**: TypeScript (ESM), tsx in development, esbuild for production bundling, express-session with PostgreSQL store (connect-pg-simple), node-cron for midnight rescheduling.
 - **Data**: Drizzle ORM with schema in `shared/schema.ts`; shared types in `shared/` are used by both frontend and backend; tasks live in Google Calendar and are mapped to `CalendarTask` on read; tables include `users`, `user_settings`, `user_sessions`.
 - **Security**: OAuth tokens are encrypted at rest; action tokens expire after 7 days.
-- **Event handling**: App-created calendar events are marked with `[CalTodo]` to avoid touching unrelated events.
+- **Event handling**: App-created calendar events are marked with `[Todo]` to avoid touching unrelated events.
 - **Google access**: OAuth scopes include `profile`, `email`, `calendar`, and `calendar.events`.
 
 ### API Overview
@@ -97,7 +97,7 @@ A web-based todo application that uses Google Calendar as its backend storage. T
    brew services start postgresql@15
 
    # Create a database
-   createdb caltodo
+   createdb todo
    ```
 
 3. **Google Cloud Project**
@@ -114,7 +114,7 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 Create a `.env` file in the project root:
 
 ```env
-DATABASE_URL=postgresql://localhost:5432/caltodo
+DATABASE_URL=postgresql://localhost:5432/todo
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 SESSION_SECRET=32+_char_random_session_secret

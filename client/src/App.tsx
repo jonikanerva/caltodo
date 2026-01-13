@@ -69,7 +69,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <CheckSquare className="h-6 w-6 text-primary" />
-            <span className="font-semibold text-lg">CalTodo</span>
+            <span className="font-semibold text-lg">Todo</span>
           </div>
 
           <nav className="flex items-center gap-1">

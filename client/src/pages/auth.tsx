@@ -19,10 +19,10 @@ export default function AuthPage() {
             <div className="flex justify-center mb-4">
               <div className="flex items-center gap-2">
                 <CheckSquare className="h-8 w-8 text-primary" />
-                <span className="text-2xl font-semibold">CalTodo</span>
+                <span className="text-2xl font-semibold">Todo</span>
               </div>
             </div>
-            <CardTitle className="text-2xl font-semibold">Welcome to CalTodo</CardTitle>
+            <CardTitle className="text-2xl font-semibold">Welcome to Todo</CardTitle>
             <CardDescription className="text-base">
               Smart task management that automatically schedules your todos into your
               Google Calendar
