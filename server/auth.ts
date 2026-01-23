@@ -81,8 +81,8 @@ export function setupAuth(app: Express): void {
         scope: [
           "profile",
           "email",
-          "https://www.googleapis.com/auth/calendar",
-          "https://www.googleapis.com/auth/calendar.events",
+          "https://www.googleapis.com/auth/calendar.readonly",
+          "https://www.googleapis.com/auth/calendar.events.owned",
         ],
       },
       async (req, accessToken, refreshToken, profile, done) => {
