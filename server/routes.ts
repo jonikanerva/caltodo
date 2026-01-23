@@ -2,7 +2,7 @@ import type { Express, Response } from "express"
 import { createServer, type Server } from "http"
 import passport from "passport"
 import { storage } from "./storage"
-import { setupAuth, requireAuth } from "./auth"
+import { GOOGLE_OAUTH_SCOPES, requireAuth, setupAuth } from "./auth"
 import {
   listCalendars,
   findFreeSlot,
@@ -143,12 +143,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     return passport.authenticate("google", {
-      scope: [
-        "profile",
-        "email",
-        "https://www.googleapis.com/auth/calendar",
-        "https://www.googleapis.com/auth/calendar.events",
-      ],
+      scope: GOOGLE_OAUTH_SCOPES,
       accessType: "offline",
       prompt: "consent",
     })(req, res, next)

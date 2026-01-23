@@ -7,6 +7,13 @@ import pgSession from "connect-pg-simple"
 import { pool } from "./db"
 import { sessionSecret } from "./config"
 
+export const GOOGLE_OAUTH_SCOPES = [
+  "profile",
+  "email",
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events.owned",
+]
+
 const PgSession = pgSession(session)
 
 declare global {
@@ -78,12 +85,7 @@ export function setupAuth(app: Express): void {
         callbackURL,
         passReqToCallback: true,
         state: true,
-        scope: [
-          "profile",
-          "email",
-          "https://www.googleapis.com/auth/calendar.readonly",
-          "https://www.googleapis.com/auth/calendar.events.owned",
-        ],
+        scope: GOOGLE_OAUTH_SCOPES,
       },
       async (req, accessToken, refreshToken, profile, done) => {
         try {
