@@ -81,9 +81,8 @@ export default function PrivacyPage() {
             </li>
             <li>You can delete your stored records anytime in Settings.</li>
             <li>
-              To delete stored data, revoke Todo&apos;s access in your Google Account
-              settings and email the address listed on the app&apos;s OAuth consent
-              screen; I will delete associated records within 30 days.
+              Revoking Todo&apos;s access in your Google Account stops future access to
+              Google data but does not delete data stored in the app.
             </li>
           </ul>
         </section>
