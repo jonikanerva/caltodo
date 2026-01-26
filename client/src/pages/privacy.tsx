@@ -55,6 +55,40 @@ export default function PrivacyPage() {
         </section>
 
         <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Data Protection</h2>
+          <ul className="list-disc pl-5 space-y-2 text-sm text-muted-foreground">
+            <li>OAuth tokens are encrypted at rest before storage.</li>
+            <li>Data is transmitted over HTTPS in production.</li>
+            <li>
+              Access to production data is restricted to the developer for support and
+              operations.
+            </li>
+            <li>I request only the Google OAuth scopes needed to operate the app.</li>
+          </ul>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Data Retention & Deletion</h2>
+          <ul className="list-disc pl-5 space-y-2 text-sm text-muted-foreground">
+            <li>
+              I retain Google account identifiers, encrypted OAuth tokens, and settings
+              while your account remains connected to Todo.
+            </li>
+            <li>Session data expires after 7 days or when you log out.</li>
+            <li>
+              Calendar events created by Todo live in your Google Calendar and remain
+              until you edit or delete them there.
+            </li>
+            <li>You can delete your stored records anytime in Settings.</li>
+            <li>
+              To delete stored data, revoke Todo&apos;s access in your Google Account
+              settings and email the address listed on the app&apos;s OAuth consent
+              screen; I will delete associated records within 30 days.
+            </li>
+          </ul>
+        </section>
+
+        <section className="space-y-3">
           <h2 className="text-lg font-semibold">Google API Limited Use</h2>
           <p className="text-sm text-muted-foreground">
             Todo&apos;s use and transfer to any other app of information received from

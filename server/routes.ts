@@ -187,6 +187,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })
   })
 
+  app.delete("/api/account", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteUserData(req.user!.id)
+    } catch (error) {
+      console.error("Error deleting user data:", error)
+      return res.status(500).json({ error: "Failed to delete user data" })
+    }
+
+    req.logout((err) => {
+      if (err) {
+        console.error("Logout error after deletion:", err)
+      }
+
+      if (req.session) {
+        req.session.destroy(() => {
+          clearSessionCookie(res)
+          res.json({ success: true })
+        })
+      } else {
+        clearSessionCookie(res)
+        res.json({ success: true })
+      }
+    })
+  })
+
   app.get("/api/settings", requireAuth, async (req, res) => {
     try {
       const settings = await storage.getUserSettings(req.user!.id)

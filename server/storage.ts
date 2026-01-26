@@ -2,6 +2,7 @@ import {
   users,
   userSettings,
   actionTokens,
+  userSessions,
   type User,
   type InsertUser,
   type UserSettings,
@@ -10,7 +11,7 @@ import {
   type InsertActionToken,
 } from "@shared/schema"
 import { db } from "./db"
-import { and, eq, isNull, ne } from "drizzle-orm"
+import { and, eq, isNull, ne, sql } from "drizzle-orm"
 import { decryptToken, encryptToken } from "./crypto"
 
 export interface IStorage {
@@ -18,6 +19,7 @@ export interface IStorage {
   getUserByGoogleId(googleId: string): Promise<User | undefined>
   createUser(user: InsertUser): Promise<User>
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>
+  deleteUserData(userId: string): Promise<void>
 
   getUserSettings(userId: string): Promise<UserSettings | undefined>
   createUserSettings(settings: InsertUserSettings): Promise<UserSettings>
@@ -83,6 +85,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning()
     return this.decryptUserTokens(user) || undefined
+  }
+
+  async deleteUserData(userId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(actionTokens).where(eq(actionTokens.userId, userId))
+      await tx.delete(userSettings).where(eq(userSettings.userId, userId))
+      await tx.delete(users).where(eq(users.id, userId))
+      await tx
+        .delete(userSessions)
+        .where(sql`${userSessions.sess} -> 'passport' ->> 'user' = ${userId}`)
+    })
   }
 
   async getUserSettings(userId: string): Promise<UserSettings | undefined> {

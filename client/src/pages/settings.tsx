@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query"
+import { useLocation } from "wouter"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
@@ -8,7 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -29,7 +30,18 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import { Settings, Calendar, Clock, Palette, Loader2, Save } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { Settings, Calendar, Clock, Palette, Loader2, Save, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { queryClient, apiRequest } from "@/lib/queryClient"
 import {
@@ -130,6 +142,7 @@ type FormValues = {
 
 export default function SettingsPage() {
   const { toast } = useToast()
+  const [, setLocation] = useLocation()
 
   const { data: settings, isLoading: settingsLoading } = useQuery<UserSettings>({
     queryKey: ["/api/settings"],
@@ -179,6 +192,29 @@ export default function SettingsPage() {
       toast({
         title: "Error",
         description: "Failed to save settings. Please try again.",
+        variant: "destructive",
+      })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", "/api/account")
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(["/api/auth/user"], null)
+      queryClient.removeQueries({ queryKey: ["/api/settings"] })
+      queryClient.removeQueries({ queryKey: ["/api/calendars"] })
+      toast({
+        title: "Account data deleted",
+        description: "Your stored data has been removed.",
+      })
+      setLocation("/")
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete your data. Please try again.",
         variant: "destructive",
       })
     },
@@ -453,6 +489,54 @@ export default function SettingsPage() {
               </div>
             </form>
           </Form>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Trash2 className="h-5 w-5 text-destructive" />
+            Data Management
+          </CardTitle>
+          <CardDescription>
+            Permanently remove your Todo account data stored in the app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            This deletes your saved settings, OAuth tokens, and action links stored in
+            Todo. Calendar events stay in your Google Calendar.
+          </p>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="destructive"
+                disabled={deleteMutation.isPending}
+                data-testid="button-delete-data"
+              >
+                Delete all data
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete all data?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. Your Todo account data will be removed.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleteMutation.isPending}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className={buttonVariants({ variant: "destructive" })}
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
+                >
+                  Delete all data
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       </Card>
     </div>
