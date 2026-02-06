@@ -20,7 +20,7 @@ import {
   type CalendarEventData,
 } from "./calendar"
 import { setupCronJobs } from "./cron"
-import { createTaskSchema, updateSettingsSchema } from "@shared/schema"
+import { createTaskSchema, taskIdsSchema, updateSettingsSchema } from "@shared/schema"
 import { getActionToken } from "./tokens"
 import { z } from "zod"
 import { ensureCsrfToken, requireCsrfToken } from "./csrf"
@@ -398,11 +398,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/tasks/reorder", requireAuth, async (req, res) => {
     try {
-      const { taskIds } = req.body
-
-      if (!Array.isArray(taskIds)) {
-        return res.status(400).json({ error: "taskIds must be an array" })
+      const parsed = taskIdsSchema.safeParse(req.body)
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid taskIds payload" })
       }
+      const { taskIds } = parsed.data
 
       const settings = await storage.getUserSettings(req.user!.id)
 
@@ -477,11 +477,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/tasks/bulk-complete", requireAuth, async (req, res) => {
     try {
-      const { taskIds } = req.body
-
-      if (!Array.isArray(taskIds)) {
-        return res.status(400).json({ error: "taskIds must be an array" })
+      const parsed = taskIdsSchema.safeParse(req.body)
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid taskIds payload" })
       }
+      const { taskIds } = parsed.data
 
       const settings = await storage.getUserSettings(req.user!.id)
 

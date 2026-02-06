@@ -1,4 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express"
+import helmet from "helmet"
+import rateLimit from "express-rate-limit"
 import { registerRoutes } from "./routes"
 import { serveStatic } from "./static"
 import { createServer } from "http"
@@ -6,6 +8,9 @@ import { runMigrations } from "./db"
 
 const app = express()
 const httpServer = createServer(app)
+const isProduction = process.env.NODE_ENV === "production"
+
+app.disable("x-powered-by")
 
 declare module "http" {
   interface IncomingMessage {
@@ -15,16 +20,51 @@ declare module "http" {
 
 app.use(
   express.json({
+    limit: "100kb",
     verify: (req, _res, buf) => {
       req.rawBody = buf
     },
   }),
 )
 
-app.use(express.urlencoded({ extended: false }))
+app.use(express.urlencoded({ extended: false, limit: "50kb" }))
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    hsts: isProduction,
+  }),
+)
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+const actionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+app.use("/api", apiLimiter)
+app.use("/api/auth/google", authLimiter)
+app.use("/api/auth/google/callback", authLimiter)
+app.use("/api/action", actionLimiter)
+app.use("/action", actionLimiter)
 
 app.use((req, res, next) => {
-  const isDevelopment = process.env.NODE_ENV !== "production"
+  const isDevelopment = !isProduction
   const scriptSrc = ["'self'"]
   if (isDevelopment) {
     scriptSrc.push("'unsafe-eval'")
