@@ -300,6 +300,18 @@ export async function findFreeSlot(
     }
     events = events.filter(isBusyEvent)
 
+    const busyIntervals = events
+      .filter((event) => event.start?.dateTime && event.end?.dateTime)
+      .map((event) => ({
+        start: new Date(event.start!.dateTime!).getTime(),
+        end: new Date(event.end!.dateTime!).getTime(),
+      }))
+      .filter(
+        (interval) => Number.isFinite(interval.start) && Number.isFinite(interval.end),
+      )
+      .sort((a, b) => a.start - b.start)
+
+    let intervalIndex = 0
     let currentDate = new Date(now)
     // Round up to next 15-minute interval
     currentDate.setMinutes(Math.ceil(currentDate.getMinutes() / 15) * 15)
@@ -348,18 +360,30 @@ export async function findFreeSlot(
       const slotEnd = new Date(slotStart)
       slotEnd.setMinutes(slotEnd.getMinutes() + durationMinutes)
 
-      const hasConflict = events.some((event) => {
-        if (!event.start?.dateTime || !event.end?.dateTime) return false
-        const eventStart = new Date(event.start.dateTime)
-        const eventEnd = new Date(event.end.dateTime)
-        return slotStart < eventEnd && slotEnd > eventStart
-      })
+      const slotStartMs = slotStart.getTime()
+      const slotEndMs = slotEnd.getTime()
+      while (
+        intervalIndex < busyIntervals.length &&
+        busyIntervals[intervalIndex].end <= slotStartMs
+      ) {
+        intervalIndex++
+      }
 
-      if (!hasConflict) {
+      const overlappingInterval =
+        intervalIndex < busyIntervals.length &&
+        busyIntervals[intervalIndex].start < slotEndMs &&
+        busyIntervals[intervalIndex].end > slotStartMs
+          ? busyIntervals[intervalIndex]
+          : null
+
+      if (!overlappingInterval) {
         return { start: slotStart, end: slotEnd }
       }
 
-      currentDate.setMinutes(currentDate.getMinutes() + 15)
+      currentDate = new Date(overlappingInterval.end)
+      currentDate.setMinutes(Math.ceil(currentDate.getMinutes() / 15) * 15)
+      currentDate.setSeconds(0)
+      currentDate.setMilliseconds(0)
     }
 
     return null
