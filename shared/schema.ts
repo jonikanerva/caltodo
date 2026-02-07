@@ -70,10 +70,14 @@ export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
 })
 
 export const createTaskSchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  details: z.string().optional(),
+  title: z.string().min(1, "Title is required").max(200, "Title is too long"),
+  details: z.string().max(5000, "Details are too long").optional(),
   urgent: z.boolean().optional().default(false),
   duration: z.number().min(15).max(480).optional(),
+})
+
+export const taskIdsSchema = z.object({
+  taskIds: z.array(z.string().min(1)).min(1).max(200),
 })
 
 export const updateSettingsSchema = z.object({

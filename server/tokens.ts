@@ -65,9 +65,11 @@ export async function getActionToken(token: string): Promise<ActionTokenPayload 
 
 export async function consumeActionToken(
   token: string,
+  expectedUserId?: string,
 ): Promise<ActionTokenPayload | null> {
   const record = await getActionToken(token)
   if (!record) return null
+  if (expectedUserId && record.userId !== expectedUserId) return null
   const updated = await storage.markActionTokenUsed(record.id)
   if (!updated) return null
   return record

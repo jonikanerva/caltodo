@@ -15,9 +15,9 @@ Preferred communication style: simple, everyday language.
 
 - `npm run dev` - Start development server (frontend + backend)
 - `npm run db:generate` - Create a new migration from schema changes
-- `npm run db:migrate` - Run pending migrations (also runs automatically on server start)
+- `npm run db:migrate` - Run pending migrations manually
 - `npm run build` - Build for production
-- `npm run start` - Run production build
+- `npm run start` - Run production build (includes startup migrations + in-process cron jobs)
 
 ## Before Committing
 

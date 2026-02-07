@@ -25,5 +25,17 @@ export function setupCronJobs(_baseUrl: string): void {
     }
   })
 
+  cron.schedule("15 1 * * *", async () => {
+    try {
+      const now = new Date()
+      const usedBefore = new Date(now)
+      usedBefore.setDate(usedBefore.getDate() - 30)
+      const deletedCount = await storage.cleanupActionTokens(now, usedBefore)
+      console.log(`Action token cleanup completed. Deleted ${deletedCount} records.`)
+    } catch (error) {
+      console.error("Error cleaning up action tokens:", error)
+    }
+  })
+
   console.log("Cron jobs initialized")
 }

@@ -11,7 +11,7 @@ import {
   type InsertActionToken,
 } from "@shared/schema"
 import { db } from "./db"
-import { and, eq, isNull, ne, sql } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, lt, ne, sql } from "drizzle-orm"
 import { decryptToken, encryptToken } from "./crypto"
 
 export interface IStorage {
@@ -31,6 +31,7 @@ export interface IStorage {
   createActionToken(token: InsertActionToken): Promise<ActionToken>
   getActionTokenByHash(tokenHash: string): Promise<ActionToken | undefined>
   markActionTokenUsed(id: string): Promise<ActionToken | undefined>
+  cleanupActionTokens(now: Date, usedBefore: Date): Promise<number>
   invalidateActionTokensForEvent(
     userId: string,
     eventId: string,
@@ -143,6 +144,20 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(actionTokens.id, id), isNull(actionTokens.usedAt)))
       .returning()
     return result || undefined
+  }
+
+  async cleanupActionTokens(now: Date, usedBefore: Date): Promise<number> {
+    const expired = await db
+      .delete(actionTokens)
+      .where(lt(actionTokens.expiresAt, now))
+      .returning({ id: actionTokens.id })
+
+    const used = await db
+      .delete(actionTokens)
+      .where(and(isNotNull(actionTokens.usedAt), lt(actionTokens.usedAt, usedBefore)))
+      .returning({ id: actionTokens.id })
+
+    return expired.length + used.length
   }
 
   async invalidateActionTokensForEvent(

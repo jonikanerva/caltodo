@@ -20,8 +20,8 @@ import {
   type CalendarEventData,
 } from "./calendar"
 import { setupCronJobs } from "./cron"
-import { createTaskSchema, updateSettingsSchema } from "@shared/schema"
-import { getActionToken } from "./tokens"
+import { createTaskSchema, taskIdsSchema, updateSettingsSchema } from "@shared/schema"
+import { consumeActionToken, getActionToken } from "./tokens"
 import { z } from "zod"
 import { ensureCsrfToken, requireCsrfToken } from "./csrf"
 import type { CalendarTask } from "@shared/types"
@@ -398,11 +398,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/tasks/reorder", requireAuth, async (req, res) => {
     try {
-      const { taskIds } = req.body
-
-      if (!Array.isArray(taskIds)) {
-        return res.status(400).json({ error: "taskIds must be an array" })
+      const parsed = taskIdsSchema.safeParse(req.body)
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid taskIds payload" })
       }
+      const { taskIds } = parsed.data
 
       const settings = await storage.getUserSettings(req.user!.id)
 
@@ -477,11 +477,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/tasks/bulk-complete", requireAuth, async (req, res) => {
     try {
-      const { taskIds } = req.body
-
-      if (!Array.isArray(taskIds)) {
-        return res.status(400).json({ error: "taskIds must be an array" })
+      const parsed = taskIdsSchema.safeParse(req.body)
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid taskIds payload" })
       }
+      const { taskIds } = parsed.data
 
       const settings = await storage.getUserSettings(req.user!.id)
 
@@ -701,13 +701,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return respondError(400, "Invalid action", "Invalid action.")
       }
 
-      const actionToken = await getActionToken(token)
-      if (!actionToken) {
+      const candidateActionToken = await getActionToken(token)
+      if (!candidateActionToken) {
         return respondError(400, "Invalid link", "Invalid or expired link.")
       }
-
-      if (actionToken.userId !== req.user!.id) {
+      if (candidateActionToken.userId !== req.user!.id) {
         return respondError(403, "Not authorized", "Unauthorized.")
+      }
+      const actionToken = await consumeActionToken(token, req.user!.id)
+      if (!actionToken) {
+        return respondError(400, "Invalid link", "Invalid or expired link.")
       }
 
       const settings = await storage.getUserSettings(req.user!.id)
