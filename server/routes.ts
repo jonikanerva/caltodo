@@ -19,6 +19,7 @@ import {
   EVENT_DELETED,
   type CalendarEventData,
 } from "./calendar"
+import { setupCronJobs } from "./cron"
 import { createTaskSchema, taskIdsSchema, updateSettingsSchema } from "@shared/schema"
 import { consumeActionToken, getActionToken } from "./tokens"
 import { z } from "zod"
@@ -115,6 +116,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   setupAuth(app)
   app.use(ensureCsrfToken)
   app.use(requireCsrfToken)
+
+  const cronBaseUrl =
+    process.env.PRODUCTION_APP_URL ||
+    (process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : "http://localhost:5000")
+
+  setupCronJobs(cronBaseUrl)
 
   // Log the callback URL being used for debugging
   console.log(

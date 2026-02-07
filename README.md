@@ -14,6 +14,7 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 - **Settings** - Configure your preferred calendar, work hours, timezone, default task duration, and event color
 - **Theme Toggle** - Switch between light and dark modes
 - **Midnight Rescheduling** - Nightly cron job reschedules incomplete tasks (server time)
+- **Action Token Cleanup** - Daily cron job removes expired and old-used action tokens
 
 ## Code Organization
 
@@ -61,7 +62,7 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 ### Architecture Notes
 
 - **Frontend**: Wouter for routing, TanStack React Query for server state, shadcn/ui (Radix UI), Tailwind CSS with theme variables, @hello-pangea/dnd for reordering, React Hook Form + Zod for validation.
-- **Backend**: TypeScript (ESM), tsx in development, esbuild for production bundling, express-session with PostgreSQL store (connect-pg-simple), node-cron for midnight rescheduling.
+- **Backend**: TypeScript (ESM), tsx in development, esbuild for production bundling, express-session with PostgreSQL store (connect-pg-simple), node-cron for midnight rescheduling and action token cleanup.
 - **Data**: Drizzle ORM with schema in `shared/schema.ts`; shared types in `shared/` are used by both frontend and backend; tasks live in Google Calendar and are mapped to `CalendarTask` on read; tables include `users`, `user_settings`, `user_sessions`.
 - **Security**: OAuth tokens are encrypted at rest; action tokens expire after 7 days.
 - **Event handling**: App-created calendar events are marked with `[Todo]` to avoid touching unrelated events.
@@ -145,9 +146,9 @@ The app will be available at `http://localhost:5000`.
 
 - `npm run dev` - Start development server (frontend + backend)
 - `npm run db:generate` - Create a new migration from schema changes
-- `npm run db:migrate` - Run pending migrations (also runs automatically on server start)
+- `npm run db:migrate` - Run pending migrations manually
 - `npm run build` - Build for production
-- `npm run start` - Run production build
+- `npm run start` - Run production build (also runs pending migrations and starts cron jobs in-process)
 
 ## Production Deployment
 
@@ -186,9 +187,6 @@ npm ci
 # Build the application
 npm run build
 
-# Run database migrations (also runs automatically on server start)
-npm run db:migrate
-
 # Start the server
 npm start
 ```
@@ -200,7 +198,8 @@ npm start
 - [ ] Google OAuth redirect URI updated for production domain
 - [ ] HTTPS configured (required for secure cookies)
 - [ ] Process manager configured for automatic restarts
-- [ ] Cron job runs at midnight server time for task rescheduling (set TZ if needed)
+- [ ] Web process startup runs DB migrations successfully
+- [ ] In-process cron jobs run for midnight rescheduling and daily action token cleanup (set `TZ` if needed)
 
 ## Contributing
 
