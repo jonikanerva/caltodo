@@ -112,6 +112,23 @@ function clearSessionCookie(res: Response): void {
   })
 }
 
+function readPathParam(params: unknown, key: string): string | null {
+  if (!params || typeof params !== "object") {
+    return null
+  }
+
+  const value = (params as Record<string, unknown>)[key]
+  if (typeof value === "string") {
+    return value
+  }
+
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return value[0]
+  }
+
+  return null
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   setupAuth(app)
   app.use(ensureCsrfToken)
@@ -366,7 +383,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
     try {
-      const { id } = req.params
+      const id = readPathParam(req.params, "id")
+      if (!id) {
+        return res.status(400).json({ error: "Invalid task id" })
+      }
       const data = patchTaskSchema.parse(req.body)
       const settings = await storage.getUserSettings(req.user!.id)
       if (!settings?.calendarId) {
@@ -527,7 +547,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/tasks/:id/complete", requireAuth, async (req, res) => {
     try {
-      const { id } = req.params
+      const id = readPathParam(req.params, "id")
+      if (!id) {
+        return res.status(400).json({ error: "Invalid task id" })
+      }
       const settings = await storage.getUserSettings(req.user!.id)
       if (!settings?.calendarId) {
         return res.status(400).json({ error: "No calendar configured" })
@@ -552,7 +575,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/tasks/:id/reschedule", requireAuth, async (req, res) => {
     try {
-      const { id } = req.params
+      const id = readPathParam(req.params, "id")
+      if (!id) {
+        return res.status(400).json({ error: "Invalid task id" })
+      }
       const settings = await storage.getUserSettings(req.user!.id)
       if (!settings?.calendarId) {
         return res.status(400).json({ error: "No calendar configured" })
@@ -588,7 +614,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/action/:token", async (req, res) => {
     try {
-      const { token } = req.params
+      const token = readPathParam(req.params, "token")
+      if (!token) {
+        const body = `
+          <h1>Invalid link</h1>
+          <p>This action link is not valid.</p>
+          <a class="button-link" href="/">Go to Todo</a>
+        `
+        return res.status(400).send(renderActionShell("Invalid Link", body))
+      }
 
       if (!req.isAuthenticated() || !req.user) {
         const loginUrl = `/api/auth/google?actionToken=${encodeURIComponent(token)}`
@@ -682,7 +716,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/action/:token", requireAuth, async (req, res) => {
     try {
-      const { token } = req.params
+      const token = readPathParam(req.params, "token")
+      if (!token) {
+        return res.status(400).json({ error: "Invalid action token" })
+      }
       const wantsHtml = req.headers.accept?.includes("text/html")
       const respondError = (status: number, title: string, message: string) => {
         if (wantsHtml) {
