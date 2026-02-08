@@ -1,17 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { createMockResponse } from "./testUtils"
 
-vi.mock("./auth", () => ({
-  GOOGLE_OAUTH_SCOPES: [],
-  requireAuth: vi.fn(),
-  setupAuth: vi.fn(),
-}))
-
-vi.mock("./csrf", () => ({
-  ensureCsrfToken: vi.fn(),
-  requireCsrfToken: vi.fn(),
-}))
-
-vi.mock("./storage", () => ({
+vi.mock("../storage", () => ({
   storage: {
     getUserSettings: vi.fn(),
     updateUserSettings: vi.fn(),
@@ -20,7 +10,7 @@ vi.mock("./storage", () => ({
   },
 }))
 
-vi.mock("./calendar", () => ({
+vi.mock("../calendar", () => ({
   EVENT_DELETED: Symbol("EVENT_DELETED"),
   listCalendars: vi.fn(),
   findFreeSlot: vi.fn(),
@@ -36,248 +26,21 @@ vi.mock("./calendar", () => ({
   refreshCalendarEventActions: vi.fn(),
 }))
 
-vi.mock("./tokens", () => ({
-  consumeActionToken: vi.fn(),
-  getActionToken: vi.fn(),
-}))
-
-vi.mock("./cron", () => ({
-  setupCronJobs: vi.fn(),
-}))
-
 import {
-  createActionPageHandler,
-  createApiActionHandler,
-  createAuthGoogleCallbackSuccessHandler,
-  createAuthGoogleCallbackAuthHandler,
-  createAuthGoogleStartHandler,
-  createAuthLogoutHandler,
-  createAuthUserHandler,
   createBulkCompleteTasksHandler,
   createCompleteTaskHandler,
-  createDeleteAccountHandler,
-  createGetCalendarsHandler,
   createGetTasksHandler,
-  createGetSettingsHandler,
   createPatchTaskHandler,
-  createPatchSettingsHandler,
   createPostTasksHandler,
   createReloadTasksHandler,
   createReorderTasksHandler,
   createRescheduleAllTasksHandler,
   createRescheduleTaskHandler,
-} from "./routes"
+} from "./taskRoutes"
 
-type MockResponse = {
-  statusCode: number
-  body: unknown
-  redirectedTo: string | null
-  clearedCookies: Array<{ name: string; options: unknown }>
-  res: {
-    status: (code: number) => MockResponse["res"]
-    json: (payload: unknown) => MockResponse["res"]
-    send: (payload: unknown) => MockResponse["res"]
-    redirect: (path: string) => MockResponse["res"]
-    clearCookie: (name: string, options?: unknown) => MockResponse["res"]
-  }
-}
-
-function createMockResponse(): MockResponse {
-  const state: {
-    statusCode: number
-    body: unknown
-    redirectedTo: string | null
-    clearedCookies: Array<{ name: string; options: unknown }>
-  } = {
-    statusCode: 200,
-    body: undefined,
-    redirectedTo: null,
-    clearedCookies: [],
-  }
-
-  const res = {
-    status(code: number) {
-      state.statusCode = code
-      return this
-    },
-    json(payload: unknown) {
-      state.body = payload
-      return this
-    },
-    send(payload: unknown) {
-      state.body = payload
-      return this
-    },
-    redirect(path: string) {
-      state.redirectedTo = path
-      return this
-    },
-    clearCookie(name: string, options?: unknown) {
-      state.clearedCookies.push({ name, options })
-      return this
-    },
-  }
-
-  return {
-    get statusCode() {
-      return state.statusCode
-    },
-    get body() {
-      return state.body
-    },
-    get redirectedTo() {
-      return state.redirectedTo
-    },
-    get clearedCookies() {
-      return state.clearedCookies
-    },
-    res,
-  }
-}
-
-describe("auth handlers", () => {
+describe("task utility handlers", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  it("stores pending token and delegates to passport authenticate", async () => {
-    let capturedOptions: unknown
-    const authenticate = vi.fn((_strategy: string, options: unknown) => {
-      capturedOptions = options
-      return (_req: unknown, _res: unknown, next: () => void) => next()
-    })
-    const req = { query: { actionToken: "tok-1" }, session: {} } as never
-    const res = createMockResponse()
-    const next = vi.fn()
-
-    await createAuthGoogleStartHandler(authenticate, ["scope1", "scope2"])(
-      req,
-      res.res as never,
-      next,
-    )
-
-    expect(req.session.pendingActionToken).toBe("tok-1")
-    expect(authenticate).toHaveBeenCalledWith(
-      "google",
-      expect.objectContaining({ scope: ["scope1", "scope2"] }),
-    )
-    expect(capturedOptions).toBeTruthy()
-  })
-
-  it("redirects to pending action on callback success", () => {
-    const req = { session: { pendingActionToken: "abc/123" } } as never
-    const res = createMockResponse()
-
-    createAuthGoogleCallbackSuccessHandler()(req, res.res as never, vi.fn())
-    expect(res.redirectedTo).toBe("/action/abc%2F123")
-    expect(req.session.pendingActionToken).toBeUndefined()
-  })
-
-  it("creates callback auth middleware from passport authenticate", () => {
-    const middleware = vi.fn()
-    const authenticate = vi.fn().mockReturnValue(middleware)
-    const created = createAuthGoogleCallbackAuthHandler(authenticate)
-    expect(authenticate).toHaveBeenCalledWith("google", { failureRedirect: "/" })
-    expect(created).toBe(middleware)
-  })
-
-  it("returns 401 when user is not authenticated", () => {
-    const req = { isAuthenticated: () => false } as never
-    const res = createMockResponse()
-
-    createAuthUserHandler()(req, res.res as never, vi.fn())
-    expect(res.statusCode).toBe(401)
-    expect(res.body).toEqual({ error: "Not authenticated" })
-  })
-
-  it("logs out and clears cookie", () => {
-    const req = {
-      logout: (cb: (err?: Error) => void) => cb(),
-      session: { destroy: (cb: () => void) => cb() },
-    } as never
-    const res = createMockResponse()
-
-    createAuthLogoutHandler()(req, res.res as never, vi.fn())
-    expect(res.statusCode).toBe(200)
-    expect(res.body).toEqual({ success: true })
-    expect(res.clearedCookies.some((entry) => entry.name === "connect.sid")).toBe(true)
-  })
-})
-
-describe("settings and account handlers", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it("deletes account data and ends session", async () => {
-    const deps = { deleteUserData: vi.fn().mockResolvedValue(undefined) }
-    const req = {
-      user: { id: "user-1" },
-      logout: (cb: (err?: Error) => void) => cb(),
-      session: { destroy: (cb: () => void) => cb() },
-    } as never
-    const res = createMockResponse()
-
-    await createDeleteAccountHandler(deps)(req, res.res as never, vi.fn())
-    expect(deps.deleteUserData).toHaveBeenCalledWith("user-1")
-    expect(res.body).toEqual({ success: true })
-  })
-
-  it("returns existing settings when found", async () => {
-    const deps = {
-      getUserSettings: vi.fn().mockResolvedValue({ calendarId: "primary" }),
-      updateUserSettings: vi.fn(),
-      createUserSettings: vi.fn(),
-    }
-    const req = { user: { id: "user-1" } } as never
-    const res = createMockResponse()
-
-    await createGetSettingsHandler(deps)(req, res.res as never, vi.fn())
-    expect(res.statusCode).toBe(200)
-    expect(res.body).toEqual({ calendarId: "primary" })
-  })
-
-  it("patches existing settings", async () => {
-    const deps = {
-      getUserSettings: vi.fn().mockResolvedValue({ id: "s1", calendarId: "primary" }),
-      updateUserSettings: vi
-        .fn()
-        .mockResolvedValue({ id: "s1", calendarId: "primary", workStartHour: 9 }),
-      createUserSettings: vi.fn(),
-    }
-    const req = {
-      user: { id: "user-1" },
-      body: {
-        calendarId: "primary",
-        workStartHour: 9,
-        workEndHour: 17,
-        timezone: "America/New_York",
-        defaultDuration: 30,
-        eventColor: "1",
-      },
-    } as never
-    const res = createMockResponse()
-
-    await createPatchSettingsHandler(deps)(req, res.res as never, vi.fn())
-    expect(deps.updateUserSettings).toHaveBeenCalled()
-    expect(res.statusCode).toBe(200)
-  })
-})
-
-describe("calendar and task utility handlers", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it("lists calendars for user", async () => {
-    const deps = {
-      listCalendars: vi.fn().mockResolvedValue([{ id: "primary", summary: "Main" }]),
-    }
-    const req = { user: { id: "user-1" } } as never
-    const res = createMockResponse()
-
-    await createGetCalendarsHandler(deps)(req, res.res as never, vi.fn())
-    expect(res.body).toEqual([{ id: "primary", summary: "Main" }])
   })
 
   it("reschedules all tasks", async () => {
@@ -311,58 +74,6 @@ describe("calendar and task utility handlers", () => {
     await createCompleteTaskHandler(deps)(req, res.res as never, vi.fn())
     expect(res.statusCode).toBe(200)
     expect(res.body).toEqual({ success: true })
-  })
-})
-
-describe("action page handler", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it("shows sign-in prompt when user is not authenticated", async () => {
-    const deps = {
-      getActionToken: vi.fn(),
-      getCalendarEvent: vi.fn(),
-      mapCalendarEventToTask: vi.fn(),
-    }
-    const req = {
-      params: { token: "tok-1" },
-      isAuthenticated: () => false,
-    } as never
-    const res = createMockResponse()
-
-    await createActionPageHandler(deps)(req, res.res as never, vi.fn())
-    expect(res.statusCode).toBe(200)
-    expect(String(res.body)).toContain("Sign in required")
-  })
-
-  it("renders manage page when token and task are valid", async () => {
-    const deps = {
-      getActionToken: vi.fn().mockResolvedValue({
-        userId: "user-1",
-        eventId: "event-1",
-        calendarId: "primary",
-      }),
-      getCalendarEvent: vi.fn().mockResolvedValue({ id: "event-1" }),
-      mapCalendarEventToTask: vi.fn().mockReturnValue({
-        id: "event-1",
-        title: "Task 1",
-        details: null,
-        completed: false,
-      }),
-    }
-    const req = {
-      params: { token: "tok-1" },
-      isAuthenticated: () => true,
-      user: { id: "user-1" },
-      session: { csrfToken: "csrf-1" },
-    } as never
-    const res = createMockResponse()
-
-    await createActionPageHandler(deps)(req, res.res as never, vi.fn())
-    expect(res.statusCode).toBe(200)
-    expect(String(res.body)).toContain("Manage task")
-    expect(String(res.body)).toContain("csrf-1")
   })
 })
 
@@ -793,148 +504,5 @@ describe("createBulkCompleteTasksHandler", () => {
     expect(response.statusCode).toBe(200)
     expect(response.body).toEqual({ success: true })
     expect(deps.updateCalendarEventCompletion).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe("createApiActionHandler", () => {
-  const deps = {
-    getActionToken: vi.fn(),
-    consumeActionToken: vi.fn(),
-    getUserSettings: vi.fn(),
-    getCalendarEvent: vi.fn(),
-    mapCalendarEventToTask: vi.fn(),
-    updateCalendarEventCompletion: vi.fn(),
-    findFreeSlot: vi.fn(),
-    updateCalendarEventTime: vi.fn(),
-    refreshCalendarEventActions: vi.fn(),
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it("returns 400 for missing token", async () => {
-    const req = {
-      user: { id: "user-1" },
-      params: {},
-      body: { action: "complete" },
-    } as never
-    const response = createMockResponse()
-
-    await createApiActionHandler(deps, () => "http://localhost:5000")(
-      req,
-      response.res as never,
-      vi.fn(),
-    )
-    expect(response.statusCode).toBe(400)
-    expect(response.body).toEqual({ error: "Invalid action token" })
-  })
-
-  it("returns 403 when token belongs to another user", async () => {
-    const req = {
-      user: { id: "user-1" },
-      params: { token: "abc" },
-      body: { action: "complete" },
-      headers: {},
-    } as never
-    deps.getActionToken.mockResolvedValueOnce({ userId: "other-user" })
-    const response = createMockResponse()
-
-    await createApiActionHandler(deps, () => "http://localhost:5000")(
-      req,
-      response.res as never,
-      vi.fn(),
-    )
-    expect(response.statusCode).toBe(403)
-    expect(response.body).toEqual({ error: "Unauthorized." })
-  })
-
-  it("completes task and returns success json", async () => {
-    const req = {
-      user: { id: "user-1" },
-      params: { token: "abc" },
-      body: { action: "complete" },
-      headers: {},
-    } as never
-    deps.getActionToken.mockResolvedValueOnce({ userId: "user-1" })
-    deps.consumeActionToken.mockResolvedValueOnce({
-      eventId: "event-1",
-      calendarId: "primary",
-    })
-    deps.getUserSettings.mockResolvedValueOnce({
-      calendarId: "primary",
-      defaultDuration: 30,
-      timezone: "UTC",
-    })
-    deps.getCalendarEvent.mockResolvedValueOnce({
-      id: "event-1",
-      start: { dateTime: "2026-02-09T10:00:00.000Z" },
-      end: { dateTime: "2026-02-09T10:30:00.000Z" },
-    })
-    deps.mapCalendarEventToTask.mockReturnValueOnce({
-      id: "event-1",
-      title: "Task 1",
-      details: null,
-      completed: false,
-    })
-    deps.updateCalendarEventCompletion.mockResolvedValueOnce({ id: "event-1" })
-    deps.refreshCalendarEventActions.mockResolvedValueOnce(undefined)
-    const response = createMockResponse()
-
-    await createApiActionHandler(deps, () => "http://localhost:5000")(
-      req,
-      response.res as never,
-      vi.fn(),
-    )
-
-    expect(response.statusCode).toBe(200)
-    expect(response.body).toEqual({ success: true })
-  })
-
-  it("reschedules task and returns html when requested", async () => {
-    const req = {
-      user: { id: "user-1" },
-      params: { token: "abc" },
-      body: { action: "reschedule" },
-      headers: { accept: "text/html" },
-    } as never
-    deps.getActionToken.mockResolvedValueOnce({ userId: "user-1" })
-    deps.consumeActionToken.mockResolvedValueOnce({
-      eventId: "event-1",
-      calendarId: "primary",
-    })
-    deps.getUserSettings.mockResolvedValueOnce({
-      calendarId: "primary",
-      defaultDuration: 30,
-      timezone: "UTC",
-    })
-    deps.getCalendarEvent.mockResolvedValueOnce({
-      id: "event-1",
-      start: { dateTime: "2026-02-09T10:00:00.000Z" },
-      end: { dateTime: "2026-02-09T10:30:00.000Z" },
-    })
-    deps.mapCalendarEventToTask.mockReturnValueOnce({
-      id: "event-1",
-      title: "Task 1",
-      details: null,
-      completed: false,
-    })
-    deps.findFreeSlot.mockResolvedValueOnce({
-      start: new Date("2026-02-10T10:00:00.000Z"),
-      end: new Date("2026-02-10T10:30:00.000Z"),
-    })
-    deps.updateCalendarEventTime.mockResolvedValueOnce(true)
-    deps.refreshCalendarEventActions.mockResolvedValueOnce(undefined)
-    const response = createMockResponse()
-
-    await createApiActionHandler(deps, () => "http://localhost:5000")(
-      req,
-      response.res as never,
-      vi.fn(),
-    )
-
-    expect(response.statusCode).toBe(200)
-    expect(typeof response.body).toBe("string")
-    expect(String(response.body)).toContain("Task rescheduled")
   })
 })
