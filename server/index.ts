@@ -99,6 +99,26 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`)
 }
 
+function getErrorStatus(error: unknown): number {
+  if (typeof error === "object" && error !== null) {
+    const withStatus = error as { status?: unknown; statusCode?: unknown }
+    if (typeof withStatus.status === "number") {
+      return withStatus.status
+    }
+    if (typeof withStatus.statusCode === "number") {
+      return withStatus.statusCode
+    }
+  }
+  return 500
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+  return "Internal Server Error"
+}
+
 app.use((req, res, next) => {
   const start = Date.now()
   const path = req.path
@@ -116,9 +136,9 @@ app.use((req, res, next) => {
   await runMigrations()
   await registerRoutes(httpServer, app)
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500
-    const message = err.message || "Internal Server Error"
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    const status = getErrorStatus(err)
+    const message = getErrorMessage(err)
 
     res.status(status).json({ message })
     if (status >= 500) {

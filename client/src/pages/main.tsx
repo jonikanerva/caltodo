@@ -60,6 +60,23 @@ const DURATION_OPTIONS = [
   { value: "240", label: "4 hours" },
 ]
 
+function reorderItems<T>(items: readonly T[], fromIndex: number, toIndex: number): T[] {
+  const movedItem = items[fromIndex]
+  return items.reduce<T[]>(
+    (acc, item, index) => {
+      if (index === fromIndex) return acc
+      if (index === toIndex) {
+        if (fromIndex < toIndex) {
+          return [...acc, item, movedItem]
+        }
+        return [...acc, movedItem, item]
+      }
+      return [...acc, item]
+    },
+    fromIndex > toIndex ? [movedItem] : [],
+  )
+}
+
 export default function MainPage() {
   const { toast } = useToast()
   const [newTask, setNewTask] = useState<CreateTaskInput>({
@@ -135,16 +152,13 @@ export default function MainPage() {
   useEffect(() => {
     if (completingTaskIds.size === 0) return
     setCompletingTaskIds((prev) => {
-      let changed = false
-      const next = new Set(prev)
-      for (const id of Array.from(prev)) {
-        const task = tasks.find((item) => item.id === id)
-        if (!task || task.completed) {
-          next.delete(id)
-          changed = true
-        }
-      }
-      return changed ? next : prev
+      const next = new Set(
+        Array.from(prev).filter((id) => {
+          const task = tasks.find((item) => item.id === id)
+          return Boolean(task && !task.completed)
+        }),
+      )
+      return next.size === prev.size ? prev : next
     })
   }, [tasks, completingTaskIds])
 
@@ -213,13 +227,15 @@ export default function MainPage() {
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return
+    if (result.source.index === result.destination.index) return
 
     const uncompletedTasks = tasks.filter((t) => !t.completed)
-    const items = Array.from(uncompletedTasks)
-    const [reorderedItem] = items.splice(result.source.index, 1)
-    items.splice(result.destination.index, 0, reorderedItem)
-
-    const newOrder = items.map((t) => t.id)
+    const reorderedTasks = reorderItems(
+      uncompletedTasks,
+      result.source.index,
+      result.destination.index,
+    )
+    const newOrder = reorderedTasks.map((t) => t.id)
     reorderTasksMutation.mutate(newOrder)
   }
 

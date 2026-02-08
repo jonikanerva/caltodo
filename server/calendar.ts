@@ -79,6 +79,32 @@ function getDurationMinutes(start: Date, end: Date): number | null {
   return Math.round(diffMs / 60000)
 }
 
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined
+  const withStatus = error as {
+    code?: unknown
+    status?: unknown
+    response?: { status?: unknown }
+  }
+  if (typeof withStatus.code === "number") return withStatus.code
+  if (typeof withStatus.response?.status === "number") return withStatus.response.status
+  if (typeof withStatus.status === "number") return withStatus.status
+  return undefined
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+  return String(error)
+}
+
+function getErrorResponseData(error: unknown): unknown {
+  if (typeof error !== "object" || error === null) return undefined
+  const withResponse = error as { response?: { data?: unknown } }
+  return withResponse.response?.data
+}
+
 export function mapCalendarEventToTask(
   event: calendar_v3.Schema$Event,
 ): CalendarTask | null {
@@ -224,8 +250,8 @@ export async function listCalendarEventsInRange(
       orderBy: "startTime",
     })
     return response.data.items || []
-  } catch (error: any) {
-    console.error("Error listing calendar events:", error?.message || error)
+  } catch (error: unknown) {
+    console.error("Error listing calendar events:", getErrorMessage(error))
     return []
   }
 }
@@ -247,10 +273,11 @@ export async function listCalendars(
       summary: cal.summary || "",
       primary: cal.primary || false,
     }))
-  } catch (error: any) {
-    console.error("Error listing calendars:", error?.message || error)
-    if (error?.response?.data) {
-      console.error("API error details:", JSON.stringify(error.response.data))
+  } catch (error: unknown) {
+    console.error("Error listing calendars:", getErrorMessage(error))
+    const responseData = getErrorResponseData(error)
+    if (responseData) {
+      console.error("API error details:", JSON.stringify(responseData))
     }
     return []
   }
@@ -612,12 +639,12 @@ export async function updateCalendarEventCompletion(
     })
 
     return response.data
-  } catch (error: any) {
-    const statusCode = error?.code || error?.response?.status || error?.status
+  } catch (error: unknown) {
+    const statusCode = getErrorStatusCode(error)
     if (statusCode === 404 || statusCode === 410) {
       return null
     }
-    console.error("Error updating calendar event completion:", error?.message || error)
+    console.error("Error updating calendar event completion:", getErrorMessage(error))
     return null
   }
 }
@@ -641,12 +668,12 @@ export async function getCalendarEvent(
       return null
     }
     return event
-  } catch (error: any) {
-    const statusCode = error?.code || error?.response?.status || error?.status
+  } catch (error: unknown) {
+    const statusCode = getErrorStatusCode(error)
     if (statusCode === 404 || statusCode === 410) {
       return null
     }
-    console.error("Error fetching calendar event:", error?.message || error)
+    console.error("Error fetching calendar event:", getErrorMessage(error))
     return null
   }
 }
@@ -713,11 +740,11 @@ export async function getCalendarEventsForTasks(
         }
       }
       return { eventId, data: undefined }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Check for deleted events - Google API may return code in different places
-      const statusCode = error?.code || error?.response?.status || error?.status
+      const statusCode = getErrorStatusCode(error)
       console.log(
-        `Event ${eventId} fetch error - code: ${statusCode}, message: ${error?.message}`,
+        `Event ${eventId} fetch error - code: ${statusCode}, message: ${getErrorMessage(error)}`,
       )
 
       // Only mark as deleted for 404 (not found) or 410 (gone) errors
@@ -725,7 +752,7 @@ export async function getCalendarEventsForTasks(
         return { eventId, data: EVENT_DELETED }
       }
       // For other errors (auth, rate limit, network), leave undefined (no change)
-      console.error(`Error fetching event ${eventId}:`, error?.message || error)
+      console.error(`Error fetching event ${eventId}:`, getErrorMessage(error))
       return { eventId, data: undefined }
     }
   })

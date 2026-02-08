@@ -66,7 +66,7 @@ function renderActionShell(title: string, body: string): string {
   `
 }
 
-function getBaseUrl(req: any): string {
+function getBaseUrl(): string {
   const normalize = (url: string | undefined): string | null => {
     if (!url) return null
     try {
@@ -332,7 +332,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
         settings,
         slot,
-        getBaseUrl(req),
+        getBaseUrl(),
       )
 
       if (!eventId) {
@@ -777,7 +777,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         calendarId,
         actionToken.eventId,
         task.details,
-        getBaseUrl(req),
+        getBaseUrl(),
       )
 
       if (wantsHtml) {
