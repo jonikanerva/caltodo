@@ -145,6 +145,10 @@ The app will be available at `http://localhost:5000`.
 ### Development Scripts
 
 - `npm run dev` - Start development server (frontend + backend)
+- `npm run check` - Run type and code-style checks
+- `npm run test` - Run the test suite once
+- `npm run test:watch` - Run tests in watch mode
+- `npm run test:coverage` - Run tests with coverage report
 - `npm run db:generate` - Create a new migration from schema changes
 - `npm run db:migrate` - Run pending migrations manually
 - `npm run build` - Build for production
