@@ -2,6 +2,7 @@ import type { RequestHandler } from "express"
 import { z } from "zod"
 import { taskIdsSchema, createTaskSchema } from "@shared/schema"
 import type { CalendarTask } from "@shared/types"
+import { ConflictError, NotFoundError, ValidationError } from "../errors"
 import { storage } from "../storage"
 import {
   getCalendarClient,
@@ -17,11 +18,34 @@ import {
   EVENT_DELETED,
   type CalendarEventData,
 } from "../calendar"
-import { getBaseUrl, readPathParam } from "./common"
+import { getBaseUrl, readPathParam, sendApiError } from "./common"
 
 const patchTaskSchema = z.object({
   completed: z.boolean(),
 })
+
+function requireTaskId(params: unknown): string {
+  const id = readPathParam(params, "id")
+  if (!id) {
+    throw new ValidationError("Invalid task id")
+  }
+  return id
+}
+
+async function requireCalendarSettings(
+  getUserSettings: typeof storage.getUserSettings,
+  userId: string,
+): Promise<
+  NonNullable<Awaited<ReturnType<typeof storage.getUserSettings>>> & {
+    calendarId: string
+  }
+> {
+  const settings = await getUserSettings(userId)
+  if (!settings?.calendarId) {
+    throw new ValidationError("No calendar configured")
+  }
+  return { ...settings, calendarId: settings.calendarId }
+}
 
 type TaskRouteDeps = {
   getUserSettings: typeof storage.getUserSettings
@@ -180,7 +204,7 @@ export function createGetTasksHandler(
       res.json([...uncompletedTasks, ...completedTasks])
     } catch (error) {
       console.error("Error fetching tasks:", error)
-      res.status(500).json({ error: "Failed to get tasks" })
+      return sendApiError(res, error, "Failed to get tasks")
     }
   }
 }
@@ -192,19 +216,13 @@ export function createPostTasksHandler(
   return async (req, res) => {
     try {
       const data = createTaskSchema.parse(req.body)
-      const settings = await deps.getUserSettings(req.user!.id)
-
-      if (!settings?.calendarId) {
-        return res.status(400).json({ error: "No calendar configured" })
-      }
+      const settings = await requireCalendarSettings(deps.getUserSettings, req.user!.id)
 
       const taskDuration = data.duration || settings.defaultDuration
       const slot = await deps.findFreeSlot(req.user!.id, settings, taskDuration)
 
       if (!slot) {
-        return res
-          .status(409)
-          .json({ error: "No free time slots available in the next 90 days." })
+        throw new ConflictError("No free time slots available in the next 90 days.")
       }
 
       const eventId = await deps.createCalendarEvent(
@@ -243,7 +261,7 @@ export function createPostTasksHandler(
       res.json(task)
     } catch (error) {
       console.error("Error creating task:", error)
-      res.status(400).json({ error: "Failed to create task" })
+      return sendApiError(res, error, "Failed to create task")
     }
   }
 }
@@ -253,16 +271,10 @@ export function createPatchTaskHandler(
 ): RequestHandler {
   return async (req, res) => {
     try {
-      const id = readPathParam(req.params, "id")
-      if (!id) {
-        return res.status(400).json({ error: "Invalid task id" })
-      }
+      const id = requireTaskId(req.params)
 
       const data = patchTaskSchema.parse(req.body)
-      const settings = await deps.getUserSettings(req.user!.id)
-      if (!settings?.calendarId) {
-        return res.status(400).json({ error: "No calendar configured" })
-      }
+      const settings = await requireCalendarSettings(deps.getUserSettings, req.user!.id)
 
       const updatedEvent = await deps.updateCalendarEventCompletion(
         req.user!.id,
@@ -272,18 +284,18 @@ export function createPatchTaskHandler(
       )
 
       if (!updatedEvent) {
-        return res.status(404).json({ error: "Task not found" })
+        throw new NotFoundError("Task not found")
       }
 
       const task = deps.mapCalendarEventToTask(updatedEvent)
       if (!task) {
-        return res.status(500).json({ error: "Failed to map updated task" })
+        throw new Error("Failed to map updated task")
       }
 
       res.json(task)
     } catch (error) {
       console.error("Error updating task:", error)
-      res.status(500).json({ error: "Failed to update task" })
+      return sendApiError(res, error, "Failed to update task")
     }
   }
 }
@@ -295,14 +307,11 @@ export function createReorderTasksHandler(
     try {
       const parsed = taskIdsSchema.safeParse(req.body)
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid taskIds payload" })
+        throw new ValidationError("Invalid taskIds payload")
       }
       const { taskIds } = parsed.data
 
-      const settings = await deps.getUserSettings(req.user!.id)
-      if (!settings?.calendarId) {
-        return res.status(400).json({ error: "No calendar configured" })
-      }
+      const settings = await requireCalendarSettings(deps.getUserSettings, req.user!.id)
 
       const calendarEvents = await deps.getCalendarEventsForTasks(
         req.user!.id,
@@ -319,7 +328,7 @@ export function createReorderTasksHandler(
         )
 
       if (eventDataList.length === 0) {
-        return res.status(404).json({ error: "No tasks found to reorder" })
+        throw new NotFoundError("No tasks found to reorder")
       }
 
       const existingSlots = eventDataList
@@ -365,7 +374,7 @@ export function createReorderTasksHandler(
       res.json({ success: true })
     } catch (error) {
       console.error("Error reordering tasks:", error)
-      res.status(500).json({ error: "Failed to reorder tasks" })
+      return sendApiError(res, error, "Failed to reorder tasks")
     }
   }
 }
@@ -377,14 +386,11 @@ export function createBulkCompleteTasksHandler(
     try {
       const parsed = taskIdsSchema.safeParse(req.body)
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid taskIds payload" })
+        throw new ValidationError("Invalid taskIds payload")
       }
       const { taskIds } = parsed.data
 
-      const settings = await deps.getUserSettings(req.user!.id)
-      if (!settings?.calendarId) {
-        return res.status(400).json({ error: "No calendar configured" })
-      }
+      const settings = await requireCalendarSettings(deps.getUserSettings, req.user!.id)
 
       for (const taskId of taskIds) {
         await deps.updateCalendarEventCompletion(req.user!.id, taskId, settings, true)
@@ -393,7 +399,7 @@ export function createBulkCompleteTasksHandler(
       res.json({ success: true })
     } catch (error) {
       console.error("Error bulk completing tasks:", error)
-      res.status(500).json({ error: "Failed to complete tasks" })
+      return sendApiError(res, error, "Failed to complete tasks")
     }
   }
 }
@@ -403,11 +409,11 @@ export function createRescheduleAllTasksHandler(
 ): RequestHandler {
   return async (req, res) => {
     try {
-      await deps.rescheduleAllUserTasks(req.user!.id)
-      res.json({ success: true })
+      const summary = await deps.rescheduleAllUserTasks(req.user!.id)
+      res.json({ success: true, summary })
     } catch (error) {
       console.error("Error rescheduling all tasks:", error)
-      res.status(500).json({ error: "Failed to reschedule tasks" })
+      return sendApiError(res, error, "Failed to reschedule tasks")
     }
   }
 }
@@ -417,15 +423,12 @@ export function createReloadTasksHandler(
 ): RequestHandler {
   return async (req, res) => {
     try {
-      const settings = await deps.getUserSettings(req.user!.id)
-      if (!settings?.calendarId) {
-        return res.status(400).json({ error: "No calendar configured" })
-      }
+      await requireCalendarSettings(deps.getUserSettings, req.user!.id)
 
       res.json({ success: true })
     } catch (error) {
       console.error("Error reloading calendar data:", error)
-      res.status(500).json({ error: "Failed to reload calendar data" })
+      return sendApiError(res, error, "Failed to reload calendar data")
     }
   }
 }
@@ -435,15 +438,9 @@ export function createCompleteTaskHandler(
 ): RequestHandler {
   return async (req, res) => {
     try {
-      const id = readPathParam(req.params, "id")
-      if (!id) {
-        return res.status(400).json({ error: "Invalid task id" })
-      }
+      const id = requireTaskId(req.params)
 
-      const settings = await deps.getUserSettings(req.user!.id)
-      if (!settings?.calendarId) {
-        return res.status(400).json({ error: "No calendar configured" })
-      }
+      const settings = await requireCalendarSettings(deps.getUserSettings, req.user!.id)
 
       const updatedEvent = await deps.updateCalendarEventCompletion(
         req.user!.id,
@@ -452,13 +449,13 @@ export function createCompleteTaskHandler(
         true,
       )
       if (!updatedEvent) {
-        return res.status(404).json({ error: "Task not found" })
+        throw new NotFoundError("Task not found")
       }
 
       res.json({ success: true })
     } catch (error) {
       console.error("Error completing task:", error)
-      res.status(500).json({ error: "Failed to complete task" })
+      return sendApiError(res, error, "Failed to complete task")
     }
   }
 }
@@ -468,19 +465,13 @@ export function createRescheduleTaskHandler(
 ): RequestHandler {
   return async (req, res) => {
     try {
-      const id = readPathParam(req.params, "id")
-      if (!id) {
-        return res.status(400).json({ error: "Invalid task id" })
-      }
+      const id = requireTaskId(req.params)
 
-      const settings = await deps.getUserSettings(req.user!.id)
-      if (!settings?.calendarId) {
-        return res.status(400).json({ error: "No calendar configured" })
-      }
+      const settings = await requireCalendarSettings(deps.getUserSettings, req.user!.id)
 
       const event = await deps.getCalendarEvent(req.user!.id, id, settings.calendarId)
       if (!event || !event.start?.dateTime || !event.end?.dateTime) {
-        return res.status(404).json({ error: "Task not found" })
+        throw new NotFoundError("Task not found")
       }
 
       const start = new Date(event.start.dateTime)
@@ -492,20 +483,18 @@ export function createRescheduleTaskHandler(
       const slot = await deps.findFreeSlot(req.user!.id, settings, durationMinutes)
 
       if (!slot) {
-        return res
-          .status(409)
-          .json({ error: "No free time slots available in the next 90 days." })
+        throw new ConflictError("No free time slots available in the next 90 days.")
       }
 
       const updated = await deps.updateCalendarEventTime(req.user!.id, id, settings, slot)
       if (!updated) {
-        return res.status(404).json({ error: "Task not found" })
+        throw new NotFoundError("Task not found")
       }
 
       res.json({ success: true })
     } catch (error) {
       console.error("Error rescheduling task:", error)
-      res.status(500).json({ error: "Failed to reschedule task" })
+      return sendApiError(res, error, "Failed to reschedule task")
     }
   }
 }

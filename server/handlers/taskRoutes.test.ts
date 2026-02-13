@@ -44,13 +44,30 @@ describe("task utility handlers", () => {
   })
 
   it("reschedules all tasks", async () => {
-    const deps = { rescheduleAllUserTasks: vi.fn().mockResolvedValue(undefined) }
+    const deps = {
+      rescheduleAllUserTasks: vi.fn().mockResolvedValue({
+        moved: 1,
+        unchanged: 2,
+        skippedNoSlot: 0,
+        skippedInvalid: 0,
+        failed: 0,
+      }),
+    }
     const req = { user: { id: "user-1" } } as never
     const res = createMockResponse()
 
     await createRescheduleAllTasksHandler(deps)(req, res.res as never, vi.fn())
     expect(deps.rescheduleAllUserTasks).toHaveBeenCalledWith("user-1")
-    expect(res.body).toEqual({ success: true })
+    expect(res.body).toEqual({
+      success: true,
+      summary: {
+        moved: 1,
+        unchanged: 2,
+        skippedNoSlot: 0,
+        skippedInvalid: 0,
+        failed: 0,
+      },
+    })
   })
 
   it("reload handler returns 400 when no calendar configured", async () => {
@@ -299,7 +316,7 @@ describe("createPostTasksHandler", () => {
     expect(response.body).toEqual({ error: "Failed to create calendar event" })
   })
 
-  it("maps upstream slot-resolution throw to 400 create-task error", async () => {
+  it("maps upstream slot-resolution throw to 500 create-task error", async () => {
     deps.getUserSettings.mockResolvedValueOnce({
       calendarId: "primary",
       defaultDuration: 30,
@@ -313,7 +330,7 @@ describe("createPostTasksHandler", () => {
       vi.fn(),
     )
 
-    expect(response.statusCode).toBe(400)
+    expect(response.statusCode).toBe(500)
     expect(response.body).toEqual({ error: "Failed to create task" })
   })
 })

@@ -324,5 +324,6 @@ describe("createApiActionHandler", () => {
 
     expect(response.statusCode).toBe(500)
     expect(response.body).toEqual({ error: "Failed to process action" })
+    expect(deps.consumeActionToken).not.toHaveBeenCalled()
   })
 })

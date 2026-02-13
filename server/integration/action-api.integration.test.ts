@@ -166,6 +166,14 @@ describe("action API integration", () => {
       .expect(500)
 
     expect(response.body).toEqual({ error: "Failed to process action" })
+
+    fixtures.mocks.action.refreshCalendarEventActions.mockResolvedValueOnce(undefined)
+    const retry = await agent
+      .post("/api/action/tok-refresh")
+      .set("x-csrf-token", csrfToken)
+      .send({ action: "complete" })
+      .expect(200)
+    expect(retry.body).toEqual({ success: true })
   })
 
   it("POST /api/action/:token HTML returns parity for error and success", async () => {

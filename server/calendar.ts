@@ -3,6 +3,13 @@ import { storage } from "./storage"
 import type { UserSettings } from "@shared/schema"
 import type { CalendarTask } from "@shared/types"
 import { createActionToken } from "./tokens"
+import {
+  createEmptyRescheduleSummary,
+  findSlotFromBusyIntervals,
+  getDurationMinutes,
+  type BusyInterval,
+  type RescheduleSummary,
+} from "./scheduler"
 
 const APP_SIGNATURE = "Created by Todo"
 const EVENT_TITLE_PREFIX_INCOMPLETE = "☑️ "
@@ -73,12 +80,6 @@ function extractDetailsFromDescription(description?: string | null): string | nu
   return trimmed.length > 0 ? trimmed : null
 }
 
-function getDurationMinutes(start: Date, end: Date): number | null {
-  const diffMs = end.getTime() - start.getTime()
-  if (!Number.isFinite(diffMs) || diffMs <= 0) return null
-  return Math.round(diffMs / 60000)
-}
-
 function getErrorStatusCode(error: unknown): number | undefined {
   if (typeof error !== "object" || error === null) return undefined
   const withStatus = error as {
@@ -143,68 +144,6 @@ function buildEventDescription(details: string | null, manageLink: string): stri
   parts.push(`Actions:\n- Manage: ${manageLink}`)
   parts.push(`\n---\n${APP_SIGNATURE}`)
   return parts.join("\n")
-}
-
-// Helper to get hours and minutes in a specific timezone
-function getTimeInTimezone(
-  date: Date,
-  timezone: string,
-): { hours: number; minutes: number; dayOfWeek: number } {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hour: "numeric",
-    minute: "numeric",
-    weekday: "short",
-    hour12: false,
-  })
-  const parts = formatter.formatToParts(date)
-  const hours = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10)
-  const minutes = parseInt(parts.find((p) => p.type === "minute")?.value || "0", 10)
-  const weekdayStr = parts.find((p) => p.type === "weekday")?.value || "Mon"
-  const dayMap: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  }
-  const dayOfWeek = dayMap[weekdayStr] ?? 1
-  return { hours, minutes, dayOfWeek }
-}
-
-// Helper to set time to a specific hour in user's timezone
-function setToHourInTimezone(date: Date, hour: number, timezone: string): Date {
-  // Get current time in user's timezone
-  const { hours: currentHours, minutes: currentMinutes } = getTimeInTimezone(
-    date,
-    timezone,
-  )
-  const currentTotalMinutes = currentHours * 60 + currentMinutes
-  const targetTotalMinutes = hour * 60
-  const diffMinutes = targetTotalMinutes - currentTotalMinutes
-
-  const result = new Date(date)
-  result.setMinutes(result.getMinutes() + diffMinutes)
-  result.setSeconds(0)
-  result.setMilliseconds(0)
-  return result
-}
-
-// Helper to advance to next day at a specific hour in user's timezone
-function advanceToNextDayAtHour(date: Date, hour: number, timezone: string): Date {
-  // First, go to the target hour today
-  let result = setToHourInTimezone(date, hour, timezone)
-  // Then add 24 hours
-  result.setTime(result.getTime() + 24 * 60 * 60 * 1000)
-  // Adjust for DST by ensuring we're exactly at the target hour
-  const { hours } = getTimeInTimezone(result, timezone)
-  if (hours !== hour) {
-    const diff = hour - hours
-    result.setHours(result.getHours() + diff)
-  }
-  return result
 }
 
 export async function getCalendarClient(
@@ -298,7 +237,6 @@ export async function findFreeSlot(
   const calendar = await getCalendarClient(userId)
   if (!calendar || !settings.calendarId) return null
 
-  const timezone = settings.timezone || "UTC"
   const now = afterTime || new Date()
   const searchEndDate = new Date(now)
   searchEndDate.setDate(searchEndDate.getDate() + 90)
@@ -327,93 +265,24 @@ export async function findFreeSlot(
     }
     events = events.filter(isBusyEvent)
 
-    const busyIntervals = events
+    const busyIntervals: BusyInterval[] = events
       .filter((event) => event.start?.dateTime && event.end?.dateTime)
       .map((event) => ({
         start: new Date(event.start!.dateTime!).getTime(),
         end: new Date(event.end!.dateTime!).getTime(),
       }))
-      .filter(
-        (interval) => Number.isFinite(interval.start) && Number.isFinite(interval.end),
-      )
-      .sort((a, b) => a.start - b.start)
 
-    let intervalIndex = 0
-    let currentDate = new Date(now)
-    // Round up to next 15-minute interval
-    currentDate.setMinutes(Math.ceil(currentDate.getMinutes() / 15) * 15)
-    currentDate.setSeconds(0)
-    currentDate.setMilliseconds(0)
-
-    while (currentDate < searchEndDate) {
-      // Get current time in user's timezone
-      const {
-        hours: currentHour,
-        minutes: currentMinute,
-        dayOfWeek,
-      } = getTimeInTimezone(currentDate, timezone)
-
-      // Skip weekends
-      if (dayOfWeek === 0 || dayOfWeek === 6) {
-        currentDate = advanceToNextDayAtHour(
-          currentDate,
-          settings.workStartHour,
-          timezone,
-        )
-        continue
-      }
-
-      const currentTimeMinutes = currentHour * 60 + currentMinute
-      const workStartMinutes = settings.workStartHour * 60
-      const workEndMinutes = settings.workEndHour * 60
-
-      // If before work hours, jump to work start
-      if (currentTimeMinutes < workStartMinutes) {
-        currentDate = setToHourInTimezone(currentDate, settings.workStartHour, timezone)
-        continue
-      }
-
-      // If task would extend past work hours, go to next day
-      if (currentTimeMinutes + durationMinutes > workEndMinutes) {
-        currentDate = advanceToNextDayAtHour(
-          currentDate,
-          settings.workStartHour,
-          timezone,
-        )
-        continue
-      }
-
-      const slotStart = new Date(currentDate)
-      const slotEnd = new Date(slotStart)
-      slotEnd.setMinutes(slotEnd.getMinutes() + durationMinutes)
-
-      const slotStartMs = slotStart.getTime()
-      const slotEndMs = slotEnd.getTime()
-      while (
-        intervalIndex < busyIntervals.length &&
-        busyIntervals[intervalIndex].end <= slotStartMs
-      ) {
-        intervalIndex++
-      }
-
-      const overlappingInterval =
-        intervalIndex < busyIntervals.length &&
-        busyIntervals[intervalIndex].start < slotEndMs &&
-        busyIntervals[intervalIndex].end > slotStartMs
-          ? busyIntervals[intervalIndex]
-          : null
-
-      if (!overlappingInterval) {
-        return { start: slotStart, end: slotEnd }
-      }
-
-      currentDate = new Date(overlappingInterval.end)
-      currentDate.setMinutes(Math.ceil(currentDate.getMinutes() / 15) * 15)
-      currentDate.setSeconds(0)
-      currentDate.setMilliseconds(0)
-    }
-
-    return null
+    return findSlotFromBusyIntervals(
+      busyIntervals,
+      durationMinutes,
+      {
+        timezone: settings.timezone || "UTC",
+        workStartHour: settings.workStartHour,
+        workEndHour: settings.workEndHour,
+      },
+      now,
+      searchEndDate,
+    )
   } catch (error) {
     console.error("Error finding free slot:", error)
     return null
@@ -583,26 +452,6 @@ export async function updateCalendarEventTime(
     return true
   } catch (error) {
     console.error("Error updating calendar event time:", error)
-    return false
-  }
-}
-
-export async function deleteCalendarEvent(
-  userId: string,
-  eventId: string,
-  calendarId: string,
-): Promise<boolean> {
-  const calendar = await getCalendarClient(userId)
-  if (!calendar) return false
-
-  try {
-    await calendar.events.delete({
-      calendarId,
-      eventId,
-    })
-    return true
-  } catch (error) {
-    console.error("Error deleting calendar event:", error)
     return false
   }
 }
@@ -778,12 +627,13 @@ export async function getCalendarEventsForTasks(
 export async function rescheduleAllUserTasks(
   userId: string,
   priorityEventIds?: string[],
-): Promise<void> {
+): Promise<RescheduleSummary> {
+  const summary = createEmptyRescheduleSummary()
   const settings = await storage.getUserSettings(userId)
-  if (!settings?.calendarId) return
+  if (!settings?.calendarId) return summary
 
   const calendar = await getCalendarClient(userId)
-  if (!calendar) return
+  if (!calendar) return summary
 
   const windowStart = new Date()
   windowStart.setDate(windowStart.getDate() - 7)
@@ -818,6 +668,10 @@ export async function rescheduleAllUserTasks(
   let lastSlotEnd: Date | undefined
 
   for (const event of orderedEvents) {
+    if (!event.id || !event.start?.dateTime || !event.end?.dateTime) {
+      summary.skippedInvalid++
+      continue
+    }
     const start = new Date(event.start!.dateTime!)
     const end = new Date(event.end!.dateTime!)
     const durationMinutes = getDurationMinutes(start, end) || settings.defaultDuration
@@ -830,15 +684,26 @@ export async function rescheduleAllUserTasks(
       true,
       { events: windowEvents, timeMin: windowStart, timeMax: windowEnd },
     )
-    if (!optimalSlot) continue
+    if (!optimalSlot) {
+      summary.skippedNoSlot++
+      continue
+    }
 
     const slotMatches = Math.abs(start.getTime() - optimalSlot.start.getTime()) < 60000
     if (slotMatches) {
       lastSlotEnd = new Date(event.end!.dateTime!)
+      summary.unchanged++
       continue
     }
 
-    await updateCalendarEventTime(userId, event.id!, settings, optimalSlot)
+    const updated = await updateCalendarEventTime(userId, event.id, settings, optimalSlot)
+    if (!updated) {
+      summary.failed++
+      continue
+    }
+    summary.moved++
     lastSlotEnd = optimalSlot.end
   }
+
+  return summary
 }

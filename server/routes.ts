@@ -26,51 +26,16 @@ import {
   createRescheduleTaskHandler,
 } from "./handlers/taskRoutes"
 import { createActionPageHandler, createApiActionHandler } from "./handlers/actionRoutes"
-
-export {
-  createAuthGoogleStartHandler,
-  createAuthGoogleCallbackAuthHandler,
-  createAuthGoogleCallbackSuccessHandler,
-  createAuthUserHandler,
-  createAuthLogoutHandler,
-  createDeleteAccountHandler,
-  createGetSettingsHandler,
-  createPatchSettingsHandler,
-  createGetCalendarsHandler,
-  createGetTasksHandler,
-  createPostTasksHandler,
-  createPatchTaskHandler,
-  createReorderTasksHandler,
-  createBulkCompleteTasksHandler,
-  createRescheduleAllTasksHandler,
-  createReloadTasksHandler,
-  createCompleteTaskHandler,
-  createRescheduleTaskHandler,
-  createActionPageHandler,
-  createApiActionHandler,
-}
+import { getBaseUrl } from "./handlers/common"
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   setupAuth(app)
   app.use(ensureCsrfToken)
   app.use(requireCsrfToken)
 
-  const cronBaseUrl =
-    process.env.PRODUCTION_APP_URL ||
-    (process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : "http://localhost:5000")
-
-  setupCronJobs(cronBaseUrl)
-
-  console.log(
-    "OAuth callback URL:",
-    process.env.PRODUCTION_APP_URL
-      ? `${process.env.PRODUCTION_APP_URL}/api/auth/google/callback`
-      : process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/auth/google/callback`
-        : "http://localhost:5000/api/auth/google/callback",
-  )
+  const appBaseUrl = getBaseUrl()
+  setupCronJobs(appBaseUrl)
+  console.log("OAuth callback URL:", `${appBaseUrl}/api/auth/google/callback`)
 
   app.get("/api/auth/google", createAuthGoogleStartHandler())
   app.get(

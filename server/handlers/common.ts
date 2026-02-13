@@ -1,4 +1,5 @@
 import type { Response } from "express"
+import { normalizeError } from "../errors"
 
 export function escapeHtml(input: string): string {
   return input
@@ -93,4 +94,13 @@ export function clearSessionCookie(res: Response): void {
     httpOnly: true,
     secure: isProduction,
   })
+}
+
+export function sendApiError(
+  res: Response,
+  error: unknown,
+  fallbackMessage: string,
+): Response {
+  const normalized = normalizeError(error, fallbackMessage)
+  return res.status(normalized.status).json({ error: normalized.message })
 }

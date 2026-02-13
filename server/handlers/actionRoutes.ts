@@ -1,5 +1,12 @@
 import type { RequestHandler } from "express"
 import { z } from "zod"
+import {
+  ConflictError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+  normalizeError,
+} from "../errors"
 import { storage } from "../storage"
 import {
   getCalendarEvent,
@@ -10,7 +17,13 @@ import {
   refreshCalendarEventActions,
 } from "../calendar"
 import { consumeActionToken, getActionToken } from "../tokens"
-import { escapeHtml, getBaseUrl, readPathParam, renderActionShell } from "./common"
+import {
+  escapeHtml,
+  getBaseUrl,
+  readPathParam,
+  renderActionShell,
+  sendApiError,
+} from "./common"
 
 const actionRequestSchema = z.object({
   action: z.enum(["complete", "reschedule"]),
@@ -169,69 +182,54 @@ export function createApiActionHandler(
         return res.status(400).json({ error: "Invalid action token" })
       }
       const wantsHtml = req.headers.accept?.includes("text/html")
-      const respondError = (status: number, title: string, message: string) => {
-        if (wantsHtml) {
-          const body = `
-            <h1>${escapeHtml(title)}</h1>
-            <p>${escapeHtml(message)}</p>
-            <a class="button-link" href="/">Go to Todo</a>
-          `
-          return res.status(status).send(renderActionShell(title, body))
-        }
-        return res.status(status).json({ error: message })
-      }
 
       const parsed = actionRequestSchema.safeParse(req.body)
       if (!parsed.success) {
-        return respondError(400, "Invalid action", "Invalid action.")
+        throw new ValidationError("Invalid action.")
       }
 
       const candidateActionToken = await deps.getActionToken(token)
       if (!candidateActionToken) {
-        return respondError(400, "Invalid link", "Invalid or expired link.")
+        throw new ValidationError("Invalid or expired link.")
       }
       if (candidateActionToken.userId !== req.user!.id) {
-        return respondError(403, "Not authorized", "Unauthorized.")
-      }
-      const actionToken = await deps.consumeActionToken(token, req.user!.id)
-      if (!actionToken) {
-        return respondError(400, "Invalid link", "Invalid or expired link.")
+        throw new UnauthorizedError("Unauthorized.")
       }
 
       const settings = await deps.getUserSettings(req.user!.id)
       if (!settings) {
-        return respondError(400, "Missing settings", "No settings configured.")
+        throw new ValidationError("No settings configured.")
       }
 
-      const calendarId = actionToken.calendarId
+      const calendarId = candidateActionToken.calendarId
       const event = await deps.getCalendarEvent(
         req.user!.id,
-        actionToken.eventId,
+        candidateActionToken.eventId,
         calendarId,
       )
       if (!event) {
-        return respondError(404, "Task not found", "Task not found.")
+        throw new NotFoundError("Task not found.")
       }
 
       const task = deps.mapCalendarEventToTask(event)
       if (!task) {
-        return respondError(404, "Task not found", "Task not found.")
+        throw new NotFoundError("Task not found.")
       }
 
       const actionSettings = { ...settings, calendarId }
       if (parsed.data.action === "complete") {
         const updatedEvent = await deps.updateCalendarEventCompletion(
           req.user!.id,
-          actionToken.eventId,
+          candidateActionToken.eventId,
           actionSettings,
           true,
         )
         if (!updatedEvent) {
-          return respondError(404, "Task not found", "Task not found.")
+          throw new NotFoundError("Task not found.")
         }
       } else {
         if (!event.start?.dateTime || !event.end?.dateTime) {
-          return respondError(400, "Invalid event", "Invalid event time range.")
+          throw new ValidationError("Invalid event time range.")
         }
 
         const start = new Date(event.start.dateTime)
@@ -247,31 +245,32 @@ export function createApiActionHandler(
         )
 
         if (!slot) {
-          return respondError(
-            409,
-            "No free time slots",
-            "No free time slots available in the next 90 days.",
-          )
+          throw new ConflictError("No free time slots available in the next 90 days.")
         }
 
         const updated = await deps.updateCalendarEventTime(
           req.user!.id,
-          actionToken.eventId,
+          candidateActionToken.eventId,
           actionSettings,
           slot,
         )
         if (!updated) {
-          return respondError(404, "Task not found", "Task not found.")
+          throw new NotFoundError("Task not found.")
         }
       }
 
       await deps.refreshCalendarEventActions(
         req.user!.id,
         calendarId,
-        actionToken.eventId,
+        candidateActionToken.eventId,
         task.details,
         baseUrlProvider(),
       )
+
+      const actionToken = await deps.consumeActionToken(token, req.user!.id)
+      if (!actionToken) {
+        throw new ValidationError("Invalid or expired link.")
+      }
 
       if (wantsHtml) {
         const actionLabel =
@@ -287,7 +286,16 @@ export function createApiActionHandler(
       return res.json({ success: true })
     } catch (error) {
       console.error("Error processing action:", error)
-      return res.status(500).json({ error: "Failed to process action" })
+      if (req.headers.accept?.includes("text/html")) {
+        const normalized = normalizeError(error, "Failed to process action")
+        const body = `
+          <h1>${escapeHtml("Something went wrong")}</h1>
+          <p>${escapeHtml(normalized.message)}</p>
+          <a class="button-link" href="/">Go to Todo</a>
+        `
+        return res.status(normalized.status).send(renderActionShell("Error", body))
+      }
+      return sendApiError(res, error, "Failed to process action")
     }
   }
 }
