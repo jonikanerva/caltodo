@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "tsx script/build.ts",
+    "build:production": "npm run build && npm prune --omit=dev",
     "start": "NODE_ENV=production node dist/index.cjs",
     "lint": "eslint . --max-warnings=0",
     "quality:deadcode": "DATABASE_URL=postgres://localhost:5432/local knip",
