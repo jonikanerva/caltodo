@@ -28,6 +28,26 @@ export default defineConfig({
         "server/index.ts",
         "server/vite.ts",
       ],
+      thresholds: {
+        "server/handlers/taskRoutes.ts": {
+          statements: 75,
+          branches: 65,
+          functions: 80,
+          lines: 75,
+        },
+        "server/handlers/actionRoutes.ts": {
+          statements: 68,
+          branches: 60,
+          functions: 70,
+          lines: 68,
+        },
+        "server/calendar.ts": {
+          statements: 20,
+          branches: 20,
+          functions: 20,
+          lines: 20,
+        },
+      },
     },
   },
 })

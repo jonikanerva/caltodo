@@ -442,7 +442,17 @@ async function updateCalendarEventActions(
   const calendar = await getCalendarClient(userId)
   if (!calendar) return
 
-  const createdToken = await createActionToken(userId, eventId, calendarId)
+  let createdToken: {
+    id: string
+    token: string
+    tokenHash: string
+  }
+  try {
+    createdToken = await createActionToken(userId, eventId, calendarId)
+  } catch (error) {
+    console.error("Error creating action token:", error)
+    return
+  }
   const manageLink = `${baseUrl}/action/${createdToken.token}`
   const description = buildEventDescription(details, manageLink)
 

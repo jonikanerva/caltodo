@@ -276,6 +276,46 @@ describe("createPostTasksHandler", () => {
     expect(deps.rescheduleAllUserTasks).toHaveBeenCalledWith("user-1", ["event-1"])
     expect(response.body).toMatchObject({ id: "event-1", title: "Write tests" })
   })
+
+  it("maps createCalendarEvent null to 500 contract error", async () => {
+    deps.getUserSettings.mockResolvedValueOnce({
+      calendarId: "primary",
+      defaultDuration: 30,
+    })
+    deps.findFreeSlot.mockResolvedValueOnce({
+      start: new Date("2026-02-09T10:00:00.000Z"),
+      end: new Date("2026-02-09T10:45:00.000Z"),
+    })
+    deps.createCalendarEvent.mockResolvedValueOnce(null)
+    const response = createMockResponse()
+
+    await createPostTasksHandler(deps, () => "http://localhost:5000")(
+      req,
+      response.res as never,
+      vi.fn(),
+    )
+
+    expect(response.statusCode).toBe(500)
+    expect(response.body).toEqual({ error: "Failed to create calendar event" })
+  })
+
+  it("maps upstream slot-resolution throw to 400 create-task error", async () => {
+    deps.getUserSettings.mockResolvedValueOnce({
+      calendarId: "primary",
+      defaultDuration: 30,
+    })
+    deps.findFreeSlot.mockRejectedValueOnce(new Error("calendar api down"))
+    const response = createMockResponse()
+
+    await createPostTasksHandler(deps, () => "http://localhost:5000")(
+      req,
+      response.res as never,
+      vi.fn(),
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(response.body).toEqual({ error: "Failed to create task" })
+  })
 })
 
 describe("createPatchTaskHandler", () => {
@@ -405,6 +445,29 @@ describe("createRescheduleTaskHandler", () => {
 
     expect(response.statusCode).toBe(200)
     expect(response.body).toEqual({ success: true })
+  })
+
+  it("maps updateCalendarEventTime false to task-not-found response", async () => {
+    const req = { user: { id: "user-1" }, params: { id: "event-1" } } as never
+    deps.getUserSettings.mockResolvedValueOnce({
+      calendarId: "primary",
+      defaultDuration: 30,
+    })
+    deps.getCalendarEvent.mockResolvedValueOnce({
+      start: { dateTime: "2026-02-09T10:00:00.000Z" },
+      end: { dateTime: "2026-02-09T10:30:00.000Z" },
+    })
+    deps.findFreeSlot.mockResolvedValueOnce({
+      start: new Date("2026-02-10T10:00:00.000Z"),
+      end: new Date("2026-02-10T10:30:00.000Z"),
+    })
+    deps.updateCalendarEventTime.mockResolvedValueOnce(false)
+    const response = createMockResponse()
+
+    await createRescheduleTaskHandler(deps)(req, response.res as never, vi.fn())
+
+    expect(response.statusCode).toBe(404)
+    expect(response.body).toEqual({ error: "Task not found" })
   })
 })
 
