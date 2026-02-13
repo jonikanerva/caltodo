@@ -110,7 +110,7 @@ function setToHourInTimezone(date: Date, hour: number, timezone: string): Date {
 }
 
 function advanceToNextDayAtHour(date: Date, hour: number, timezone: string): Date {
-  let result = setToHourInTimezone(date, hour, timezone)
+  const result = setToHourInTimezone(date, hour, timezone)
   result.setTime(result.getTime() + 24 * 60 * 60 * 1000)
   const { hours } = getTimeInTimezone(result, timezone)
   if (hours !== hour) {

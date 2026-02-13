@@ -135,16 +135,14 @@ export default function MainPage() {
       return apiRequest("PATCH", `/api/tasks/${id}`, { completed })
     },
     onMutate: ({ id }) => {
-      setCompletingTaskIds((prev) => new Set(prev).add(id))
+      setCompletingTaskIds((prev) => new Set([...Array.from(prev), id]))
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
     },
     onError: (_, { id }) => {
       setCompletingTaskIds((prev) => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
+        return new Set(Array.from(prev).filter((taskId) => taskId !== id))
       })
     },
   })

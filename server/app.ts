@@ -102,10 +102,7 @@ function applyCommonMiddleware(app: Express, isProduction: boolean): void {
 
   app.use((req, res, next) => {
     const isDevelopment = !isProduction
-    const scriptSrc = ["'self'"]
-    if (isDevelopment) {
-      scriptSrc.push("'unsafe-eval'")
-    }
+    const scriptSrc = isDevelopment ? ["'self'", "'unsafe-eval'"] : ["'self'"]
 
     const csp = [
       "default-src 'self'",

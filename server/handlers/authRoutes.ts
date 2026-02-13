@@ -147,16 +147,12 @@ export function createPatchSettingsHandler(
   return async (req, res) => {
     try {
       const data = updateSettingsSchema.parse(req.body)
-      let settings = await deps.getUserSettings(req.user!.id)
-
-      if (settings) {
-        settings = await deps.updateUserSettings(req.user!.id, data)
-      } else {
-        settings = await deps.createUserSettings({
-          userId: req.user!.id,
-          ...data,
-        })
-      }
+      const settings = (await deps.getUserSettings(req.user!.id))
+        ? await deps.updateUserSettings(req.user!.id, data)
+        : await deps.createUserSettings({
+            userId: req.user!.id,
+            ...data,
+          })
 
       res.json(settings)
     } catch (error) {

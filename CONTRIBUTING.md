@@ -14,11 +14,13 @@ Preferred communication style: simple, everyday language.
 ## Scripts
 
 - `npm run dev` - Start development server (frontend + backend)
+- `npm run lint` - Run strict ESLint quality gates (includes complexity thresholds)
+- `npm run quality:deadcode` - Detect unused files/exports/dependencies with Knip
 - `npm run test` - Run tests once
 - `npm run test:integration` - Run integration tests only
 - `npm run test:watch` - Run tests in watch mode
 - `npm run test:coverage` - Run tests with coverage report
-- `npm run verify` - Run full quality gate (`test:coverage`, `check`, `build`)
+- `npm run verify` - Run full quality gate (`lint`, `quality:deadcode`, `test:coverage`, `check`, `build`)
 - `npm run db:generate` - Create a new migration from schema changes
 - `npm run db:migrate` - Run pending migrations manually
 - `npm run build` - Build for production

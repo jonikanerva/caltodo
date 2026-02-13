@@ -171,15 +171,15 @@ export class DatabaseStorage implements IStorage {
     calendarId: string,
     keepTokenHash?: string,
   ): Promise<void> {
-    const conditions = [
+    const baseConditions = [
       eq(actionTokens.userId, userId),
       eq(actionTokens.eventId, eventId),
       eq(actionTokens.calendarId, calendarId),
       isNull(actionTokens.usedAt),
     ]
-    if (keepTokenHash) {
-      conditions.push(ne(actionTokens.tokenHash, keepTokenHash))
-    }
+    const conditions = keepTokenHash
+      ? [...baseConditions, ne(actionTokens.tokenHash, keepTokenHash)]
+      : baseConditions
     await db
       .update(actionTokens)
       .set({ usedAt: new Date() })

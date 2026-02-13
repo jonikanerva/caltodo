@@ -25,7 +25,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 }
 
 export function loginWithGoogle(): void {
-  window.location.href = "/api/auth/google"
+  window.location.assign("/api/auth/google")
 }
 
 export async function logout(): Promise<void> {
@@ -35,5 +35,5 @@ export async function logout(): Promise<void> {
     credentials: "include",
     headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {},
   })
-  window.location.href = "/"
+  window.location.assign("/")
 }

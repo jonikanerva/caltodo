@@ -100,22 +100,21 @@ export function setupAuth(app: Express): void {
             req.session.pendingActionToken = pendingActionToken
           }
 
-          let user = await storage.getUserByGoogleId(profile.id)
+          const existingUser = await storage.getUserByGoogleId(profile.id)
+          const user = existingUser
+            ? await storage.updateUser(existingUser.id, {
+                accessToken,
+                refreshToken: refreshToken || existingUser.refreshToken,
+              })
+            : await storage.createUser({
+                googleId: profile.id,
+                email: profile.emails?.[0]?.value || "",
+                displayName: profile.displayName || profile.emails?.[0]?.value || "User",
+                accessToken,
+                refreshToken,
+              })
 
-          if (user) {
-            user = await storage.updateUser(user.id, {
-              accessToken,
-              refreshToken: refreshToken || user.refreshToken,
-            })
-          } else {
-            user = await storage.createUser({
-              googleId: profile.id,
-              email: profile.emails?.[0]?.value || "",
-              displayName: profile.displayName || profile.emails?.[0]?.value || "User",
-              accessToken,
-              refreshToken,
-            })
-
+          if (!existingUser) {
             await storage.createUserSettings({
               userId: user!.id,
               workStartHour: 9,

@@ -107,7 +107,7 @@ const getOffsetMinutes = (tz: string): number => {
   }
 }
 
-const TIMEZONES = Intl.supportedValuesOf("timeZone").sort((a, b) => {
+const TIMEZONES = Intl.supportedValuesOf("timeZone").toSorted((a, b) => {
   const offsetA = getOffsetMinutes(a)
   const offsetB = getOffsetMinutes(b)
   // Sort by offset first, then alphabetically by name
