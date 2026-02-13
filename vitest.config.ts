@@ -11,6 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    setupFiles: ["./server/testSetup.ts"],
     include: [
       "server/**/*.test.ts",
       "shared/**/*.test.ts",
@@ -30,22 +31,22 @@ export default defineConfig({
       ],
       thresholds: {
         "server/handlers/taskRoutes.ts": {
-          statements: 75,
-          branches: 65,
+          statements: 78,
+          branches: 70,
           functions: 80,
-          lines: 75,
+          lines: 78,
         },
         "server/handlers/actionRoutes.ts": {
-          statements: 68,
-          branches: 60,
+          statements: 72,
+          branches: 65,
           functions: 70,
-          lines: 68,
+          lines: 72,
         },
         "server/calendar.ts": {
-          statements: 20,
-          branches: 20,
-          functions: 20,
-          lines: 20,
+          statements: 30,
+          branches: 30,
+          functions: 30,
+          lines: 30,
         },
       },
     },

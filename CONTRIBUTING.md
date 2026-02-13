@@ -15,8 +15,10 @@ Preferred communication style: simple, everyday language.
 
 - `npm run dev` - Start development server (frontend + backend)
 - `npm run test` - Run tests once
+- `npm run test:integration` - Run integration tests only
 - `npm run test:watch` - Run tests in watch mode
 - `npm run test:coverage` - Run tests with coverage report
+- `npm run verify` - Run full quality gate (`test:coverage`, `check`, `build`)
 - `npm run db:generate` - Create a new migration from schema changes
 - `npm run db:migrate` - Run pending migrations manually
 - `npm run build` - Build for production
@@ -24,9 +26,7 @@ Preferred communication style: simple, everyday language.
 
 ## Before Committing
 
-- Run `npm run check`
-- Run `npm run test`
-- Run `npm run build`
+- Run `npm run verify`
 - Keep commits focused: one holistic change per commit; split unrelated fixes
 
 ## Design Guidelines

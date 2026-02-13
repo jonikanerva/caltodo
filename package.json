@@ -9,8 +9,10 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc && prettier --check .",
     "test": "vitest run",
+    "test:integration": "vitest run server/integration",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "verify": "npm run test:coverage && npm run check && npm run build",
     "format": "prettier --write .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx script/migrate.ts"
