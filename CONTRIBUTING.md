@@ -6,29 +6,29 @@ Preferred communication style: simple, everyday language.
 
 ## Development Workflow
 
-- Install dependencies: `npm install`
+- Install dependencies: `pnpm install`
 - Create `.env` in the project root (see `README.md`)
-- Run migrations: `npm run db:migrate`
-- Start the dev server: `npm run dev`
+- Run migrations: `pnpm run db:migrate`
+- Start the dev server: `pnpm run dev`
 
 ## Scripts
 
-- `npm run dev` - Start development server (frontend + backend)
-- `npm run lint` - Run strict ESLint quality gates (includes complexity thresholds)
-- `npm run quality:deadcode` - Detect unused files/exports/dependencies with Knip
-- `npm run test` - Run tests once
-- `npm run test:integration` - Run integration tests only
-- `npm run test:watch` - Run tests in watch mode
-- `npm run test:coverage` - Run tests with coverage report
-- `npm run verify` - Run full quality gate (`lint`, `quality:deadcode`, `test:coverage`, `check`, `build`)
-- `npm run db:generate` - Create a new migration from schema changes
-- `npm run db:migrate` - Run pending migrations manually
-- `npm run build` - Build for production
-- `npm run start` - Run production build (includes startup migrations + in-process cron jobs)
+- `pnpm run dev` - Start development server (frontend + backend)
+- `pnpm run lint` - Run strict ESLint quality gates (includes complexity thresholds)
+- `pnpm run quality:deadcode` - Detect unused files/exports/dependencies with Knip
+- `pnpm run test` - Run tests once
+- `pnpm run test:integration` - Run integration tests only
+- `pnpm run test:watch` - Run tests in watch mode
+- `pnpm run test:coverage` - Run tests with coverage report
+- `pnpm run verify` - Run full quality gate (`lint`, `quality:deadcode`, `test:coverage`, `check`, `build`)
+- `pnpm run db:generate` - Create a new migration from schema changes
+- `pnpm run db:migrate` - Run pending migrations manually
+- `pnpm run build` - Build for production
+- `pnpm run start` - Run production build (includes startup migrations + in-process cron jobs)
 
 ## Before Committing
 
-- Run `npm run verify`
+- Run `pnpm run verify`
 - Keep commits focused: one holistic change per commit; split unrelated fixes
 
 ## Design Guidelines

@@ -131,32 +131,32 @@ Notes:
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Run database migrations
-npm run db:migrate
+pnpm run db:migrate
 
 # Start development server
-npm run dev
+pnpm run dev
 ```
 
 The app will be available at `http://localhost:5000`.
 
 ### Development Scripts
 
-- `npm run dev` - Start development server (frontend + backend)
-- `npm run lint` - Run strict ESLint quality gates (includes complexity thresholds)
-- `npm run quality:deadcode` - Detect unused files/exports/dependencies with Knip
-- `npm run check` - Run type and code-style checks
-- `npm run test` - Run the test suite once
-- `npm run test:integration` - Run integration tests only
-- `npm run test:watch` - Run tests in watch mode
-- `npm run test:coverage` - Run tests with coverage report
-- `npm run verify` - Run full quality gate (`lint`, `quality:deadcode`, `test:coverage`, `check`, `build`)
-- `npm run db:generate` - Create a new migration from schema changes
-- `npm run db:migrate` - Run pending migrations manually
-- `npm run build` - Build for production
-- `npm run start` - Run production build (also runs pending migrations and starts cron jobs in-process)
+- `pnpm run dev` - Start development server (frontend + backend)
+- `pnpm run lint` - Run strict ESLint quality gates (includes complexity thresholds)
+- `pnpm run quality:deadcode` - Detect unused files/exports/dependencies with Knip
+- `pnpm run check` - Run type and code-style checks
+- `pnpm run test` - Run the test suite once
+- `pnpm run test:integration` - Run integration tests only
+- `pnpm run test:watch` - Run tests in watch mode
+- `pnpm run test:coverage` - Run tests with coverage report
+- `pnpm run verify` - Run full quality gate (`lint`, `quality:deadcode`, `test:coverage`, `check`, `build`)
+- `pnpm run db:generate` - Create a new migration from schema changes
+- `pnpm run db:migrate` - Run pending migrations manually
+- `pnpm run build` - Build for production
+- `pnpm run start` - Run production build (also runs pending migrations and starts cron jobs in-process)
 
 ## Production Deployment
 
@@ -190,13 +190,13 @@ PRODUCTION_APP_URL=https://your-domain.com
 
 ```bash
 # Install dependencies (includes dev dependencies needed for build)
-npm ci
+pnpm install --frozen-lockfile
 
 # Build the application
-npm run build
+pnpm run build
 
 # Start the server
-npm start
+pnpm start
 ```
 
 ### Deployment Checklist

@@ -7,11 +7,11 @@ This repository contains Todo, a web-based todo app that stores tasks in Google 
 
 Quick start:
 
-- Install dependencies: `npm install`
+- Install dependencies: `pnpm install`
 - Create `.env` with database and Google OAuth secrets (see `README.md`)
-- Develop: `npm run dev`
-- Run complete local validation: `npm run verify`
+- Develop: `pnpm run dev`
+- Run complete local validation: `pnpm run verify`
 - Runtime model: a single web process handles API, startup migrations, and scheduled cron jobs (no separate cron worker process)
-- Before committing, verify changes with `npm run verify`
-- Before presenting results to the user, always run `npm run verify`
+- Before committing, verify changes with `pnpm run verify`
+- Before presenting results to the user, always run `pnpm run verify`
 - Keep commits focused: one holistic change per commit; split unrelated or separate fixes into individual commits
