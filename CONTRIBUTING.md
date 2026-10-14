@@ -6,29 +6,27 @@ Preferred communication style: simple, everyday language.
 
 ## Development Workflow
 
-- Install dependencies: `pnpm install`
+- Read `DOCTRINE.md`, `VISION.md`, and `STACK.md` before a change. `CLAUDE.md` and `AGENTS.md` are the agent contracts.
+- Install the tools and the dependencies: `mise trust`, then `mise run setup`
 - Create `.env` in the project root (see `README.md`)
-- Run migrations: `pnpm run db:migrate`
-- Start the dev server: `pnpm run dev`
+- Start the app: `mise run dev`
+- Change the API: change the Rust route and its types, then run `mise run contract:export` and `mise run contract:generate`. Never edit `packages/api-client/src/generated/` by hand.
+- Change a query: run `mise run sqlx:prepare` to update `.sqlx/`.
+- Change the schema: add a new file in `migrations/`. Never edit a released migration.
 
-## Scripts
+## Commands
 
-- `pnpm run dev` - Start development server (frontend + backend)
-- `pnpm run lint` - Run strict ESLint quality gates (includes complexity thresholds)
-- `pnpm run quality:deadcode` - Detect unused files/exports/dependencies with Knip
-- `pnpm run test` - Run tests once
-- `pnpm run test:integration` - Run integration tests only
-- `pnpm run test:watch` - Run tests in watch mode
-- `pnpm run test:coverage` - Run tests with coverage report
-- `pnpm run verify` - Run full quality gate (`lint`, `quality:deadcode`, `test:coverage`, `check`, `build`)
-- `pnpm run db:generate` - Create a new migration from schema changes
-- `pnpm run db:migrate` - Run pending migrations manually
-- `pnpm run build` - Build for production
-- `pnpm run start` - Run production build (includes startup migrations + in-process cron jobs)
+`mise.toml` defines every command. `STACK.md` §3 describes them.
+
+- `mise run format` - Format the Rust and TypeScript sources
+- `mise run lint` - Clippy, Oxlint, and the TypeScript type checks
+- `mise run build` - Contract export, client generation, web build, and the release server
+- `mise run test` - Nextest, doctests, Vitest, and the Playwright journeys
+- `mise run verify` - The full quality gate (format check, lint, SQLx check, contract check, secret and dependency scans, build, and tests)
 
 ## Before Committing
 
-- Run `pnpm run verify`
+- Run `mise run verify`
 - Keep commits focused: one holistic change per commit; split unrelated fixes
 
 ## Design Guidelines

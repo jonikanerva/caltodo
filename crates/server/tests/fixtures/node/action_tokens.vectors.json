@@ -1,0 +1,45 @@
+{
+  "source": "server/tokens.ts (Node) at the commit that adds this file",
+  "secret": "fixture-action-token-secret-0123456789abcdef",
+  "expiryMs": 604800000,
+  "generated": [
+    {
+      "token": "uMUH5Q0T1HwAH07EInQq8eKO3ksQLvr-4gHeEnFgg8w",
+      "tokenHash": "7bae63804bc38b7593489e7f4ca1f882aaca37a2eb44d6c7f0251a6fc7fc066d"
+    },
+    {
+      "token": "I3tU7KnLewPv0RBFFC5OXA61euH-KfElATRIk4Wor2M",
+      "tokenHash": "4c1e402c209e89d31e192770335fb7a7a8a87a42e1e728833bcad57c71f3753a"
+    },
+    {
+      "token": "MV0mnSINqYuUDuDYWnaKvHqFIP1gFl8Y9rvHBxZUMjs",
+      "tokenHash": "f5e761fd175dcbae12cea1fc8ca184365a288f73fde359e77df9d8f1d2cf09b9"
+    },
+    {
+      "token": "cdCdY50h_Wj_VucBpXvgK3-rD7XDwnPiMgBcJ-fAAxU",
+      "tokenHash": "52b7068e0bf6db41bcb19e53252e75ebc61f2642d205b69975c077caa793d37e"
+    }
+  ],
+  "hashed": [
+    {
+      "token": "",
+      "tokenHash": null
+    },
+    {
+      "token": "a",
+      "tokenHash": "00cacdf9b2cab6560cd283772a4058722495d25c99d460da77cd0b40e9fe00aa"
+    },
+    {
+      "token": "AAAA",
+      "tokenHash": "e17e52853baca7524a93c5d266d84706471176287c011e9a14d9e4b114e462c6"
+    },
+    {
+      "token": "not base64url ä",
+      "tokenHash": "1f2267d8e129fb74cd1fd7e55135ad2daf3a2af66ae2abdb9a6ca9e02a59474d"
+    },
+    {
+      "token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenHash": "fb75511a4a81bf3934960ab346c9c7d6d689b866c27355516cf40f476b7b3fa6"
+    }
+  ]
+}

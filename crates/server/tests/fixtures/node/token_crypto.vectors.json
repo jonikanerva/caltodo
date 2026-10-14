@@ -1,0 +1,98 @@
+{
+  "source": "server/crypto.ts (Node) at the commit that adds this file",
+  "key": "fixture-token-encryption-key-0123456789abcdef",
+  "encrypted": [
+    {
+      "plaintext": "ya29.a0AfH6SMBx-synthetic-access-token",
+      "stored": "enc:v1:HEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw"
+    },
+    {
+      "plaintext": "1//0gSynthetic-refresh-token_ABCdef-123",
+      "stored": "enc:v1:k_IfObVgqCHD0YSo:sc4d-fJsWxDHljtH-MCLng:2lOP_mpg9_1jHg_5v76Cnnw36Xe1_zgMD6soJFWT7rfkAjrzNUQr"
+    },
+    {
+      "plaintext": "a",
+      "stored": "enc:v1:-KBdDuLiAYnYRWKj:JFeojE79mX8elkXwSHBQ-A:zA"
+    },
+    {
+      "plaintext": "unicode: äöå ✅ ☑️",
+      "stored": "enc:v1:HuF3_en2p6YqCFt_:K6AfwPtJP-wLL_mD7m7yiw:BcC6DIbRRmKyJm2R_xLGUKIHIjX29zJLF78"
+    },
+    {
+      "plaintext": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "stored": "enc:v1:d8DLRHDHyKyinqze:E5q6c1G8m6L_IbiQOHUEBA:PeajflsYcjbP7F8h3Kf9fD_8ilpFByXsfoVD2Gr1mvh0YftaJVpv__55i1kK7FwochUe2GNHPl4p1kI9RMSe63Ne35_rNf2uAwZri2KRGenBMRI_9EXxyAjlpSQG0gGV0Krl7YT41qdARA2xTdzTx48bd2kUrqX6Dy9954SBqHZ8wPega1lOONX_1uyu4LGLE7X7_8v9579f-NlZyhKcSiEVf1kkiy036qm4lfrfdxvJQITXd15HPIWYeBcXvz2CEOtYPKvA9Ax2YH9MOh1PXxzY4EWf0E_ZuhRNHcha7VvV_9-QgcogVip6_si-SjKp-iI4d2Ljnpj0BqXKIW9UOirqOL7M5ibx7Fia2ghNmgSdfleaaKZMFbxjG2GYBjFsM0HpIpqh-QklZGYoGP2jjMIvSSdgiMWknpYZ8fwvuOhaCCMXHuZj4k_PTiOaQbtmb-cuQ8mRYz82f5T7MrmRcK0lmf9kU6Gfq8Duii6dUq5MLF_URD55bTd5vG71CfRo4j_AM64VPmxk2GFr8rVyLqeCEV9rTeUUTySfbw5W5EvsgYHiCfUnb81JEE4oNR2qLaTQieVhRnKK_JRZqBQCGU9Ai4HBiB8kvTEWB72iT2LUuJkUbvnVl_XHbOH-P4pSdTo_BUcPooa0-ii1UYLPtowGkiJdO75M5qsL0ZdKv95M1pXoaqthTfza73mI3kha3zqCkPG_SPy4TSyntfWLK4jcPLD3n4pY5pZB9PjmIftTK-GMHTRT9nVqAmTf8LknMy1j6Rlycm7B9nU4EgTyGNFoYhAwjD_9zv9txQBZ3XgOygyJsMiJIcTUc6vY46K1cIjfwKjqjIyIgOLQwcWDE3uxw6tbrpjmO5uxWbECFOiwU1lz-I5uw2qN0TO_m27x0Z14NsYq83fdAiCDK56Sxo4T4aIi2TmMUx07Nh5K6tWpFoaQzf3GKDywjwxMBwBPAH4JGIJoxF-JOiX96qqRNLXuRQajm1bNdCb2WqKoj0uJPB8-4mfZHX5O3RsO6GqT3iDi6znTSf2MivRmlXsecAsE60fCnA6XQGTup0-KvEHa2pKZtjmmx5cehTTVljKG7KTUPVEu28qZr3dq9VAwpXURH7o929G8bq-QLLOJ7rBWEqDq4vgWTJKrfgXcQxR0WlpwuVGCpJFlWFIqWLxN_kCO5EWG8FmrdX6jrzxyeMvMHY2gMkDx8swzaDUigypOBSmMCnM8Pxi8P5mhr_f0eOBny6P2IM1nC1jdu58f2cA8pyA8yC_7R9UxR0bYG6muLhsQL9atJq1i2D6JeEIRunyznxCsGGE6OjF4swFHDISSUSw5umVqgPrmzbQDYy_ipyI5TMjnj-zdBYfpAAUEEZo5SQzUQZiZMoWZwdARuPoJBjP6ikCouDMBXMTJ12mfg3GbwXZy4rxxbGb54vUQSkgjsEpP48plGzR1i6tpKKbUqKmea7MS-zoPfLt6rnrq6Yrk-Nf_O4EyJ78hiPlC0QMgyMB1U-eY0TydOn7YRtVfl_DRonZ485VZoPX4fRfJho4Z2SGqTQxhjZVYOvJ8BnfrghS-Jhs0VCP7TzMv0Vs25T08EM-TG7CIP5uEJR04_wJ7xeZlANvax8T_9scrjaKV78oOM90g1vGYRzrogmRDPtZBfy-o7Go5YtLg8fwPfknibWQ0caM_EcyBmMGln9wmikrHxUeXMMelZrU3a-45q6rJCcxCSwaVydL9h9u3zQ8HmrcJ_Rdy0mNwXnWIp1B6dX9X1r1x0ca-X_C8WjbAnwjQjz2nOWAiQKchzGp631d4OxC4ZHVZkqryIUacLenG17np7hggrHxTIY0aC4ATuvdPbwO55OkXUFkPYfgrNJ3M2lGuxc8HmUedxFI87oiYN54oZAxPWggUMrXfazCDXJ36A7lYTM5gewA6mHmhC0PqL1o5T-rTmtXirf38tLWT8BuhA17G0KAIkygsm2Bw7KNXhQE5BTlPJJLZaBbf4aRR0533fM8FbACvKk23xJUoHdqgE4F7Vad9459RLTC_PbEHWAEg81k7JXnHG2V0bBr6cUgn0koNxAPgm3b9--hNE0Iso8k0I8CoxKRp0RQxED0SRV64xxbY8a_alJ83GDAW8sw3NpDMb8Tqf-u1xzBSo1ngKDa4l_BQBFGvjrrQOFA4mhCWSdThQAmtPZGodho-qKHvbslmU3wok9wSHqsLspRKd_mQigWqI_W-y7WK8TdTiWfDTSPJ_tMAMpXyCUg-y8O5NJQDDylpPz6Yyz5UWzB6TNdQhnFjdWx_ikqa1foZM4hWZWa85lHPQe25L3PpQnI51FG6n6KfIe67LGOP285Q-hP7C04SNnC67ceFfQkv_RU2fP7uMULusLbI-YqKeJpPEZ_jlkG1paKzm_Cu8mvD2FenbiWJhll4qQaZJAcWP3j5y2WDQQCyLLGazMnakD34_9In8f75a7vGLo7ryvQZs_1TEoKlifm7oCnb7v4JUZomCQzi-O7na4hgVynzDuJVrpjEE3aew2jpXsd-9d_YR1N-IW6ZFqZtkFOnFRu0KRLzWWAwmtSTE_33_tDb609XG532T0hBnZvu1dqeI1W8MNyx51j12Bsnl67YAEpXPqGTfEO6nSn7bCeGL3GPU-vnStg2kU6FyF3MuQhQM2-H7DRh5-D1nUlTnBSzcTkF-KyQ38q9g9PyPpa317Xn712wHgJwzqveTG_1O2Shbv2lIKdYXxxMR4Lt640"
+    }
+  ],
+  "decrypt": [
+    {
+      "name": "legacy plaintext passes through",
+      "stored": "ya29.legacy-plaintext",
+      "decrypted": "ya29.legacy-plaintext"
+    },
+    {
+      "name": "empty string passes through",
+      "stored": "",
+      "decrypted": ""
+    },
+    {
+      "name": "prefix only",
+      "stored": "enc:v1:",
+      "decrypted": null
+    },
+    {
+      "name": "four parts",
+      "stored": "enc:v1:HEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA",
+      "decrypted": null
+    },
+    {
+      "name": "six parts",
+      "stored": "enc:v1:HEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw:extra",
+      "decrypted": null
+    },
+    {
+      "name": "short iv",
+      "stored": "enc:v1:gDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw",
+      "decrypted": null
+    },
+    {
+      "name": "short tag",
+      "stored": "enc:v1:HEgDqF-5uX5M2DXi:5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw",
+      "decrypted": null
+    },
+    {
+      "name": "tampered ciphertext",
+      "stored": "enc:v1:HEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:Any9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw",
+      "decrypted": null
+    },
+    {
+      "name": "tampered tag",
+      "stored": "enc:v1:HEgDqF-5uX5M2DXi:AF5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw",
+      "decrypted": null
+    },
+    {
+      "name": "tampered iv",
+      "stored": "enc:v1:AEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw",
+      "decrypted": null
+    },
+    {
+      "name": "other version passes through",
+      "stored": "enc:v2:HEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw",
+      "decrypted": "enc:v2:HEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw"
+    },
+    {
+      "name": "upper-case prefix passes through",
+      "stored": "ENC:v1:HEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw",
+      "decrypted": "ENC:v1:HEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw"
+    },
+    {
+      "name": "padded base64 iv",
+      "stored": "enc:v1:HEgDqF-5uX5M2DXi==:5F5phyCg1monjACz9rjiaA:Zny9R6zFjdUNfLXpGyMLqtORItug1Vice_s-kHQr4LhvbCOS9Rw",
+      "decrypted": "ya29.a0AfH6SMBx-synthetic-access-token"
+    },
+    {
+      "name": "empty ciphertext",
+      "stored": "enc:v1:HEgDqF-5uX5M2DXi:5F5phyCg1monjACz9rjiaA:",
+      "decrypted": null
+    }
+  ]
+}

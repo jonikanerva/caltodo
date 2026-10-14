@@ -1,0 +1,56 @@
+# Railpack 0.40 reads this manifest to find the binary of the workspace. It
+# decodes `edition`, `rust-version`, and `publish` as plain values, and an
+# inherited value (`edition.workspace = true`) fails that decode (STACK.md
+# §15). So this crate repeats the values of `[workspace.package]`. Keep them
+# equal.
+[package]
+name = "caltodo"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+default-run = "caltodo"
+description = "The caltodo server: Google Calendar tasks with automatic scheduling"
+
+[dependencies]
+caltodo-domain = { workspace = true }
+aes-gcm = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+base64 = { workspace = true }
+form_urlencoded = { workspace = true }
+futures-util = { workspace = true }
+getrandom = { workspace = true }
+hmac = { workspace = true }
+http = { workspace = true }
+jiff = { workspace = true }
+jiff-sqlx = { workspace = true }
+oauth2 = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+sqlx = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tower-sessions = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+utoipa = { workspace = true }
+utoipa-axum = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true
+
+# The deterministic server of the browser journeys (e2e/).
+[[example]]
+name = "e2e_server"
+test = false

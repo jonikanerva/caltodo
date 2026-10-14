@@ -1,0 +1,7 @@
+# Every build uses the committed SQLx query metadata (`.sqlx/`), so a build
+# needs no database and never reads a DATABASE_URL of the environment
+# (Railway gives the service variables to the build). `cargo sqlx prepare`
+# sets SQLX_OFFLINE=false itself; an explicit environment value wins over
+# this default.
+[env]
+SQLX_OFFLINE = "true"

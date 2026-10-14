@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, user_id, event_id, calendar_id,\n                      expires_at AS \"expires_at: jiff_sqlx::DateTime\",\n                      used_at AS \"used_at: jiff_sqlx::DateTime\"\n                 FROM action_tokens WHERE token_hash = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "action_tokens",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "action_tokens",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "event_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "action_tokens",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "calendar_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "action_tokens",
+            "name": "calendar_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_at: jiff_sqlx::DateTime",
+        "type_info": "Timestamp",
+        "origin": {
+          "Table": {
+            "table": "action_tokens",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "used_at: jiff_sqlx::DateTime",
+        "type_info": "Timestamp",
+        "origin": {
+          "Table": {
+            "table": "action_tokens",
+            "name": "used_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "4db163db140cd465502081133a46af8805e3868593643da50612c8d01811af31"
+}

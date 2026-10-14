@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE action_tokens SET used_at = $2 WHERE id = $1 AND used_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "76fea027d0102420771b6c1a8af9fe8fe7cdfc8d9f80eecc4327dc4bf38b5829"
+}

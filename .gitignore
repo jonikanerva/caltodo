@@ -1,9 +1,31 @@
-node_modules
-dist
-coverage
-.DS_Store
-server/public
-vite.config.ts.*
-*.tar.gz
+# secrets
 .env
+.env.*
+
+# dependencies
+node_modules
+**/node_modules
+
+# builds
+/target
+/build
+**/build
+**/dist
+
+# testing
+coverage
+/e2e/test-results
+/e2e/playwright-report
+
+# caches
+.cache
+**/.vite
+.pnpm-store/
+
+# misc
+.DS_Store
 .claude
+*.tar.gz
+
+# Baseline screenshots of the visual comparison (see e2e/visual-compare)
+/e2e/visual-compare/snapshots

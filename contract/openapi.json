@@ -1,0 +1,1859 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "caltodo API",
+    "description": "Tasks that live as Google Calendar events. Every failure answers RFC 9457 Problem Details (`application/problem+json`) with a stable `code`. A request that is not GET must send the CSRF token of `GET /api/auth/user` as the `X-CSRF-Token` header.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/account": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Deletes the stored data of the user and signs out. The calendar events\nstay in Google Calendar.",
+        "operationId": "deleteAccount",
+        "responses": {
+          "200": {
+            "description": "The account data is deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/action/{token}": {
+      "post": {
+        "tags": [
+          "actions"
+        ],
+        "summary": "Completes or reschedules the task of an action link, then writes a new\nlink into the event and uses up this one.",
+        "operationId": "performAction",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "The raw action token of the link.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The action. The HTML form of the action page sends the same fields as `application/x-www-form-urlencoded` and gets an HTML page back.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The action is done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem `invalid_request`, `invalid_task_ids`, `invalid_settings`, `invalid_action`, `no_calendar`, `no_settings`, `invalid_link`, or `invalid_event_time`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `forbidden` (the link belongs to another user) or `csrf_rejected`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Problem `no_free_slot`: no free time slot in the next 90 days.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Problem `payload_too_large`: more than 100 KiB of JSON or 50 KiB of form data.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Signs out: deletes the session and its cookie.",
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "The session is deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/auth/user": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "The signed-in user with the CSRF token of the session.",
+        "operationId": "getCurrentUser",
+        "responses": {
+          "200": {
+            "description": "The signed-in user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUser"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/calendars": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "The calendars of the user's Google account.",
+        "operationId": "listCalendars",
+        "responses": {
+          "200": {
+            "description": "The calendar list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarListItem"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "The settings of the user, or `null` without settings.",
+        "operationId": "getSettings",
+        "responses": {
+          "200": {
+            "description": "The settings, or `null`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/UserSettings"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Saves the settings. Without `calendarId` the stored calendar stays.",
+        "operationId": "updateSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The saved settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem `invalid_request`, `invalid_task_ids`, `invalid_settings`, `invalid_action`, `no_calendar`, `no_settings`, `invalid_link`, or `invalid_event_time`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Problem `payload_too_large`: more than 100 KiB of JSON or 50 KiB of form data.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "The tasks from 14 days ago to 90 days ahead: incomplete tasks by start\ntime, then completed tasks, most recent first.",
+        "operationId": "listTasks",
+        "responses": {
+          "200": {
+            "description": "The task list; empty without a calendar.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarTask"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Creates a task in the first free slot. An urgent task then moves to the\nfront of the schedule.",
+        "operationId": "createTask",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The created task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarTask"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem `invalid_request`, `invalid_task_ids`, `invalid_settings`, `invalid_action`, `no_calendar`, `no_settings`, `invalid_link`, or `invalid_event_time`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Problem `no_free_slot`: no free time slot in the next 90 days.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Problem `payload_too_large`: more than 100 KiB of JSON or 50 KiB of form data.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/bulk-complete": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Completes each task. A task that fails does not stop the others.",
+        "operationId": "bulkCompleteTasks",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskIdsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Done. The answer does not say which tasks failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem `invalid_request`, `invalid_task_ids`, `invalid_settings`, `invalid_action`, `no_calendar`, `no_settings`, `invalid_link`, or `invalid_event_time`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Problem `payload_too_large`: more than 100 KiB of JSON or 50 KiB of form data.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/reload": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Checks that a calendar is configured; the client then reloads the list.",
+        "operationId": "reloadTasks",
+        "responses": {
+          "200": {
+            "description": "A calendar is configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem `invalid_request`, `invalid_task_ids`, `invalid_settings`, `invalid_action`, `no_calendar`, `no_settings`, `invalid_link`, or `invalid_event_time`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/reorder": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Gives the tasks the order of `taskIds` by swapping their time slots.",
+        "operationId": "reorderTasks",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskIdsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The tasks have the requested order. A task that could not move is skipped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem `invalid_request`, `invalid_task_ids`, `invalid_settings`, `invalid_action`, `no_calendar`, `no_settings`, `invalid_link`, or `invalid_event_time`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Problem `payload_too_large`: more than 100 KiB of JSON or 50 KiB of form data.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/reschedule-all": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Moves every incomplete task into the earliest free slots.",
+        "operationId": "rescheduleAllTasks",
+        "responses": {
+          "200": {
+            "description": "The counts of moved, unchanged, skipped, and failed tasks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RescheduleAllResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/{id}": {
+      "patch": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Completes or reopens a task.",
+        "operationId": "updateTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The Google Calendar event id of the task.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The changed task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarTask"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem `invalid_request`, `invalid_task_ids`, `invalid_settings`, `invalid_action`, `no_calendar`, `no_settings`, `invalid_link`, or `invalid_event_time`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Problem `payload_too_large`: more than 100 KiB of JSON or 50 KiB of form data.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/{id}/complete": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Completes one task.",
+        "operationId": "completeTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The Google Calendar event id of the task.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The task is complete.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem `invalid_request`, `invalid_task_ids`, `invalid_settings`, `invalid_action`, `no_calendar`, `no_settings`, `invalid_link`, or `invalid_event_time`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/{id}/reschedule": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Moves one task to the first free slot.",
+        "operationId": "rescheduleTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The Google Calendar event id of the task.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The task is moved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem `invalid_request`, `invalid_task_ids`, `invalid_settings`, `invalid_action`, `no_calendar`, `no_settings`, `invalid_link`, or `invalid_event_time`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem `unauthenticated`: no signed-in session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem `csrf_rejected`: the CSRF token is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Problem `no_free_slot`: no free time slot in the next 90 days.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Problem `rate_limited`: too many requests from this client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActionName": {
+        "type": "string",
+        "description": "The action of an action link.",
+        "enum": [
+          "complete",
+          "reschedule"
+        ]
+      },
+      "ActionRequest": {
+        "type": "object",
+        "description": "The body of `POST /api/action/{token}`.",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionName"
+          },
+          "csrfToken": {
+            "type": "string",
+            "description": "The CSRF token, for a form post without the `X-CSRF-Token` header."
+          }
+        }
+      },
+      "AuthUser": {
+        "type": "object",
+        "description": "The signed-in user (`GET /api/auth/user`).",
+        "required": [
+          "id",
+          "googleId",
+          "email",
+          "displayName",
+          "csrfToken"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "googleId": {
+            "type": "string",
+            "description": "The Google account id."
+          },
+          "email": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "csrfToken": {
+            "type": "string",
+            "description": "The CSRF token of the session. Send it as `X-CSRF-Token` on every\nrequest that is not GET, HEAD, or OPTIONS."
+          }
+        }
+      },
+      "CalendarListItem": {
+        "type": "object",
+        "description": "One calendar of the user's Google calendar list.",
+        "required": [
+          "id",
+          "summary",
+          "primary"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "primary": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CalendarTask": {
+        "type": "object",
+        "description": "A task (`CalendarTask`). Instants are UTC with milliseconds, like\n`2026-03-02T15:00:00.000Z`.",
+        "required": [
+          "id",
+          "title",
+          "details",
+          "duration",
+          "scheduledStart",
+          "scheduledEnd",
+          "completed",
+          "completedAt",
+          "priority"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The Google Calendar event id."
+          },
+          "title": {
+            "type": "string"
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The duration in whole minutes; `null` when the event ends at or before\nits start."
+          },
+          "scheduledStart": {
+            "type": "string"
+          },
+          "scheduledEnd": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The position among the incomplete tasks; 0 for a completed task.",
+            "minimum": 0
+          }
+        }
+      },
+      "CreateTaskRequest": {
+        "type": "object",
+        "description": "The body of `POST /api/tasks`.",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "1 to 200 UTF-16 code units.",
+            "maxLength": 200,
+            "minLength": 1
+          },
+          "details": {
+            "type": "string",
+            "description": "At most 5000 UTF-16 code units. Omit it rather than send `null`.",
+            "maxLength": 5000
+          },
+          "urgent": {
+            "type": "boolean",
+            "description": "Move the task to the front of the schedule. The default is `false`."
+          },
+          "duration": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Whole minutes, 15 to 480. The default is the settings duration.",
+            "maximum": 480,
+            "minimum": 15
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "description": "An RFC 9457 Problem Details body with the application `code` extension.",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Always `about:blank`."
+          },
+          "title": {
+            "type": "string",
+            "description": "The HTTP status phrase."
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The HTTP status code of the response.",
+            "minimum": 0
+          },
+          "detail": {
+            "type": "string",
+            "description": "A fixed explanation. It contains no request data."
+          },
+          "code": {
+            "$ref": "#/components/schemas/ProblemCode"
+          }
+        }
+      },
+      "ProblemCode": {
+        "type": "string",
+        "description": "The stable application code of a public failure.",
+        "enum": [
+          "invalid_request",
+          "invalid_task_ids",
+          "invalid_settings",
+          "invalid_action",
+          "no_calendar",
+          "no_settings",
+          "invalid_link",
+          "invalid_event_time",
+          "unauthenticated",
+          "csrf_rejected",
+          "forbidden",
+          "not_found",
+          "task_not_found",
+          "no_tasks_to_reorder",
+          "no_free_slot",
+          "payload_too_large",
+          "rate_limited",
+          "internal_error",
+          "calendar_unavailable",
+          "event_not_created",
+          "google_unavailable",
+          "google_reauthorization_required",
+          "sign_in_failed"
+        ]
+      },
+      "RescheduleAllResult": {
+        "type": "object",
+        "description": "The answer of `POST /api/tasks/reschedule-all`.",
+        "required": [
+          "success",
+          "summary"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Always `true`."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/RescheduleCounts"
+          }
+        }
+      },
+      "RescheduleCounts": {
+        "type": "object",
+        "description": "The counters of \"Reschedule all\".",
+        "required": [
+          "moved",
+          "unchanged",
+          "skippedNoSlot",
+          "skippedInvalid",
+          "failed"
+        ],
+        "properties": {
+          "moved": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "unchanged": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "skippedNoSlot": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "skippedInvalid": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "Success": {
+        "type": "object",
+        "description": "A success without other data.",
+        "required": [
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Always `true`."
+          }
+        }
+      },
+      "TaskIdsRequest": {
+        "type": "object",
+        "description": "The body of `POST /api/tasks/reorder` and `/api/tasks/bulk-complete`.",
+        "required": [
+          "taskIds"
+        ],
+        "properties": {
+          "taskIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "1 to 200 non-empty task ids.",
+            "maxItems": 200,
+            "minItems": 1
+          }
+        }
+      },
+      "UpdateSettingsRequest": {
+        "type": "object",
+        "description": "The body of `PATCH /api/settings`.",
+        "required": [
+          "workStartHour",
+          "workEndHour",
+          "timezone",
+          "defaultDuration",
+          "eventColor"
+        ],
+        "properties": {
+          "calendarId": {
+            "type": "string",
+            "description": "Omit to keep the current calendar."
+          },
+          "workStartHour": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 23,
+            "minimum": 0
+          },
+          "workEndHour": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 23,
+            "minimum": 0
+          },
+          "timezone": {
+            "type": "string",
+            "description": "An IANA time zone name."
+          },
+          "defaultDuration": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 480,
+            "minimum": 15
+          },
+          "eventColor": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateTaskRequest": {
+        "type": "object",
+        "description": "The body of `PATCH /api/tasks/{id}`.",
+        "required": [
+          "completed"
+        ],
+        "properties": {
+          "completed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserSettings": {
+        "type": "object",
+        "description": "The settings of a user.",
+        "required": [
+          "id",
+          "userId",
+          "calendarId",
+          "workStartHour",
+          "workEndHour",
+          "timezone",
+          "defaultDuration",
+          "eventColor"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "calendarId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Google Calendar id for the tasks; `null` until the user selects one."
+          },
+          "workStartHour": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The first work hour, 0 to 23."
+          },
+          "workEndHour": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The hour by which tasks end, 0 to 23."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "An IANA time zone name."
+          },
+          "defaultDuration": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The default task duration in minutes."
+          },
+          "eventColor": {
+            "type": "string",
+            "description": "The Google Calendar color id of new events."
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "csrfToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "The `csrfToken` of `GET /api/auth/user`."
+      },
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "caltodo.sid",
+        "description": "The HttpOnly session cookie of the Google sign-in. The browser sends it; script never reads it."
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "auth",
+      "description": "The signed-in user and the account"
+    },
+    {
+      "name": "tasks",
+      "description": "Tasks as Google Calendar events"
+    },
+    {
+      "name": "settings",
+      "description": "Calendar choice, work hours, and defaults"
+    },
+    {
+      "name": "actions",
+      "description": "The action links in event descriptions"
+    }
+  ]
+}

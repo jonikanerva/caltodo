@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM action_tokens WHERE expires_at < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "780da8d694079439608bf897eab04393b704d6b43a54df243cf94f4fb6cabfad"
+}

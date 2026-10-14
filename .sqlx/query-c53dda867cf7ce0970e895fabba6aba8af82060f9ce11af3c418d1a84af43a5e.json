@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_settings\n               (user_id, work_start_hour, work_end_hour, timezone, default_duration, event_color)\n             VALUES ($1, 9, 17, 'America/New_York', 60, '1')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c53dda867cf7ce0970e895fabba6aba8af82060f9ce11af3c418d1a84af43a5e"
+}

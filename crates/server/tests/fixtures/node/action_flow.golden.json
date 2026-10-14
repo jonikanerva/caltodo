@@ -1,0 +1,136 @@
+{
+  "source": "server/handlers/actionRoutes.ts with the real token and calendar modules (Node) at the commit that adds this file",
+  "results": [
+    {
+      "action": "complete",
+      "accept": "application/json",
+      "status": 400,
+      "body": {
+        "error": "Invalid or expired link."
+      },
+      "patchedFields": [
+        [
+          "extendedProperties",
+          "summary",
+          "transparency"
+        ],
+        [
+          "description"
+        ]
+      ],
+      "tokens": [
+        {
+          "id": "t1",
+          "used": true
+        },
+        {
+          "id": "t2",
+          "used": false
+        }
+      ]
+    },
+    {
+      "action": "complete",
+      "accept": "text/html,application/xhtml+xml",
+      "status": 400,
+      "body": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n      <title>Error</title>\n      <meta charset=\"utf-8\" />\n      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      <style>\n        body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }\n        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }\n        h1 { font-size: 20px; margin: 0 0 12px; }\n        p { margin: 0 0 16px; color: #334155; }\n        .actions { display: flex; gap: 12px; flex-wrap: wrap; }\n        .actions form { margin: 0; }\n        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }\n        button.secondary { background: #0f172a; }\n        button:disabled { background: #94a3b8; cursor: not-allowed; }\n        .status { margin-top: 16px; font-size: 14px; color: #475569; }\n        .muted { color: #64748b; font-size: 13px; }\n      </style>\n    </head>\n    <body>\n      <div class=\"card\">\n        \n          <h1>Something went wrong</h1>\n          <p>Invalid or expired link.</p>\n          <a class=\"button-link\" href=\"/\">Go to Todo</a>\n        \n      </div>\n    </body>\n    </html>\n  ",
+      "patchedFields": [
+        [
+          "extendedProperties",
+          "summary",
+          "transparency"
+        ],
+        [
+          "description"
+        ]
+      ],
+      "tokens": [
+        {
+          "id": "t1",
+          "used": true
+        },
+        {
+          "id": "t2",
+          "used": false
+        }
+      ]
+    },
+    {
+      "action": "reschedule",
+      "accept": "application/json",
+      "status": 400,
+      "body": {
+        "error": "Invalid or expired link."
+      },
+      "patchedFields": [
+        [
+          "end",
+          "start"
+        ],
+        [
+          "description"
+        ]
+      ],
+      "tokens": [
+        {
+          "id": "t1",
+          "used": true
+        },
+        {
+          "id": "t2",
+          "used": false
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "signed out",
+      "tokenParam": "raw/tok en?x",
+      "status": 200,
+      "html": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n      <title>Sign in required</title>\n      <meta charset=\"utf-8\" />\n      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      <style>\n        body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }\n        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }\n        h1 { font-size: 20px; margin: 0 0 12px; }\n        p { margin: 0 0 16px; color: #334155; }\n        .actions { display: flex; gap: 12px; flex-wrap: wrap; }\n        .actions form { margin: 0; }\n        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }\n        button.secondary { background: #0f172a; }\n        button:disabled { background: #94a3b8; cursor: not-allowed; }\n        .status { margin-top: 16px; font-size: 14px; color: #475569; }\n        .muted { color: #64748b; font-size: 13px; }\n      </style>\n    </head>\n    <body>\n      <div class=\"card\">\n        \n          <h1>Sign in required</h1>\n          <p>Sign in to manage this task with your Todo account.</p>\n          <a class=\"button-link\" href=\"/api/auth/google?actionToken=raw%2Ftok%20en%3Fx\">Sign in with Google</a>\n        \n      </div>\n    </body>\n    </html>\n  "
+    },
+    {
+      "name": "invalid token",
+      "tokenParam": "raw",
+      "status": 400,
+      "html": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n      <title>Invalid Link</title>\n      <meta charset=\"utf-8\" />\n      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      <style>\n        body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }\n        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }\n        h1 { font-size: 20px; margin: 0 0 12px; }\n        p { margin: 0 0 16px; color: #334155; }\n        .actions { display: flex; gap: 12px; flex-wrap: wrap; }\n        .actions form { margin: 0; }\n        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }\n        button.secondary { background: #0f172a; }\n        button:disabled { background: #94a3b8; cursor: not-allowed; }\n        .status { margin-top: 16px; font-size: 14px; color: #475569; }\n        .muted { color: #64748b; font-size: 13px; }\n      </style>\n    </head>\n    <body>\n      <div class=\"card\">\n        \n          <h1>Invalid or expired link</h1>\n          <p>This action link is no longer valid. Please use the app to manage your tasks.</p>\n          <a class=\"button-link\" href=\"/\">Go to Todo</a>\n        \n      </div>\n    </body>\n    </html>\n  "
+    },
+    {
+      "name": "other user",
+      "tokenParam": "raw",
+      "status": 403,
+      "html": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n      <title>Not authorized</title>\n      <meta charset=\"utf-8\" />\n      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      <style>\n        body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }\n        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }\n        h1 { font-size: 20px; margin: 0 0 12px; }\n        p { margin: 0 0 16px; color: #334155; }\n        .actions { display: flex; gap: 12px; flex-wrap: wrap; }\n        .actions form { margin: 0; }\n        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }\n        button.secondary { background: #0f172a; }\n        button:disabled { background: #94a3b8; cursor: not-allowed; }\n        .status { margin-top: 16px; font-size: 14px; color: #475569; }\n        .muted { color: #64748b; font-size: 13px; }\n      </style>\n    </head>\n    <body>\n      <div class=\"card\">\n        \n          <h1>Not authorized</h1>\n          <p>This action link belongs to a different account.</p>\n          <a class=\"button-link\" href=\"/\">Go to Todo</a>\n        \n      </div>\n    </body>\n    </html>\n  "
+    },
+    {
+      "name": "deleted event",
+      "tokenParam": "raw",
+      "status": 404,
+      "html": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n      <title>Task not found</title>\n      <meta charset=\"utf-8\" />\n      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      <style>\n        body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }\n        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }\n        h1 { font-size: 20px; margin: 0 0 12px; }\n        p { margin: 0 0 16px; color: #334155; }\n        .actions { display: flex; gap: 12px; flex-wrap: wrap; }\n        .actions form { margin: 0; }\n        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }\n        button.secondary { background: #0f172a; }\n        button:disabled { background: #94a3b8; cursor: not-allowed; }\n        .status { margin-top: 16px; font-size: 14px; color: #475569; }\n        .muted { color: #64748b; font-size: 13px; }\n      </style>\n    </head>\n    <body>\n      <div class=\"card\">\n        \n          <h1>Task not found</h1>\n          <p>This task may have been deleted.</p>\n          <a class=\"button-link\" href=\"/\">Go to Todo</a>\n        \n      </div>\n    </body>\n    </html>\n  "
+    },
+    {
+      "name": "foreign event",
+      "tokenParam": "raw",
+      "status": 404,
+      "html": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n      <title>Task not found</title>\n      <meta charset=\"utf-8\" />\n      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      <style>\n        body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }\n        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }\n        h1 { font-size: 20px; margin: 0 0 12px; }\n        p { margin: 0 0 16px; color: #334155; }\n        .actions { display: flex; gap: 12px; flex-wrap: wrap; }\n        .actions form { margin: 0; }\n        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }\n        button.secondary { background: #0f172a; }\n        button:disabled { background: #94a3b8; cursor: not-allowed; }\n        .status { margin-top: 16px; font-size: 14px; color: #475569; }\n        .muted { color: #64748b; font-size: 13px; }\n      </style>\n    </head>\n    <body>\n      <div class=\"card\">\n        \n          <h1>Task not found</h1>\n          <p>This link is no longer valid for that task.</p>\n          <a class=\"button-link\" href=\"/\">Go to Todo</a>\n        \n      </div>\n    </body>\n    </html>\n  "
+    },
+    {
+      "name": "manage open task",
+      "tokenParam": "raw-token_1",
+      "status": 200,
+      "html": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n      <title>Manage task</title>\n      <meta charset=\"utf-8\" />\n      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      <style>\n        body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }\n        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }\n        h1 { font-size: 20px; margin: 0 0 12px; }\n        p { margin: 0 0 16px; color: #334155; }\n        .actions { display: flex; gap: 12px; flex-wrap: wrap; }\n        .actions form { margin: 0; }\n        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }\n        button.secondary { background: #0f172a; }\n        button:disabled { background: #94a3b8; cursor: not-allowed; }\n        .status { margin-top: 16px; font-size: 14px; color: #475569; }\n        .muted { color: #64748b; font-size: 13px; }\n      </style>\n    </head>\n    <body>\n      <div class=\"card\">\n        \n        <h1>Manage task</h1>\n        <p>\"Water &lt;plants&gt; &amp; &quot;more&quot;\"</p>\n        \n        <div class=\"actions\">\n          <form method=\"POST\" action=\"/api/action/raw-token_1\">\n            <input type=\"hidden\" name=\"csrfToken\" value=\"csrf&lt;&quot;&amp;&#039;&gt;token\" />\n            <input type=\"hidden\" name=\"action\" value=\"complete\" />\n            <button type=\"submit\" >Mark complete</button>\n          </form>\n          <form method=\"POST\" action=\"/api/action/raw-token_1\">\n            <input type=\"hidden\" name=\"csrfToken\" value=\"csrf&lt;&quot;&amp;&#039;&gt;token\" />\n            <input type=\"hidden\" name=\"action\" value=\"reschedule\" />\n            <button type=\"submit\" class=\"secondary\">Reschedule</button>\n          </form>\n        </div>\n      \n      </div>\n    </body>\n    </html>\n  "
+    },
+    {
+      "name": "manage completed task",
+      "tokenParam": "raw-token_1",
+      "status": 200,
+      "html": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n      <title>Manage task</title>\n      <meta charset=\"utf-8\" />\n      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      <style>\n        body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }\n        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }\n        h1 { font-size: 20px; margin: 0 0 12px; }\n        p { margin: 0 0 16px; color: #334155; }\n        .actions { display: flex; gap: 12px; flex-wrap: wrap; }\n        .actions form { margin: 0; }\n        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }\n        button.secondary { background: #0f172a; }\n        button:disabled { background: #94a3b8; cursor: not-allowed; }\n        .status { margin-top: 16px; font-size: 14px; color: #475569; }\n        .muted { color: #64748b; font-size: 13px; }\n      </style>\n    </head>\n    <body>\n      <div class=\"card\">\n        \n        <h1>Manage task</h1>\n        <p>\"Water &lt;plants&gt; &amp; &quot;more&quot;\"</p>\n        <p class=\"muted\">This task is already marked complete.</p>\n        <div class=\"actions\">\n          <form method=\"POST\" action=\"/api/action/raw-token_1\">\n            <input type=\"hidden\" name=\"csrfToken\" value=\"csrf&lt;&quot;&amp;&#039;&gt;token\" />\n            <input type=\"hidden\" name=\"action\" value=\"complete\" />\n            <button type=\"submit\" disabled>Mark complete</button>\n          </form>\n          <form method=\"POST\" action=\"/api/action/raw-token_1\">\n            <input type=\"hidden\" name=\"csrfToken\" value=\"csrf&lt;&quot;&amp;&#039;&gt;token\" />\n            <input type=\"hidden\" name=\"action\" value=\"reschedule\" />\n            <button type=\"submit\" class=\"secondary\">Reschedule</button>\n          </form>\n        </div>\n      \n      </div>\n    </body>\n    </html>\n  "
+    },
+    {
+      "name": "manage untitled task",
+      "tokenParam": "raw-token_1",
+      "status": 200,
+      "html": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n      <title>Manage task</title>\n      <meta charset=\"utf-8\" />\n      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n      <style>\n        body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 32px; }\n        .card { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }\n        h1 { font-size: 20px; margin: 0 0 12px; }\n        p { margin: 0 0 16px; color: #334155; }\n        .actions { display: flex; gap: 12px; flex-wrap: wrap; }\n        .actions form { margin: 0; }\n        button, .button-link { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block; }\n        button.secondary { background: #0f172a; }\n        button:disabled { background: #94a3b8; cursor: not-allowed; }\n        .status { margin-top: 16px; font-size: 14px; color: #475569; }\n        .muted { color: #64748b; font-size: 13px; }\n      </style>\n    </head>\n    <body>\n      <div class=\"card\">\n        \n        <h1>Manage task</h1>\n        <p>\"Task\"</p>\n        \n        <div class=\"actions\">\n          <form method=\"POST\" action=\"/api/action/raw-token_1\">\n            <input type=\"hidden\" name=\"csrfToken\" value=\"csrf&lt;&quot;&amp;&#039;&gt;token\" />\n            <input type=\"hidden\" name=\"action\" value=\"complete\" />\n            <button type=\"submit\" >Mark complete</button>\n          </form>\n          <form method=\"POST\" action=\"/api/action/raw-token_1\">\n            <input type=\"hidden\" name=\"csrfToken\" value=\"csrf&lt;&quot;&amp;&#039;&gt;token\" />\n            <input type=\"hidden\" name=\"action\" value=\"reschedule\" />\n            <button type=\"submit\" class=\"secondary\">Reschedule</button>\n          </form>\n        </div>\n      \n      </div>\n    </body>\n    </html>\n  "
+    }
+  ]
+}

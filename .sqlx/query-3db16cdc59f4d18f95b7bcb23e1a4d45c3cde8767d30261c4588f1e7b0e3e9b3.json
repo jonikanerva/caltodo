@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM action_tokens WHERE user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3db16cdc59f4d18f95b7bcb23e1a4d45c3cde8767d30261c4588f1e7b0e3e9b3"
+}

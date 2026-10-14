@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, user_id, calendar_id, work_start_hour, work_end_hour, timezone,\n                    default_duration, event_color\n               FROM user_settings WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "calendar_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "calendar_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "work_start_hour",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "work_start_hour"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "work_end_hour",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "work_end_hour"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "timezone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "timezone"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "default_duration",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "default_duration"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "event_color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "event_color"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fb4b6ed9e2cd364b42cfa3e61dfe9fb38369dda041fde0eb8ebe7296efc595d3"
+}

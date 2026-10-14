@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT data, expiry_date AS \"expiry_date: jiff_sqlx::Timestamp\"\n                 FROM app_sessions WHERE id = $1 AND expiry_date > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "data",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "app_sessions",
+            "name": "data"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "expiry_date: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "app_sessions",
+            "name": "expiry_date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "acf643d52ceb0fe047e5ee5127ea70bebe142a4bc4a1c07851d5fba1d31bc524"
+}
