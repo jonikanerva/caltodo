@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO app_sessions (id, user_id, data, expiry_date)\n             VALUES ($1, $2, $3, $4)\n             ON CONFLICT (id) DO UPDATE SET\n               user_id = EXCLUDED.user_id,\n               data = EXCLUDED.data,\n               expiry_date = EXCLUDED.expiry_date",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Varchar",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aed84af65252bdd06651956bade3f8e1f777e6ad10fcea3b46e2b6f59b8b7e51"
+}

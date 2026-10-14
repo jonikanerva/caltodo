@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM app_sessions WHERE expiry_date < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2f7cc1452a057be90c657903833476e0a8f6cb7b183ab8e9a155070c39858e55"
+}

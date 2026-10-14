@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.id FROM users u\n               JOIN user_settings s ON s.user_id = u.id\n              WHERE s.calendar_id IS NOT NULL AND s.calendar_id <> ''\n              ORDER BY u.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "17dbc0a3412bc8d5dee010e1d9bf0c780536f7ba28bb0f79171f2f61aa071175"
+}

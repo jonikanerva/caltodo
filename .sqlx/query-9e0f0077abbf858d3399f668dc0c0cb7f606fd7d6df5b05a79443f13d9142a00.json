@@ -1,0 +1,119 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_settings\n               (user_id, calendar_id, work_start_hour, work_end_hour, timezone,\n                default_duration, event_color)\n             VALUES ($1, $3, $4, $5, $6, $7, $8)\n             ON CONFLICT (user_id) DO UPDATE SET\n               calendar_id = CASE WHEN $2 THEN EXCLUDED.calendar_id\n                                  ELSE user_settings.calendar_id END,\n               work_start_hour = EXCLUDED.work_start_hour,\n               work_end_hour = EXCLUDED.work_end_hour,\n               timezone = EXCLUDED.timezone,\n               default_duration = EXCLUDED.default_duration,\n               event_color = EXCLUDED.event_color\n             RETURNING id, user_id, calendar_id, work_start_hour, work_end_hour, timezone,\n                       default_duration, event_color",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "calendar_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "calendar_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "work_start_hour",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "work_start_hour"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "work_end_hour",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "work_end_hour"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "timezone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "timezone"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "default_duration",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "default_duration"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "event_color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_settings",
+            "name": "event_color"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Bool",
+        "Text",
+        "Int4",
+        "Int4",
+        "Text",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9e0f0077abbf858d3399f668dc0c0cb7f606fd7d6df5b05a79443f13d9142a00"
+}
