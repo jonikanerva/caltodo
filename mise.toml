@@ -1,0 +1,232 @@
+# Source of truth for the toolchain and the command surface (STACK.md §1 and
+# §3). The Rust version comes only from rust-toolchain.toml. Update the
+# mirrors in the same commit: `.nvmrc`, `engines` and `packageManager` in the
+# root package.json, and `packages` in railpack.json.
+#
+# A fresh machine: install mise, rustup, and Docker, then run `mise trust`
+# and `mise run setup` in the repository root.
+[settings]
+idiomatic_version_file_enable_tools = ["rust"]
+
+[tools]
+node = "24.21.0"
+pnpm = "12.8.1"
+gitleaks = "8.30.1"
+# Release binary; mise checks the SHA-256 of the aqua registry.
+cargo-deny = "0.20.2"
+# Release binary; mise checks the SHA-256 of the aqua registry.
+"aqua:nextest-rs/nextest/cargo-nextest" = "0.9.146"
+# Release binary; mise checks the GitHub asset digest and the GitHub artifact
+# attestation. The project publishes no checksum file.
+"github:Boshen/cargo-shear" = "1.14.0"
+# Built from crates.io with the locked dependency versions of the release.
+"cargo:sqlx-cli" = { version = "0.9.0", default-features = false, features = "postgres,rustls", locked = true }
+
+# The local PostgreSQL server of development and of the tests: a Docker
+# container on 127.0.0.1:55473 (STACK.md §11). The tests create and drop
+# their own databases on this server; `caltodo` is the development database.
+[env]
+CALTODO_PG_CONTAINER = "caltodo-pg"
+CALTODO_PG_URL = "postgres://postgres:postgres@127.0.0.1:55473"
+
+[tasks.setup]
+description = "Install the pinned tools, the locked dependencies, and the Playwright browser"
+run = [
+  "mise install",
+  "pnpm install --frozen-lockfile",
+  "cargo fetch --locked",
+  # The browser build matches the locked Playwright version of e2e/.
+  "pnpm --filter @caltodo/e2e exec playwright install chromium",
+]
+
+[tasks."db:start"]
+description = "Start the local PostgreSQL container and wait until it accepts connections"
+run = '''
+set -eu
+if [ -z "$(docker ps --quiet --filter "name=^${CALTODO_PG_CONTAINER}$")" ]; then
+  if [ -n "$(docker ps --all --quiet --filter "name=^${CALTODO_PG_CONTAINER}$")" ]; then
+    docker start "$CALTODO_PG_CONTAINER" >/dev/null
+  else
+    # Synthetic local credentials. The data stays in the named volume.
+    docker run --detach --name "$CALTODO_PG_CONTAINER" \
+      --publish 127.0.0.1:55473:5432 \
+      --env POSTGRES_PASSWORD=postgres --env POSTGRES_DB=caltodo \
+      --volume caltodo-pg:/var/lib/postgresql/data \
+      postgres:17 -c fsync=off >/dev/null
+  fi
+fi
+for _ in $(seq 1 60); do
+  if docker exec "$CALTODO_PG_CONTAINER" pg_isready --username postgres --dbname caltodo >/dev/null 2>&1; then
+    exit 0
+  fi
+  sleep 0.5
+done
+echo "db:start: PostgreSQL did not become ready" >&2
+exit 1
+'''
+
+[tasks."db:stop"]
+description = "Stop the local PostgreSQL container; the data stays"
+run = 'docker stop "$CALTODO_PG_CONTAINER" >/dev/null'
+
+[tasks."db:migrate"]
+description = "Apply the migrations to the development database"
+depends = ["db:start"]
+env = { DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:55473/caltodo" }
+run = "cargo run --locked -p caltodo -- migrate"
+
+[tasks."db:reset"]
+description = "Drop and recreate the development database, then apply the migrations"
+depends = ["db:start"]
+run = [
+  'docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE IF EXISTS caltodo WITH (FORCE)" --command "CREATE DATABASE caltodo"',
+  { task = "db:migrate" },
+]
+
+[tasks.dev]
+description = "The server on port 5001 and the Vite dev server on port 5000; reads .env"
+depends = ["db:start"]
+raw = true
+run = '''
+set -eu
+# `.env` holds the local secrets (README.md). The dev server always uses port
+# 5001 behind the Vite proxy and writes a readable log.
+set -a
+if [ -f .env ]; then . ./.env; fi
+set +a
+export PORT=5001 CALTODO_LOG_FORMAT=text
+export DATABASE_URL="${DATABASE_URL:-$CALTODO_PG_URL/caltodo}"
+cargo run --locked -p caltodo -- migrate
+cargo run --locked -p caltodo -- serve &
+server=$!
+trap 'kill "$server" 2>/dev/null || true' EXIT INT TERM
+pnpm --filter @caltodo/web run dev
+'''
+
+[tasks.format]
+description = "Format the Rust and the TypeScript sources"
+run = [
+  "cargo fmt --all",
+  "pnpm exec prettier --write . --log-level warn",
+]
+
+[tasks.format-check]
+description = "Fail on a formatting difference; change no file"
+run = [
+  "cargo fmt --all -- --check",
+  "pnpm exec prettier --check . --log-level warn",
+]
+
+[tasks.lint]
+description = "Clippy, type-aware Oxlint, and the type check of every TypeScript package"
+run = [
+  "cargo clippy --workspace --all-targets --locked -- -D warnings",
+  "pnpm exec oxlint --type-aware --deny-warnings web/src packages/api-client/src packages/api-client/scripts e2e",
+  # pnpm runs the packages in dependency order: the API client first.
+  "pnpm --recursive --if-present run typecheck",
+]
+
+[tasks."sqlx:check"]
+description = "Fail when the SQLx query metadata (.sqlx) differs from the queries and the migrations"
+depends = ["db:start"]
+run = '''
+set -eu
+database=caltodo_sqlx_check
+docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE IF EXISTS $database WITH (FORCE)" --command "CREATE DATABASE $database"
+export DATABASE_URL="$CALTODO_PG_URL/$database"
+cargo run --locked --quiet -p caltodo -- migrate
+SQLX_OFFLINE=false cargo sqlx prepare --workspace --check -- --all-targets --locked
+docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE $database WITH (FORCE)"
+'''
+
+[tasks."sqlx:prepare"]
+description = "Write the SQLx query metadata (.sqlx) from a freshly migrated database"
+depends = ["db:start"]
+run = '''
+set -eu
+database=caltodo_sqlx_check
+docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE IF EXISTS $database WITH (FORCE)" --command "CREATE DATABASE $database"
+export DATABASE_URL="$CALTODO_PG_URL/$database"
+cargo run --locked --quiet -p caltodo -- migrate
+SQLX_OFFLINE=false cargo sqlx prepare --workspace -- --all-targets --locked
+docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE $database WITH (FORCE)"
+'''
+
+[tasks."contract:export"]
+description = "Write contract/openapi.json from the Rust HTTP types"
+run = "cargo run --locked --quiet -p caltodo --bin openapi -- contract/openapi.json"
+
+[tasks."contract:generate"]
+description = "Generate the TypeScript API client from contract/openapi.json"
+run = "pnpm --filter @caltodo/api-client run generate"
+
+[tasks."contract:check"]
+description = "Fail when the OpenAPI document or the generated client drifts; change no file"
+run = "pnpm --filter @caltodo/api-client run contract-check"
+
+[tasks."scan:secrets"]
+description = "Gitleaks on the history that HEAD reaches"
+run = 'gitleaks git --no-banner --redact --config .gitleaks.toml --log-opts="--full-history HEAD" .'
+
+[tasks."scan:deps"]
+description = "pnpm audit, cargo-deny (advisories, bans, licences, sources), and cargo-shear"
+run = [
+  "pnpm audit --audit-level low",
+  "cargo deny --locked check",
+  "cargo shear --locked --deny-warnings",
+]
+
+[tasks.build]
+description = "OpenAPI export, client generation, web build, and the release server"
+run = [
+  "rm -rf web/build",
+  { task = "contract:export" },
+  { task = "contract:generate" },
+  "pnpm --filter @caltodo/web run build",
+  "cargo build --release --locked -p caltodo",
+]
+
+[tasks.test]
+description = "Nextest, the doc tests, Vitest in every TypeScript package, and the browser journeys"
+depends = ["db:start"]
+env = { DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:55473/caltodo" }
+run = [
+  # The database tests (`#[sqlx::test]` and tests/lifecycle.rs) create and
+  # drop their own databases on the server of DATABASE_URL.
+  "cargo nextest run --workspace --locked",
+  "cargo test --doc --workspace --locked",
+  # The e2e package has no `test` script, so this runs Vitest only.
+  "pnpm --recursive --if-present run test",
+  { task = "test:e2e" },
+]
+
+[tasks."test:e2e"]
+description = "Playwright and axe journeys against the deterministic test server (STACK.md §11)"
+depends = ["db:start"]
+env = { E2E_DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:55473/caltodo_e2e" }
+run = [
+  # The journeys test the current client and test server, so both are built
+  # first, and each run starts from an empty database.
+  "pnpm --filter @caltodo/web run build",
+  "cargo build --release --locked -p caltodo --example e2e_server",
+  'docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE IF EXISTS caltodo_e2e WITH (FORCE)" --command "CREATE DATABASE caltodo_e2e"',
+  "pnpm --filter @caltodo/e2e run e2e",
+]
+
+[tasks.verify]
+description = "The full verification (VERIFY_CMD); stops at the first failed step"
+run = [
+  { task = "format-check" },
+  { task = "lint" },
+  { task = "sqlx:check" },
+  { task = "contract:check" },
+  { task = "scan:secrets" },
+  { task = "scan:deps" },
+  { task = "build" },
+  { task = "test" },
+]
+
+[tasks.start]
+description = "Start the release server that `mise run build` made"
+raw = true
+run = "./target/release/caltodo serve"

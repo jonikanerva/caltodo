@@ -1,0 +1,11 @@
+# Gitleaks configuration of `mise run scan:secrets` (STACK.md §14).
+# The default rules apply. They cover, for example, the Google OAuth client
+# secret and a PostgreSQL URL with a password.
+[extend]
+useDefault = true
+
+# Synthetic test values of this tree. A finding in another file still fails.
+[[allowlists]]
+description = "Synthetic test secrets and the action token vectors of the Node fixtures"
+paths = ['''^crates/server/tests/fixtures/node/action_tokens\.vectors\.json$''']
+regexes = ['''synthetic-[a-z-]+-[0-9a-f]{8,}''']

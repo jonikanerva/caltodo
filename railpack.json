@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "rust",
+  "exclude": ["mise.toml"],
+  "packages": {
+    "node": "24.21.0",
+    "pnpm": "12.8.1"
+  },
+  "steps": {
+    "install": {
+      "secrets": [],
+      "deployOutputs": []
+    },
+    "build": {
+      "secrets": [],
+      "commands": [
+        "pnpm install --frozen-lockfile --filter @caltodo/web...",
+        "pnpm --filter @caltodo/web run build",
+        "mkdir -p bin",
+        "SQLX_OFFLINE=true cargo build --release --locked --package caltodo --bin caltodo",
+        "cp target/release/caltodo bin"
+      ]
+    }
+  },
+  "deploy": {
+    "startCommand": "./bin/caltodo migrate && exec ./bin/caltodo serve",
+    "inputs": [
+      {
+        "step": "build",
+        "include": ["bin", "web/build"]
+      }
+    ]
+  }
+}

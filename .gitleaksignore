@@ -1,0 +1,17 @@
+# Findings in commits of `main` before the Rust server (STACK.md §13 and §14).
+# Each line is one finding of one historical commit; a new finding still fails.
+
+# Synthetic test values of the removed Node test suite and the README
+# placeholders.
+42865fbf5f41cd854742a080d971c92df6bd38d4:server/testSetup.ts:generic-api-key:9
+86def07a44cc9c6b3fa2f14389339e021899fd9d:server/auth.test.ts:generic-api-key:8
+86def07a44cc9c6b3fa2f14389339e021899fd9d:server/crypto.test.ts:generic-api-key:5
+86def07a44cc9c6b3fa2f14389339e021899fd9d:server/crypto.test.ts:generic-api-key:121
+f00149d4705f27deb2f31f68ddf4977c394d7573:README.md:generic-api-key:139
+
+# OPEN EXCEPTION (owner decision required, see the PR): the Replit
+# configuration of December 2025 contains values for TOKEN_ENCRYPTION_KEY and
+# ACTION_TOKEN_SECRET in the public history. If production uses these
+# values, rotate them. This scan cannot remove them from the history.
+1dc22ed1cec87ef30c060c769d154cc6c6fbfb4a:.replit:generic-api-key:50
+1dc22ed1cec87ef30c060c769d154cc6c6fbfb4a:.replit:generic-api-key:51
