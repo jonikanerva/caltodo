@@ -1,0 +1,1567 @@
+{
+  "source": "server/calendar.ts and server/handlers/taskRoutes.ts (Node, TZ=UTC) at the commit that adds this file",
+  "mapEvents": [
+    {
+      "name": "completed with updated time",
+      "event": {
+        "id": "e1",
+        "summary": "✅ Write tests",
+        "start": {
+          "dateTime": "2026-02-08T14:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T15:00:00.000Z"
+        },
+        "updated": "2026-02-08T15:30:00.000Z",
+        "description": "Add integration tests\n\nActions:\n- Manage: https://example.com/action/x\n\n---\nCreated by Todo",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "true"
+          }
+        }
+      },
+      "task": {
+        "id": "e1",
+        "title": "Write tests",
+        "details": "Add integration tests",
+        "duration": 60,
+        "scheduledStart": "2026-02-08T14:00:00.000Z",
+        "scheduledEnd": "2026-02-08T15:00:00.000Z",
+        "completed": true,
+        "completedAt": "2026-02-08T15:30:00.000Z",
+        "priority": 0
+      }
+    },
+    {
+      "name": "completed without updated time",
+      "event": {
+        "id": "e2",
+        "summary": "✅ Done",
+        "start": {
+          "dateTime": "2026-02-08T09:00:00Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T10:00:00Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "true"
+          }
+        }
+      },
+      "task": {
+        "id": "e2",
+        "title": "Done",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-08T09:00:00.000Z",
+        "scheduledEnd": "2026-02-08T10:00:00.000Z",
+        "completed": true,
+        "completedAt": "2026-02-08T10:00:00.000Z",
+        "priority": 0
+      }
+    },
+    {
+      "name": "incomplete with offset times",
+      "event": {
+        "id": "e3",
+        "summary": "☑️ Offset",
+        "start": {
+          "dateTime": "2026-03-02T10:00:00+02:00"
+        },
+        "end": {
+          "dateTime": "2026-03-02T10:45:00+02:00"
+        },
+        "updated": "2026-03-01T08:00:00.123Z",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e3",
+        "title": "Offset",
+        "details": null,
+        "duration": 45,
+        "scheduledStart": "2026-03-02T08:00:00.000Z",
+        "scheduledEnd": "2026-03-02T08:45:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "marker without completion flag",
+      "event": {
+        "id": "e4",
+        "summary": "☑️ No flag",
+        "start": {
+          "dateTime": "2026-02-08T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T09:15:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true"
+          }
+        }
+      },
+      "task": {
+        "id": "e4",
+        "title": "No flag",
+        "details": null,
+        "duration": 15,
+        "scheduledStart": "2026-02-08T09:00:00.000Z",
+        "scheduledEnd": "2026-02-08T09:15:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "invalid completion flag",
+      "event": {
+        "id": "e5",
+        "summary": "✅ Odd flag",
+        "start": {
+          "dateTime": "2026-02-08T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T09:30:00.000Z"
+        },
+        "updated": "2026-02-08T11:00:00.000Z",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "TRUE"
+          }
+        }
+      },
+      "task": {
+        "id": "e5",
+        "title": "Odd flag",
+        "details": null,
+        "duration": 30,
+        "scheduledStart": "2026-02-08T09:00:00.000Z",
+        "scheduledEnd": "2026-02-08T09:30:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "no marker",
+      "event": {
+        "id": "e6",
+        "summary": "Meeting",
+        "start": {
+          "dateTime": "2026-02-08T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        }
+      },
+      "task": null
+    },
+    {
+      "name": "marker not exactly true",
+      "event": {
+        "id": "e7",
+        "summary": "☑️ Marker",
+        "start": {
+          "dateTime": "2026-02-08T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "TRUE"
+          }
+        }
+      },
+      "task": null
+    },
+    {
+      "name": "missing id",
+      "event": {
+        "summary": "☑️ No id",
+        "start": {
+          "dateTime": "2026-02-08T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": null
+    },
+    {
+      "name": "all-day start",
+      "event": {
+        "id": "e8",
+        "summary": "☑️ All day",
+        "start": {
+          "date": "2026-02-08"
+        },
+        "end": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": null
+    },
+    {
+      "name": "all-day end",
+      "event": {
+        "id": "e9",
+        "summary": "☑️ All day end",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "date": "2026-02-09"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": null
+    },
+    {
+      "name": "legacy action marker",
+      "event": {
+        "id": "e10",
+        "summary": "☑️ Legacy",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "description": "My details\n\nActions:\n- Mark Complete: legacy-link\n- Reschedule: other\n\n---\nCreated by Todo",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e10",
+        "title": "Legacy",
+        "details": "My details",
+        "duration": 60,
+        "scheduledStart": "2026-02-08T10:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "signature only",
+      "event": {
+        "id": "e11",
+        "summary": "☑️ Signature",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "description": "---\nCreated by Todo",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e11",
+        "title": "Signature",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-08T10:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "details with whitespace and no actions",
+      "event": {
+        "id": "e12",
+        "summary": "☑️ Spaces",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "description": "  First line\nSecond line  \n\n\n---\nCreated by Todo",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e12",
+        "title": "Spaces",
+        "details": "First line\nSecond line",
+        "duration": 60,
+        "scheduledStart": "2026-02-08T10:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "base description with details",
+      "event": {
+        "id": "e13",
+        "summary": "☑️ Base",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "description": "Only details\n\n---\nCreated by Todo",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e13",
+        "title": "Base",
+        "details": "Only details",
+        "duration": 60,
+        "scheduledStart": "2026-02-08T10:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "user-edited description",
+      "event": {
+        "id": "e14",
+        "summary": "☑️ Edited",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "description": "Edited by hand",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e14",
+        "title": "Edited",
+        "details": "Edited by hand",
+        "duration": 60,
+        "scheduledStart": "2026-02-08T10:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "empty summary",
+      "event": {
+        "id": "e15",
+        "summary": "",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e15",
+        "title": "",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-08T10:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "missing summary",
+      "event": {
+        "id": "e16",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e16",
+        "title": "",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-08T10:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "summary without prefix",
+      "event": {
+        "id": "e17",
+        "summary": "Renamed in calendar",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e17",
+        "title": "Renamed in calendar",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-08T10:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "double prefix",
+      "event": {
+        "id": "e18",
+        "summary": "✅ ☑️ Twice",
+        "start": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "true"
+          }
+        }
+      },
+      "task": {
+        "id": "e18",
+        "title": "☑️ Twice",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-08T10:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": true,
+        "completedAt": "2026-02-08T11:00:00.000Z",
+        "priority": 0
+      }
+    },
+    {
+      "name": "end before start",
+      "event": {
+        "id": "e19",
+        "summary": "☑️ Backwards",
+        "start": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T10:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e19",
+        "title": "Backwards",
+        "details": null,
+        "duration": null,
+        "scheduledStart": "2026-02-08T11:00:00.000Z",
+        "scheduledEnd": "2026-02-08T10:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "zero length",
+      "event": {
+        "id": "e20",
+        "summary": "☑️ Zero",
+        "start": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "true"
+          }
+        }
+      },
+      "task": {
+        "id": "e20",
+        "title": "Zero",
+        "details": null,
+        "duration": null,
+        "scheduledStart": "2026-02-08T11:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:00.000Z",
+        "completed": true,
+        "completedAt": "2026-02-08T11:00:00.000Z",
+        "priority": 0
+      }
+    },
+    {
+      "name": "cancelled status is not checked by the mapper",
+      "event": {
+        "id": "e21",
+        "status": "cancelled",
+        "summary": "☑️ Cancelled",
+        "start": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:30:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e21",
+        "title": "Cancelled",
+        "details": null,
+        "duration": 30,
+        "scheduledStart": "2026-02-08T11:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:30:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "sub-minute duration",
+      "event": {
+        "id": "e22",
+        "summary": "☑️ Short",
+        "start": {
+          "dateTime": "2026-02-08T11:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:00:29.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e22",
+        "title": "Short",
+        "details": null,
+        "duration": 0,
+        "scheduledStart": "2026-02-08T11:00:00.000Z",
+        "scheduledEnd": "2026-02-08T11:00:29.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    },
+    {
+      "name": "fractional seconds",
+      "event": {
+        "id": "e23",
+        "summary": "☑️ Fraction",
+        "start": {
+          "dateTime": "2026-02-08T11:00:00.5Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T11:30:00.250Z"
+        },
+        "updated": "2026-02-08T12:00:00.999Z",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "true"
+          }
+        }
+      },
+      "task": {
+        "id": "e23",
+        "title": "Fraction",
+        "details": null,
+        "duration": 30,
+        "scheduledStart": "2026-02-08T11:00:00.500Z",
+        "scheduledEnd": "2026-02-08T11:30:00.250Z",
+        "completed": true,
+        "completedAt": "2026-02-08T12:00:00.999Z",
+        "priority": 0
+      }
+    },
+    {
+      "name": "actions before signature with crlf",
+      "event": {
+        "id": "e24",
+        "summary": "☑️ CRLF",
+        "start": {
+          "dateTime": "2026-02-08T11:00:00Z"
+        },
+        "end": {
+          "dateTime": "2026-02-08T12:00:00Z"
+        },
+        "description": "Line\r\nTwo\r\n\r\nActions:\n- Manage: x\n\n---\nCreated by Todo",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      "task": {
+        "id": "e24",
+        "title": "CRLF",
+        "details": "Line\r\nTwo",
+        "duration": 60,
+        "scheduledStart": "2026-02-08T11:00:00.000Z",
+        "scheduledEnd": "2026-02-08T12:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      }
+    }
+  ],
+  "requests": {
+    "createWithDetails": {
+      "insert": {
+        "calendarId": "primary",
+        "requestBody": {
+          "summary": "☑️ Write tests",
+          "description": "Cover boundary\nSecond line\n\n---\nCreated by Todo",
+          "visibility": "private",
+          "start": {
+            "dateTime": "2026-03-02T15:00:00.000Z",
+            "timeZone": "Europe/Helsinki"
+          },
+          "end": {
+            "dateTime": "2026-03-02T15:30:00.000Z",
+            "timeZone": "Europe/Helsinki"
+          },
+          "colorId": "7",
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        }
+      },
+      "actionsPatch": {
+        "calendarId": "primary",
+        "eventId": "evt-1",
+        "requestBody": {
+          "description": "Cover boundary\nSecond line\n\nActions:\n- Manage: https://todo.example/action/tok-raw\n\n---\nCreated by Todo"
+        }
+      },
+      "invalidate": [
+        "user-1",
+        "evt-1",
+        "primary",
+        "tok-hash"
+      ]
+    },
+    "createWithoutDetails": {
+      "insert": {
+        "calendarId": "primary",
+        "requestBody": {
+          "summary": "☑️ No details",
+          "description": "---\nCreated by Todo",
+          "visibility": "private",
+          "start": {
+            "dateTime": "2026-03-02T15:00:00.000Z",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-03-02T15:30:00.000Z",
+            "timeZone": "UTC"
+          },
+          "colorId": "2",
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        }
+      },
+      "actionsPatch": {
+        "calendarId": "primary",
+        "eventId": "evt-2",
+        "requestBody": {
+          "description": "Actions:\n- Manage: https://todo.example/action/tok-raw\n\n---\nCreated by Todo"
+        }
+      }
+    },
+    "failedActionsPatch": {
+      "markUsed": [
+        [
+          "tok-id"
+        ]
+      ],
+      "invalidate": []
+    },
+    "completePatch": {
+      "calendarId": "primary",
+      "eventId": "evt-4",
+      "requestBody": {
+        "summary": "✅ Write tests",
+        "transparency": "transparent",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "true",
+            "oldField": "keep-me"
+          }
+        }
+      }
+    },
+    "redoPatch": {
+      "calendarId": "primary",
+      "eventId": "evt-4",
+      "requestBody": {
+        "summary": "☑️ Write tests",
+        "transparency": "opaque",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false",
+            "oldField": "keep-me"
+          }
+        }
+      }
+    },
+    "timePatch": {
+      "calendarId": "primary",
+      "eventId": "evt-4",
+      "requestBody": {
+        "start": {
+          "dateTime": "2026-03-02T17:00:00.000Z",
+          "timeZone": "America/New_York"
+        },
+        "end": {
+          "dateTime": "2026-03-02T17:45:00.000Z",
+          "timeZone": "America/New_York"
+        }
+      }
+    }
+  },
+  "rescheduleAll": [
+    {
+      "name": "priority first, busy event, completed and all-day events skipped",
+      "now": "2026-03-02T09:00:00.000Z",
+      "settings": {
+        "id": "settings-1",
+        "userId": "user-1",
+        "calendarId": "primary",
+        "timezone": "UTC",
+        "workStartHour": 9,
+        "workEndHour": 17,
+        "eventColor": "2",
+        "defaultDuration": 30
+      },
+      "priority": [
+        "p1"
+      ],
+      "events": [
+        {
+          "id": "p2",
+          "summary": "☑️ Later",
+          "start": {
+            "dateTime": "2026-03-02T11:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-03-02T11:30:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        },
+        {
+          "id": "busy",
+          "summary": "Team sync",
+          "start": {
+            "dateTime": "2026-03-02T09:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-03-02T09:30:00.000Z"
+          }
+        },
+        {
+          "id": "allday",
+          "summary": "☑️ All day",
+          "start": {
+            "date": "2026-03-02"
+          },
+          "end": {
+            "date": "2026-03-03"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        },
+        {
+          "id": "p1",
+          "summary": "☑️ First",
+          "start": {
+            "dateTime": "2026-03-02T10:30:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-03-02T11:00:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        },
+        {
+          "id": "done",
+          "summary": "✅ Done",
+          "start": {
+            "dateTime": "2026-03-02T12:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-03-02T12:30:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "true"
+            }
+          }
+        }
+      ],
+      "patches": [
+        {
+          "eventId": "p1",
+          "start": {
+            "dateTime": "2026-03-02T09:30:00.000Z",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-03-02T10:00:00.000Z",
+            "timeZone": "UTC"
+          }
+        },
+        {
+          "eventId": "p2",
+          "start": {
+            "dateTime": "2026-03-02T10:00:00.000Z",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-03-02T10:30:00.000Z",
+            "timeZone": "UTC"
+          }
+        }
+      ],
+      "listCalls": [
+        {
+          "timeMin": "2026-02-23T09:00:00.000Z",
+          "timeMax": "2026-05-31T09:00:00.000Z"
+        },
+        {
+          "timeMin": "2026-03-02T10:00:00.000Z",
+          "timeMax": "2026-05-31T10:00:00.000Z"
+        }
+      ],
+      "summary": {
+        "moved": 2,
+        "unchanged": 0,
+        "skippedNoSlot": 0,
+        "skippedInvalid": 0,
+        "failed": 0
+      }
+    },
+    {
+      "name": "already in place, past task, transparent busy, failure",
+      "now": "2026-02-09T08:10:00.000Z",
+      "settings": {
+        "id": "settings-1",
+        "userId": "user-1",
+        "calendarId": "primary",
+        "timezone": "Europe/Helsinki",
+        "workStartHour": 8,
+        "workEndHour": 16,
+        "eventColor": "2",
+        "defaultDuration": 30
+      },
+      "events": [
+        {
+          "id": "first",
+          "summary": "☑️ First",
+          "start": {
+            "dateTime": "2026-02-09T08:15:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-02-09T09:15:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        },
+        {
+          "id": "past",
+          "summary": "☑️ Past",
+          "start": {
+            "dateTime": "2026-02-05T08:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-02-05T08:45:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true"
+            }
+          }
+        },
+        {
+          "id": "free",
+          "summary": "Out of office",
+          "transparency": "transparent",
+          "start": {
+            "dateTime": "2026-02-09T09:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-02-09T12:00:00.000Z"
+          }
+        },
+        {
+          "id": "lunch",
+          "summary": "Lunch",
+          "start": {
+            "dateTime": "2026-02-09T10:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-02-09T11:00:00.000Z"
+          }
+        },
+        {
+          "id": "broken",
+          "summary": "☑️ Broken",
+          "start": {
+            "dateTime": "2026-02-10T08:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-02-10T09:00:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        },
+        {
+          "id": "gone",
+          "summary": "☑️ Gone",
+          "start": {
+            "dateTime": "2026-02-11T08:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-02-11T08:30:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        }
+      ],
+      "failPatch": [
+        "broken"
+      ],
+      "cancelled": [
+        "gone"
+      ],
+      "patches": [
+        {
+          "eventId": "past",
+          "start": {
+            "dateTime": "2026-02-09T08:15:00.000Z",
+            "timeZone": "Europe/Helsinki"
+          },
+          "end": {
+            "dateTime": "2026-02-09T09:00:00.000Z",
+            "timeZone": "Europe/Helsinki"
+          }
+        },
+        {
+          "eventId": "first",
+          "start": {
+            "dateTime": "2026-02-09T09:00:00.000Z",
+            "timeZone": "Europe/Helsinki"
+          },
+          "end": {
+            "dateTime": "2026-02-09T10:00:00.000Z",
+            "timeZone": "Europe/Helsinki"
+          }
+        },
+        {
+          "eventId": "broken",
+          "start": {
+            "dateTime": "2026-02-09T11:00:00.000Z",
+            "timeZone": "Europe/Helsinki"
+          },
+          "end": {
+            "dateTime": "2026-02-09T12:00:00.000Z",
+            "timeZone": "Europe/Helsinki"
+          }
+        }
+      ],
+      "listCalls": [
+        {
+          "timeMin": "2026-02-02T08:10:00.000Z",
+          "timeMax": "2026-05-10T08:10:00.000Z"
+        },
+        {
+          "timeMin": "2026-02-09T09:00:00.000Z",
+          "timeMax": "2026-05-10T09:00:00.000Z"
+        },
+        {
+          "timeMin": "2026-02-09T10:00:00.000Z",
+          "timeMax": "2026-05-10T10:00:00.000Z"
+        },
+        {
+          "timeMin": "2026-02-09T10:00:00.000Z",
+          "timeMax": "2026-05-10T10:00:00.000Z"
+        }
+      ],
+      "summary": {
+        "moved": 2,
+        "unchanged": 0,
+        "skippedNoSlot": 0,
+        "skippedInvalid": 0,
+        "failed": 2
+      }
+    },
+    {
+      "name": "no slot for an oversized task",
+      "now": "2026-02-09T08:00:00.000Z",
+      "settings": {
+        "id": "settings-1",
+        "userId": "user-1",
+        "calendarId": "primary",
+        "timezone": "UTC",
+        "workStartHour": 9,
+        "workEndHour": 10,
+        "eventColor": "2",
+        "defaultDuration": 30
+      },
+      "events": [
+        {
+          "id": "long",
+          "summary": "☑️ Long",
+          "start": {
+            "dateTime": "2026-02-09T09:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-02-09T12:00:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        },
+        {
+          "id": "short",
+          "summary": "☑️ Short",
+          "start": {
+            "dateTime": "2026-02-10T09:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-02-10T09:15:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        }
+      ],
+      "patches": [
+        {
+          "eventId": "short",
+          "start": {
+            "dateTime": "2026-02-09T09:00:00.000Z",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-02-09T09:15:00.000Z",
+            "timeZone": "UTC"
+          }
+        }
+      ],
+      "listCalls": [
+        {
+          "timeMin": "2026-02-02T08:00:00.000Z",
+          "timeMax": "2026-05-10T08:00:00.000Z"
+        }
+      ],
+      "summary": {
+        "moved": 1,
+        "unchanged": 0,
+        "skippedNoSlot": 1,
+        "skippedInvalid": 0,
+        "failed": 0
+      }
+    },
+    {
+      "name": "zero-length task uses the default duration",
+      "now": "2026-02-09T08:00:00.000Z",
+      "settings": {
+        "id": "settings-1",
+        "userId": "user-1",
+        "calendarId": "primary",
+        "timezone": "UTC",
+        "workStartHour": 9,
+        "workEndHour": 17,
+        "eventColor": "2",
+        "defaultDuration": 45
+      },
+      "events": [
+        {
+          "id": "zero",
+          "summary": "☑️ Zero",
+          "start": {
+            "dateTime": "2026-02-12T13:00:00.000Z"
+          },
+          "end": {
+            "dateTime": "2026-02-12T13:00:00.000Z"
+          },
+          "extendedProperties": {
+            "private": {
+              "caltodo": "true",
+              "caltodoCompleted": "false"
+            }
+          }
+        }
+      ],
+      "patches": [
+        {
+          "eventId": "zero",
+          "start": {
+            "dateTime": "2026-02-09T09:00:00.000Z",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-02-09T09:45:00.000Z",
+            "timeZone": "UTC"
+          }
+        }
+      ],
+      "listCalls": [
+        {
+          "timeMin": "2026-02-02T08:00:00.000Z",
+          "timeMax": "2026-05-10T08:00:00.000Z"
+        }
+      ],
+      "summary": {
+        "moved": 1,
+        "unchanged": 0,
+        "skippedNoSlot": 0,
+        "skippedInvalid": 0,
+        "failed": 0
+      }
+    }
+  ],
+  "taskList": {
+    "now": "2026-02-10T12:00:00.000Z",
+    "events": [
+      {
+        "id": "late",
+        "summary": "☑️ Late",
+        "start": {
+          "dateTime": "2026-02-12T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-12T10:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      },
+      {
+        "id": "done-old",
+        "summary": "✅ Old",
+        "start": {
+          "dateTime": "2026-02-01T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-01T10:00:00.000Z"
+        },
+        "updated": "2026-02-01T10:05:00.000Z",
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "true"
+          }
+        }
+      },
+      {
+        "id": "early",
+        "summary": "☑️ Early",
+        "start": {
+          "dateTime": "2026-02-11T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-11T09:30:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true"
+          }
+        }
+      },
+      {
+        "id": "meeting",
+        "summary": "Meeting",
+        "start": {
+          "dateTime": "2026-02-11T08:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-11T08:30:00.000Z"
+        }
+      },
+      {
+        "id": "done-new",
+        "summary": "✅ New",
+        "start": {
+          "dateTime": "2026-02-09T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-09T10:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "true"
+          }
+        }
+      },
+      {
+        "id": "same-start",
+        "summary": "☑️ Same start",
+        "start": {
+          "dateTime": "2026-02-11T09:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-02-11T10:00:00.000Z"
+        },
+        "extendedProperties": {
+          "private": {
+            "caltodo": "true",
+            "caltodoCompleted": "false"
+          }
+        }
+      }
+    ],
+    "listParams": {
+      "calendarId": "primary",
+      "timeMin": "2026-01-27T12:00:00.000Z",
+      "timeMax": "2026-05-11T12:00:00.000Z"
+    },
+    "body": [
+      {
+        "id": "early",
+        "title": "Early",
+        "details": null,
+        "duration": 30,
+        "scheduledStart": "2026-02-11T09:00:00.000Z",
+        "scheduledEnd": "2026-02-11T09:30:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 0
+      },
+      {
+        "id": "same-start",
+        "title": "Same start",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-11T09:00:00.000Z",
+        "scheduledEnd": "2026-02-11T10:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 1
+      },
+      {
+        "id": "late",
+        "title": "Late",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-12T09:00:00.000Z",
+        "scheduledEnd": "2026-02-12T10:00:00.000Z",
+        "completed": false,
+        "completedAt": null,
+        "priority": 2
+      },
+      {
+        "id": "done-new",
+        "title": "New",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-09T09:00:00.000Z",
+        "scheduledEnd": "2026-02-09T10:00:00.000Z",
+        "completed": true,
+        "completedAt": "2026-02-09T10:00:00.000Z",
+        "priority": 0
+      },
+      {
+        "id": "done-old",
+        "title": "Old",
+        "details": null,
+        "duration": 60,
+        "scheduledStart": "2026-02-01T09:00:00.000Z",
+        "scheduledEnd": "2026-02-01T10:00:00.000Z",
+        "completed": true,
+        "completedAt": "2026-02-01T10:05:00.000Z",
+        "priority": 0
+      }
+    ]
+  },
+  "reorder": [
+    {
+      "name": "swap two tasks",
+      "taskIds": [
+        "t1",
+        "t2"
+      ],
+      "events": {
+        "t1": [
+          "2026-02-10T10:00:00.000Z",
+          "2026-02-10T10:30:00.000Z",
+          30
+        ],
+        "t2": [
+          "2026-02-10T09:00:00.000Z",
+          "2026-02-10T09:30:00.000Z",
+          30
+        ]
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      },
+      "updates": [
+        {
+          "eventId": "t1",
+          "start": "2026-02-10T09:00:00.000Z",
+          "end": "2026-02-10T09:30:00.000Z"
+        },
+        {
+          "eventId": "t2",
+          "start": "2026-02-10T10:00:00.000Z",
+          "end": "2026-02-10T10:30:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "different durations keep their own length",
+      "taskIds": [
+        "c",
+        "a",
+        "b"
+      ],
+      "events": {
+        "a": [
+          "2026-02-10T09:00:00.000Z",
+          "2026-02-10T10:00:00.000Z",
+          60
+        ],
+        "b": [
+          "2026-02-10T10:00:00.000Z",
+          "2026-02-10T10:15:00.000Z",
+          15
+        ],
+        "c": [
+          "2026-02-10T13:00:00.000Z",
+          "2026-02-10T14:30:00.000Z",
+          90
+        ]
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      },
+      "updates": [
+        {
+          "eventId": "c",
+          "start": "2026-02-10T09:00:00.000Z",
+          "end": "2026-02-10T10:30:00.000Z"
+        },
+        {
+          "eventId": "a",
+          "start": "2026-02-10T10:00:00.000Z",
+          "end": "2026-02-10T11:00:00.000Z"
+        },
+        {
+          "eventId": "b",
+          "start": "2026-02-10T13:00:00.000Z",
+          "end": "2026-02-10T13:15:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "deleted and unknown tasks are skipped",
+      "taskIds": [
+        "gone",
+        "x",
+        "y",
+        "missing"
+      ],
+      "events": {
+        "x": [
+          "2026-02-11T09:00:00.000Z",
+          "2026-02-11T09:45:00.000Z",
+          45
+        ],
+        "y": [
+          "2026-02-10T09:00:00.000Z",
+          "2026-02-10T09:45:00.000Z",
+          45
+        ],
+        "gone": "deleted"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      },
+      "updates": [
+        {
+          "eventId": "x",
+          "start": "2026-02-10T09:00:00.000Z",
+          "end": "2026-02-10T09:45:00.000Z"
+        },
+        {
+          "eventId": "y",
+          "start": "2026-02-11T09:00:00.000Z",
+          "end": "2026-02-11T09:45:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "unchanged order makes no update",
+      "taskIds": [
+        "a",
+        "b"
+      ],
+      "events": {
+        "a": [
+          "2026-02-10T09:00:00.000Z",
+          "2026-02-10T09:30:00.000Z",
+          30
+        ],
+        "b": [
+          "2026-02-10T10:00:00.000Z",
+          "2026-02-10T10:30:00.000Z",
+          30
+        ]
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      },
+      "updates": []
+    }
+  ]
+}

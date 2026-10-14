@@ -1,0 +1,382 @@
+{
+  "source": "server/db.ts runMigrations (Node, drizzle-orm migrator) on an empty database at the commit that adds this file",
+  "postgres": "17.9 (Debian 17.9-1.pgdg13+1)",
+  "snapshot": {
+    "tables": [
+      {
+        "table": "action_tokens",
+        "kind": "r"
+      },
+      {
+        "table": "user_sessions",
+        "kind": "r"
+      },
+      {
+        "table": "user_settings",
+        "kind": "r"
+      },
+      {
+        "table": "users",
+        "kind": "r"
+      }
+    ],
+    "columns": [
+      {
+        "table": "action_tokens",
+        "position": 1,
+        "name": "id",
+        "type": "character varying",
+        "not_null": true,
+        "default": "gen_random_uuid()"
+      },
+      {
+        "table": "action_tokens",
+        "position": 2,
+        "name": "token_hash",
+        "type": "text",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "action_tokens",
+        "position": 3,
+        "name": "user_id",
+        "type": "character varying",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "action_tokens",
+        "position": 4,
+        "name": "event_id",
+        "type": "text",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "action_tokens",
+        "position": 5,
+        "name": "calendar_id",
+        "type": "text",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "action_tokens",
+        "position": 6,
+        "name": "expires_at",
+        "type": "timestamp(6) without time zone",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "action_tokens",
+        "position": 7,
+        "name": "used_at",
+        "type": "timestamp(6) without time zone",
+        "not_null": false,
+        "default": null
+      },
+      {
+        "table": "action_tokens",
+        "position": 8,
+        "name": "created_at",
+        "type": "timestamp(6) without time zone",
+        "not_null": true,
+        "default": "now()"
+      },
+      {
+        "table": "user_sessions",
+        "position": 1,
+        "name": "sid",
+        "type": "character varying",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "user_sessions",
+        "position": 2,
+        "name": "sess",
+        "type": "json",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "user_sessions",
+        "position": 3,
+        "name": "expire",
+        "type": "timestamp(6) without time zone",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "user_settings",
+        "position": 1,
+        "name": "id",
+        "type": "character varying",
+        "not_null": true,
+        "default": "gen_random_uuid()"
+      },
+      {
+        "table": "user_settings",
+        "position": 2,
+        "name": "user_id",
+        "type": "character varying",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "user_settings",
+        "position": 3,
+        "name": "calendar_id",
+        "type": "text",
+        "not_null": false,
+        "default": null
+      },
+      {
+        "table": "user_settings",
+        "position": 4,
+        "name": "work_start_hour",
+        "type": "integer",
+        "not_null": true,
+        "default": "9"
+      },
+      {
+        "table": "user_settings",
+        "position": 5,
+        "name": "work_end_hour",
+        "type": "integer",
+        "not_null": true,
+        "default": "17"
+      },
+      {
+        "table": "user_settings",
+        "position": 6,
+        "name": "timezone",
+        "type": "text",
+        "not_null": true,
+        "default": "'America/New_York'::text"
+      },
+      {
+        "table": "user_settings",
+        "position": 7,
+        "name": "default_duration",
+        "type": "integer",
+        "not_null": true,
+        "default": "60"
+      },
+      {
+        "table": "user_settings",
+        "position": 8,
+        "name": "event_color",
+        "type": "text",
+        "not_null": true,
+        "default": "'1'::text"
+      },
+      {
+        "table": "users",
+        "position": 1,
+        "name": "id",
+        "type": "character varying",
+        "not_null": true,
+        "default": "gen_random_uuid()"
+      },
+      {
+        "table": "users",
+        "position": 2,
+        "name": "google_id",
+        "type": "text",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "users",
+        "position": 3,
+        "name": "email",
+        "type": "text",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "users",
+        "position": 4,
+        "name": "display_name",
+        "type": "text",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "table": "users",
+        "position": 5,
+        "name": "access_token",
+        "type": "text",
+        "not_null": false,
+        "default": null
+      },
+      {
+        "table": "users",
+        "position": 6,
+        "name": "refresh_token",
+        "type": "text",
+        "not_null": false,
+        "default": null
+      }
+    ],
+    "constraints": [
+      {
+        "table": "action_tokens",
+        "name": "action_tokens_pkey",
+        "type": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "action_tokens",
+        "name": "action_tokens_token_hash_key",
+        "type": "u",
+        "definition": "UNIQUE (token_hash)"
+      },
+      {
+        "table": "action_tokens",
+        "name": "action_tokens_user_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (user_id) REFERENCES users(id)"
+      },
+      {
+        "table": "user_sessions",
+        "name": "user_sessions_pkey",
+        "type": "p",
+        "definition": "PRIMARY KEY (sid)"
+      },
+      {
+        "table": "user_settings",
+        "name": "user_settings_pkey",
+        "type": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "user_settings",
+        "name": "user_settings_user_id_unique",
+        "type": "u",
+        "definition": "UNIQUE (user_id)"
+      },
+      {
+        "table": "user_settings",
+        "name": "user_settings_user_id_users_id_fk",
+        "type": "f",
+        "definition": "FOREIGN KEY (user_id) REFERENCES users(id)"
+      },
+      {
+        "table": "users",
+        "name": "users_google_id_unique",
+        "type": "u",
+        "definition": "UNIQUE (google_id)"
+      },
+      {
+        "table": "users",
+        "name": "users_pkey",
+        "type": "p",
+        "definition": "PRIMARY KEY (id)"
+      }
+    ],
+    "indexes": [
+      {
+        "table": "action_tokens",
+        "name": "action_tokens_calendar_id_idx",
+        "definition": "CREATE INDEX action_tokens_calendar_id_idx ON public.action_tokens USING btree (calendar_id)"
+      },
+      {
+        "table": "action_tokens",
+        "name": "action_tokens_event_id_idx",
+        "definition": "CREATE INDEX action_tokens_event_id_idx ON public.action_tokens USING btree (event_id)"
+      },
+      {
+        "table": "action_tokens",
+        "name": "action_tokens_expires_at_idx",
+        "definition": "CREATE INDEX action_tokens_expires_at_idx ON public.action_tokens USING btree (expires_at)"
+      },
+      {
+        "table": "action_tokens",
+        "name": "action_tokens_pkey",
+        "definition": "CREATE UNIQUE INDEX action_tokens_pkey ON public.action_tokens USING btree (id)"
+      },
+      {
+        "table": "action_tokens",
+        "name": "action_tokens_token_hash_key",
+        "definition": "CREATE UNIQUE INDEX action_tokens_token_hash_key ON public.action_tokens USING btree (token_hash)"
+      },
+      {
+        "table": "action_tokens",
+        "name": "action_tokens_user_id_idx",
+        "definition": "CREATE INDEX action_tokens_user_id_idx ON public.action_tokens USING btree (user_id)"
+      },
+      {
+        "table": "user_sessions",
+        "name": "user_sessions_pkey",
+        "definition": "CREATE UNIQUE INDEX user_sessions_pkey ON public.user_sessions USING btree (sid)"
+      },
+      {
+        "table": "user_settings",
+        "name": "user_settings_pkey",
+        "definition": "CREATE UNIQUE INDEX user_settings_pkey ON public.user_settings USING btree (id)"
+      },
+      {
+        "table": "user_settings",
+        "name": "user_settings_user_id_unique",
+        "definition": "CREATE UNIQUE INDEX user_settings_user_id_unique ON public.user_settings USING btree (user_id)"
+      },
+      {
+        "table": "users",
+        "name": "users_google_id_unique",
+        "definition": "CREATE UNIQUE INDEX users_google_id_unique ON public.users USING btree (google_id)"
+      },
+      {
+        "table": "users",
+        "name": "users_pkey",
+        "definition": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"
+      }
+    ],
+    "functions": []
+  },
+  "drizzleLedger": [
+    {
+      "id": 1,
+      "hash": "c9e2841d5241208e04da02b860ea4456013d425766aef5f9910e74d1957fecd9",
+      "created_at": "1766141785073"
+    },
+    {
+      "id": 2,
+      "hash": "7ba2543325678736f5ff22d2f2cf9a6b11cd9ca6e85987cbd040ab31bc168947",
+      "created_at": "1766141785074"
+    },
+    {
+      "id": 3,
+      "hash": "c88ac9cdfe69d963e9afd7158437a1c8f28fcb8b6001e56b8c9dc7374df1d7ae",
+      "created_at": "1766141785075"
+    },
+    {
+      "id": 4,
+      "hash": "dda7f52c945bee6f388d8d57b0b7313902706d2bffc0c7ff7cfc3af1cc53c76c",
+      "created_at": "1766233822527"
+    }
+  ],
+  "drizzleLedgerColumns": [
+    {
+      "column_name": "id",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "nextval('drizzle.__drizzle_migrations_id_seq'::regclass)"
+    },
+    {
+      "column_name": "hash",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "bigint",
+      "is_nullable": "YES",
+      "column_default": null
+    }
+  ]
+}

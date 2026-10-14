@@ -1,0 +1,45 @@
+{
+  "source": "server/storage.ts (Node, drizzle-orm 0.45.1, pg) with TZ=Europe/Helsinki at the commit that adds this file",
+  "tz": "Europe/Helsinki",
+  "writes": [
+    {
+      "hash": "winter",
+      "expiresAt": "2026-02-02T10:00:00.123Z",
+      "stored": "2026-02-02 10:00:00.123"
+    },
+    {
+      "hash": "summer",
+      "expiresAt": "2026-07-02T10:00:00.000Z",
+      "stored": "2026-07-02 10:00:00"
+    }
+  ],
+  "used": {
+    "hash": "winter",
+    "usedAt": "2026-02-03T08:15:00.456Z",
+    "stored": "2026-02-03 08:15:00.456"
+  },
+  "reads": [
+    {
+      "hash": "read-winter",
+      "stored": "2026-02-02 10:00:00.123",
+      "expiresAt": "2026-02-02T10:00:00.123Z"
+    },
+    {
+      "hash": "read-gap",
+      "stored": "2026-03-29 03:30:00",
+      "expiresAt": "2026-03-29T03:30:00.000Z"
+    },
+    {
+      "hash": "read-overlap",
+      "stored": "2026-10-25 03:30:00",
+      "expiresAt": "2026-10-25T03:30:00.000Z"
+    }
+  ],
+  "cleanup": {
+    "now": "2026-07-02T09:30:00.000Z",
+    "usedBefore": "2026-02-03T07:00:00.000Z",
+    "left": [
+      "summer"
+    ]
+  }
+}
