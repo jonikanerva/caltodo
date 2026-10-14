@@ -13,95 +13,63 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 - **Calendar Action Links** - Event descriptions include "Mark Complete" and "Reschedule" links
 - **Settings** - Configure your preferred calendar, work hours, timezone, default task duration, and event color
 - **Theme Toggle** - Switch between light and dark modes
-- **Midnight Rescheduling** - Nightly cron job reschedules incomplete tasks (server time)
-- **Action Token Cleanup** - Daily cron job removes expired and old-used action tokens
+- **Midnight Rescheduling** - A nightly job at 00:00 reschedules incomplete tasks (server time zone `TZ`)
+- **Action Token Cleanup** - A daily job at 01:15 removes expired and old used action tokens and expired sessions
 
 ## Code Organization
 
 ```
-├── client/                  # React frontend
-│   ├── src/
-│   │   ├── components/      # Reusable UI components (shadcn/ui)
-│   │   ├── hooks/           # Custom React hooks
-│   │   ├── lib/             # Utilities (API client, query client)
-│   │   ├── pages/           # Page components (auth, main, settings, calendar view, not found)
-│   │   └── App.tsx          # Root component with routing
-│   └── index.html
-│
-├── server/                  # Express backend
-│   ├── auth.ts              # Passport.js Google OAuth setup
-│   ├── calendar.ts          # Google Calendar API integration
-│   ├── config.ts            # Environment secret validation
-│   ├── cron.ts              # Midnight rescheduling cron job (runs at 00:00)
-│   ├── crypto.ts            # Token encryption utilities
-│   ├── csrf.ts              # CSRF token middleware
-│   ├── db.ts                # Database connection
-│   ├── index.ts             # Server entry point
-│   ├── routes.ts            # API route handlers
-│   ├── static.ts            # Static file serving (production)
-│   ├── storage.ts           # Database operations (Drizzle ORM)
-│   ├── tokens.ts            # Action tokens for calendar event links
-│   └── vite.ts              # Vite dev server integration
-│
-├── shared/                  # Shared between frontend and backend
-│   ├── schema.ts            # Drizzle database schema and types
-│   └── types.ts             # Shared API types
-│
-├── drizzle.config.ts        # Drizzle ORM configuration
-├── vite.config.ts           # Vite bundler configuration
-└── package.json             # Dependencies and scripts
+├── crates/
+│   ├── domain/              # Pure rules: free-slot search, event format, task order, settings
+│   └── server/              # The `caltodo` binary: HTTP (Axum), use cases, PostgreSQL (SQLx),
+│                            # Google adapters, sessions, jobs, configuration, lifecycle
+├── migrations/              # SQLx migrations (0001 is the baseline of the old Drizzle schema)
+├── contract/openapi.json    # The API contract, generated from the Rust routes
+├── packages/api-client/     # Generated TypeScript SDK and Zod validators + a small facade
+├── web/                     # The React app (Vite, TanStack Router and Query, shadcn/ui, Tailwind CSS)
+├── e2e/                     # Playwright and axe journeys against a deterministic test server
+├── docs/adr/                # Architecture decision records
+├── mise.toml                # Tool versions and every project command
+└── railpack.json            # The Railway build
 ```
 
 ### Key Technologies
 
-- **Frontend**: React 19, TypeScript, Vite, TanStack Query, Wouter (routing), shadcn/ui, Tailwind CSS
-- **Backend**: Node.js, Express, TypeScript, Passport.js
-- **Database**: PostgreSQL with Drizzle ORM
+- **Server**: Rust, Axum, Tokio, SQLx, tower-sessions, reqwest, oauth2, Jiff, tracing
+- **Web app**: React 19, TypeScript 7, Vite 8, TanStack Router, TanStack Query, shadcn/ui (Radix UI), Tailwind CSS, React Hook Form + Zod
+- **Database**: PostgreSQL
 - **APIs**: Google Calendar API, Google OAuth 2.0
+
+`STACK.md` describes the stack, the commands, and the quality checks. `VISION.md` describes the product. `docs/adr/` records the main decisions.
 
 ### Architecture Notes
 
-- **Frontend**: Wouter for routing, TanStack React Query for server state, shadcn/ui (Radix UI), Tailwind CSS with theme variables, @hello-pangea/dnd for reordering, React Hook Form + Zod for validation.
-- **Backend**: TypeScript (ESM), tsx in development, esbuild for production bundling, express-session with PostgreSQL store (connect-pg-simple), node-cron for midnight rescheduling and action token cleanup.
-- **Data**: Drizzle ORM with schema in `shared/schema.ts`; shared types in `shared/` are used by both frontend and backend; tasks live in Google Calendar and are mapped to `CalendarTask` on read; tables include `users`, `user_settings`, `user_sessions`.
-- **Security**: OAuth tokens are encrypted at rest; action tokens expire after 7 days.
-- **Event handling**: App-created calendar events are marked with `[Todo]` to avoid touching unrelated events.
-- **Google access**: OAuth scopes include `profile`, `email`, `calendar`, and `calendar.events`.
+- One web process serves the API, the action pages, and the built web app. It also runs the two daily jobs in-process. There is no separate worker.
+- Migrations are an explicit start step: `caltodo migrate`, then `caltodo serve`. `serve` refuses a database without the migrations.
+- Tasks live in Google Calendar. The server maps app-created events (private extended property `caltodo`) to tasks on read.
+- OAuth tokens are encrypted at rest (AES-256-GCM). Action links expire after 7 days and work once.
+- Sessions live in the `app_sessions` table. The cookie is `caltodo.sid`.
+- Google access: OAuth scopes `profile`, `email`, `calendar`, and `calendar.events`.
 
 ### API Overview
 
-- Auth: `/api/auth/google`, `/api/auth/google/callback`, `/api/auth/logout`, `/api/auth/user`
-- Tasks: `/api/tasks` (list + create), `/api/tasks/:id` (complete/redo), `/api/tasks/reorder`, `/api/tasks/reschedule-all`, `/api/tasks/reload`, `/api/tasks/:id/complete`, `/api/tasks/:id/reschedule`, `/api/tasks/bulk-complete`
+`contract/openapi.json` is the complete contract. Every error is RFC 9457 Problem Details (`application/problem+json`) with a stable `code`.
+
+- Auth: `/api/auth/google`, `/api/auth/google/callback`, `/api/auth/logout`, `/api/auth/user`, `/api/account`
+- Tasks: `/api/tasks` (list + create), `/api/tasks/{id}` (complete/redo), `/api/tasks/reorder`, `/api/tasks/reschedule-all`, `/api/tasks/reload`, `/api/tasks/{id}/complete`, `/api/tasks/{id}/reschedule`, `/api/tasks/bulk-complete`
 - Settings: `/api/settings`, `/api/calendars`
-- Action links: `/api/action/:token` (complete/reschedule)
-- CSRF: send `X-CSRF-Token` from `/api/auth/user` on non-GET requests
+- Action links: `/action/{token}` (HTML page) and `/api/action/{token}`
+- Operations: `/healthz`, `/readyz`, `/version`
+- CSRF: send `X-CSRF-Token` from `/api/auth/user` on every request that is not GET
 
 ## Local Development Setup (macOS)
 
 ### Prerequisites
 
-1. **Node.js** (v20 or later)
-
-   ```bash
-   # Using Homebrew
-   brew install node
-
-   # Or using nvm
-   nvm install 20
-   nvm use 20
-   ```
-
-2. **PostgreSQL**
-
-   ```bash
-   brew install postgresql@15
-   brew services start postgresql@15
-
-   # Create a database
-   createdb todo
-   ```
-
-3. **Google Cloud Project**
+1. **mise**: `brew install mise`, then activate it in your shell (see the mise documentation).
+2. **rustup**: `brew install rustup`, then `rustup-init`. `rust-toolchain.toml` selects the Rust version.
+3. **Docker** (for example OrbStack or Docker Desktop) for the local PostgreSQL container.
+4. **Google Cloud Project**
    - Go to [Google Cloud Console](https://console.cloud.google.com/)
    - Create a new project
    - Enable the **Google Calendar API**
@@ -112,10 +80,9 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root. `mise run dev` reads it.
 
 ```env
-DATABASE_URL=postgresql://localhost:5432/todo
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 SESSION_SECRET=32+_char_random_session_secret
@@ -126,46 +93,34 @@ TOKEN_ENCRYPTION_KEY=32+_char_random_key_for_token_encryption
 Notes:
 
 - `SESSION_SECRET` and `ACTION_TOKEN_SECRET` must be different values and at least 32 characters long.
+- `mise run dev` uses the local container database (`postgres://postgres:postgres@127.0.0.1:55473/caltodo`) when `.env` has no `DATABASE_URL`.
+- `TZ` sets the time zone of the jobs (00:00 and 01:15). The default is UTC. Stored timestamps are always UTC.
 
 ### Installation
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Run database migrations
-pnpm run db:migrate
-
-# Start development server
-pnpm run dev
+mise trust
+mise run setup     # tools, dependencies, and the Playwright browser
+mise run dev       # PostgreSQL container, migrations, the server on 5001, and Vite on 5000
 ```
 
-The app will be available at `http://localhost:5000`.
+The app will be available at `http://localhost:5000`. Vite sends `/api` and `/action` to the server.
 
-### Development Scripts
+### Commands
 
-- `pnpm run dev` - Start development server (frontend + backend)
-- `pnpm run lint` - Run strict ESLint quality gates (includes complexity thresholds)
-- `pnpm run quality:deadcode` - Detect unused files/exports/dependencies with Knip
-- `pnpm run check` - Run type and code-style checks
-- `pnpm run test` - Run the test suite once
-- `pnpm run test:integration` - Run integration tests only
-- `pnpm run test:watch` - Run tests in watch mode
-- `pnpm run test:coverage` - Run tests with coverage report
-- `pnpm run verify` - Run full quality gate (`lint`, `quality:deadcode`, `test:coverage`, `check`, `build`)
-- `pnpm run db:generate` - Create a new migration from schema changes
-- `pnpm run db:migrate` - Run pending migrations manually
-- `pnpm run build` - Build for production
-- `pnpm run start` - Run production build (also runs pending migrations and starts cron jobs in-process)
+- `mise run dev` - Start the server and the Vite dev server
+- `mise run format` - Format the Rust and TypeScript sources
+- `mise run lint` - Clippy, Oxlint, and the TypeScript type checks
+- `mise run build` - Export the API contract, generate the client, build the web app and the release server
+- `mise run test` - Rust tests, Vitest, and the Playwright journeys
+- `mise run verify` - The full quality gate; run it before each commit
+- `mise run db:start`, `db:stop`, `db:migrate`, `db:reset` - The local PostgreSQL container
+- `mise run contract:export`, `contract:generate`, `contract:check` - The API contract and the generated client
+- `mise run start` - Run the release server from `mise run build`
 
 ## Production Deployment
 
-### Requirements
-
-1. **Node.js Runtime** - Node.js 20+ environment
-2. **PostgreSQL Database** - Managed instance or self-hosted
-3. **HTTPS** - Required for OAuth security and session cookies
-4. **Persistent Process Manager** - configured for automatic restarts
+Railway builds the service with Railpack from `railpack.json` and starts it with `./bin/caltodo migrate && exec ./bin/caltodo serve`. `STACK.md` §15 describes the release, the checks, and the rollback.
 
 ### Environment Variables (Production)
 
@@ -176,38 +131,17 @@ GOOGLE_CLIENT_SECRET=your-production-client-secret
 SESSION_SECRET=strong-random-secret-min-32-chars
 ACTION_TOKEN_SECRET=another-strong-random-secret-min-32-chars
 TOKEN_ENCRYPTION_KEY=strong-32-char-key-for-encryption
-NODE_ENV=production
 PRODUCTION_APP_URL=https://your-domain.com
+TZ=Europe/Helsinki
 ```
+
+`PRODUCTION_APP_URL` turns on production mode: secure cookies, HSTS, and the production origin of the OAuth callback. On Railway, the server refuses to start without it. `NODE_ENV` has no effect.
 
 ### Google OAuth Setup for Production
 
 1. In Google Cloud Console, add your production domain to authorized redirect URIs:
    - `https://your-domain.com/api/auth/google/callback`
 2. If your app is public, you may need to complete Google's OAuth verification process
-
-### Build and Deploy
-
-```bash
-# Install dependencies (includes dev dependencies needed for build)
-pnpm install --frozen-lockfile
-
-# Build the application
-pnpm run build
-
-# Start the server
-pnpm start
-```
-
-### Deployment Checklist
-
-- [ ] PostgreSQL database provisioned and accessible
-- [ ] Environment variables configured
-- [ ] Google OAuth redirect URI updated for production domain
-- [ ] HTTPS configured (required for secure cookies)
-- [ ] Process manager configured for automatic restarts
-- [ ] Web process startup runs DB migrations successfully
-- [ ] In-process cron jobs run for midnight rescheduling and daily action token cleanup (set `TZ` if needed)
 
 ## Contributing
 
