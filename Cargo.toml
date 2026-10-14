@@ -1,0 +1,97 @@
+# The Rust workspace: the pure domain crate and the server crate.
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+# crates/server/Cargo.toml repeats these values for Railpack. Keep them equal.
+[workspace.package]
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+# STACK.md §6 records the reason of each dependency. Enable only the features
+# that the code uses. Each crate inherits its entries with `workspace = true`.
+[workspace.dependencies]
+# The path dependency has a version, so cargo-deny does not see a wildcard.
+caltodo-domain = { path = "crates/domain", version = "=0.1.0" }
+# AES-256-GCM of the stored OAuth tokens (byte-compatible with the Node
+# format `enc:v1:`).
+aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes", "alloc"] }
+# The `SessionStore` trait of tower-sessions is an `async_trait`. Already in
+# the graph through tower-sessions.
+async-trait = { version = "=0.1.92", default-features = false }
+axum = { version = "=0.8.9", default-features = false, features = ["form", "http1", "json", "matched-path", "query", "tokio"] }
+# Unpadded base64url of the token formats. Version 0.22 is already in the
+# graph through SQLx.
+base64 = { version = "=0.22.1", default-features = false, features = ["alloc"] }
+# Parses form bodies and query strings like the Node server. Already in the
+# graph through reqwest.
+form_urlencoded = { version = "=1.2.2", default-features = false, features = ["std"] }
+futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
+# The request type of the OAuth client interface. Already in the graph
+# through axum and reqwest.
+http = { version = "=1.5.0", default-features = false, features = ["std"] }
+# Random bytes for tokens, nonces, and the CSRF token. Already in the graph
+# through aes-gcm.
+getrandom = { version = "=0.4.3", default-features = false, features = ["std"] }
+# The action token hash (HMAC-SHA256). Already in the graph through SQLx.
+hmac = { version = "=0.13.0", default-features = false }
+# Time. The bundled time zone database makes the zone rules independent of
+# the host files (STACK.md §10).
+jiff = { version = "=0.2.38", default-features = false, features = ["std", "tzdb-bundle-always"] }
+# The Jiff wrapper types for SQLx: the civil `timestamp` columns and
+# `timestamptz`.
+jiff-sqlx = { version = "=0.2.0", default-features = false, features = ["postgres"] }
+# The Google OAuth 2.0 authorization code flow with PKCE (ADR 0002).
+oauth2 = { version = "=5.0.0", default-features = false }
+reqwest = { version = "=0.13.5", default-features = false, features = ["form", "json", "query", "rustls"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+sha2 = { version = "=0.11.1", default-features = false }
+sqlx = { version = "=0.9.0", default-features = false, features = ["json", "macros", "migrate", "postgres", "runtime-tokio", "tls-rustls-ring-webpki"] }
+# Constant-time comparison of the CSRF token.
+subtle = { version = "=2.6.1", default-features = false, features = ["std"] }
+thiserror = "=2.0.21"
+# The expiry type of tower-sessions records. Already in the graph through
+# tower-sessions.
+time = { version = "=0.3.55", default-features = false, features = ["std"] }
+tokio = { version = "=1.53.3", features = ["macros", "net", "rt", "signal", "sync", "time"] }
+tower = { version = "=0.5.3", default-features = false, features = ["util"] }
+tower-http = { version = "=0.6.11", default-features = false, features = ["fs"] }
+# Server-side sessions with a first-party SQLx store (ADR 0003).
+tower-sessions = { version = "=0.15.0", default-features = false, features = ["axum-core", "signed"] }
+tracing = { version = "=0.1.44", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["registry", "std"] }
+# The random request id of each request (`v4`).
+uuid = { version = "=1.28.0", default-features = false, features = ["std", "v4"] }
+# The OpenAPI 3.1 document of the `/api` routes (contract/openapi.json).
+utoipa = { version = "=6.0.0", default-features = false, features = ["macros", "preserve_order"] }
+utoipa-axum = "=0.3.0"
+
+# The lints of the default Rust profile (STACK.md §1). Each crate inherits
+# them with `[lints] workspace = true`. `missing_debug_implementations` is an
+# extra lint of this project.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+unfulfilled_lint_expectations = "deny"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+let_underscore_must_use = "deny"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"
