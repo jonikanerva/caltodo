@@ -6,6 +6,11 @@
 -- that the Rust server adds on purpose: the SQLx ledger `_sqlx_migrations`
 -- and the session table `app_sessions` with its indexes. The `drizzle`
 -- schema is outside `public`, so the snapshot excludes it too.
+--
+-- From PostgreSQL 18, `pg_constraint` also lists each NOT NULL column as a
+-- constraint of type `n`. The `columns` part already records NOT NULL, and
+-- PostgreSQL 17 and older list no such rows, so the snapshot excludes them.
+-- The snapshot then stays the same on each major version.
 SELECT json_build_object(
   'tables', (
     SELECT coalesce(json_agg(json_build_object(
@@ -49,6 +54,7 @@ SELECT json_build_object(
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public'
       AND c.relname NOT IN ('_sqlx_migrations', 'app_sessions')
+      AND con.contype <> 'n'
   ),
   'indexes', (
     SELECT coalesce(json_agg(json_build_object(
