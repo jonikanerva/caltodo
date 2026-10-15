@@ -21,9 +21,10 @@ aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes", "a
 # the graph through tower-sessions.
 async-trait = { version = "=0.1.92", default-features = false }
 axum = { version = "=0.8.9", default-features = false, features = ["form", "http1", "json", "matched-path", "query", "tokio"] }
-# Unpadded base64url of the token formats. Version 0.22 is already in the
-# graph through SQLx.
-base64 = { version = "=0.22.1", default-features = false, features = ["alloc"] }
+# Unpadded base64url of the token formats. Version 0.23 is already in the
+# graph through reqwest. This crate does not request `simd-unsafe`, but reqwest
+# enables it and Cargo unifies the features.
+base64 = { version = "=0.23.1", default-features = false, features = ["alloc"] }
 # Parses form bodies and query strings like the Node server. Already in the
 # graph through reqwest.
 form_urlencoded = { version = "=1.2.2", default-features = false, features = ["std"] }
