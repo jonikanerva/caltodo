@@ -227,7 +227,7 @@ dependencies = [
  "aes-gcm",
  "async-trait",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "caltodo-domain",
  "form_urlencoded",
  "futures-util",
