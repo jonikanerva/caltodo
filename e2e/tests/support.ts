@@ -34,16 +34,22 @@ const isKnownFontViolation = (violation: Violation): boolean =>
 // The client address of each test. The server keeps its real rate limits
 // (120 API requests per minute per client) and trusts one
 // `X-Forwarded-For` hop, so each test sends its own address: the requests
-// of one test never count against the limit of another test.
+// of one test never count against the limit of another test. The counter
+// starts again in each worker process, and each project runs in a new worker,
+// so the second octet holds the worker index. Without it, the tests of the
+// second project reuse the addresses of the first project on the same server.
 let clientCount = 0
-const nextClientAddress = (): string => {
+const nextClientAddress = (workerIndex: number): string => {
   clientCount += 1
-  return `10.77.${String(Math.floor(clientCount / 250))}.${String((clientCount % 250) + 1)}`
+  return `10.${String(64 + (workerIndex % 192))}.${String(Math.floor(clientCount / 250))}.${String((clientCount % 250) + 1)}`
 }
 
 export const test = base.extend<{ problems: string[] }>({
-  extraHTTPHeaders: async ({ extraHTTPHeaders }, use) => {
-    await use({ ...extraHTTPHeaders, "X-Forwarded-For": nextClientAddress() })
+  extraHTTPHeaders: async ({ extraHTTPHeaders }, use, testInfo) => {
+    await use({
+      ...extraHTTPHeaders,
+      "X-Forwarded-For": nextClientAddress(testInfo.workerIndex),
+    })
   },
   problems: [
     async ({ context }, use) => {
