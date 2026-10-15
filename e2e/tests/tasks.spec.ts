@@ -48,13 +48,17 @@ test("completes a task and reopens it", async ({ page }) => {
 
 test("reorders two tasks with the keyboard", async ({ page }) => {
   const first = unique("First task")
-  const second = unique("Second task")
   await createTask(page, first)
-  await createTask(page, second)
+  await createTask(page, unique("Second task"))
   const titles = page.locator('[data-testid^="card-task-"] span.font-medium')
   const before = await titles.allTextContents()
   const firstIndex = before.indexOf(first)
-  expect(before.indexOf(second)).toBe(firstIndex + 1)
+  // The task after the first task in the list. The second task gets a later
+  // slot, so this task exists. It is not always the second task: the other
+  // journeys leave tasks of other durations in the same account, and the
+  // free-slot search can put the second task after them.
+  const next = before[firstIndex + 1]
+  if (next === undefined) throw new Error("no task after the first task")
   // @hello-pangea/dnd: Space lifts, an arrow moves, Space drops.
   const handle = page
     .locator('[data-testid^="card-task-"]', { hasText: first })
@@ -66,9 +70,9 @@ test("reorders two tasks with the keyboard", async ({ page }) => {
   await expect
     .poll(async () => {
       const after = await titles.allTextContents()
-      return after.indexOf(second) < after.indexOf(first)
+      return [after.indexOf(next), after.indexOf(first)]
     })
-    .toBe(true)
+    .toEqual([firstIndex, firstIndex + 1])
 })
 
 test("reloads and reschedules the list", async ({ page }) => {
