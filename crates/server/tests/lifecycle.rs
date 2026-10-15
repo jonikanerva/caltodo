@@ -405,6 +405,38 @@ async fn an_invalid_setting_stops_the_start_without_its_value() {
     assert!(!output.contains("short-synthetic-value"), "{output}");
 }
 
+/// A peer that accepts the PostgreSQL `SSLRequest` and then closes the
+/// connection. The local test server has no TLS and refuses the request, so
+/// SQLx would stop before it builds the certificate verifier.
+fn tls_accepting_peer() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            let mut ssl_request = [0_u8; 8];
+            if stream.read_exact(&mut ssl_request).is_ok() {
+                stream.write_all(b"S").ok();
+            }
+        }
+    });
+    port
+}
+
+/// `sslmode=verify-ca` makes SQLx build a certificate verifier with the
+/// process-default rustls crypto provider. With two providers in the binary,
+/// rustls has no default and panics (exit code 101). The start must fail with
+/// the mapped database error instead.
+#[test]
+fn migrate_fails_without_a_panic_when_the_url_requires_certificate_verification() {
+    let port = tls_accepting_peer();
+    let url = format!("postgres://caltodo:synthetic@127.0.0.1:{port}/caltodo?sslmode=verify-ca");
+    let mut migrate = Process::start(&["migrate"], &url, free_port());
+    let line = migrate.wait_for("caltodo stopped with an error");
+    assert_eq!(line["stage"], "database");
+    assert_eq!(migrate.wait_exit().code(), Some(1));
+}
+
 #[test]
 fn an_unknown_command_is_a_usage_error() {
     let status = Command::new(env!("CARGO_BIN_EXE_caltodo"))
