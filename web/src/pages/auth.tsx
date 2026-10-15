@@ -6,7 +6,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Calendar, CheckSquare, Clock } from "lucide-react"
+import { Calendar, SquareCheckBig, Clock } from "lucide-react"
 import { SiGoogle } from "react-icons/si"
 import { loginWithGoogle } from "@/lib/auth"
 
@@ -18,7 +18,7 @@ export default function AuthPage() {
           <CardHeader className="text-center space-y-2">
             <div className="flex justify-center mb-4">
               <div className="flex items-center gap-2">
-                <CheckSquare className="h-8 w-8 text-primary" />
+                <SquareCheckBig className="h-8 w-8 text-primary" />
                 <span className="text-2xl font-semibold">Todo</span>
               </div>
             </div>
@@ -49,7 +49,7 @@ export default function AuthPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <CheckSquare className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                <SquareCheckBig className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium text-sm">Priority Control</p>
                   <p className="text-sm text-muted-foreground">
