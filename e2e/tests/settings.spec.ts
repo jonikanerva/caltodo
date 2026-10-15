@@ -8,9 +8,8 @@ import {
 } from "./support.js"
 
 test("saves the settings and keeps them after a reload", async ({ page }) => {
-  // The default work hours: the original client shows a saved work hour
-  // other than the default as an empty select after a page load (a known
-  // defect, see the PR), so the journey starts from the defaults.
+  // The journey starts from the default work hours, so the hour select moves
+  // from a known value.
   await saveSettings(page, { workStartHour: 9, workEndHour: 17 })
   await page.goto("/settings")
   await expect(
@@ -34,10 +33,13 @@ test("saves the settings and keeps them after a reload", async ({ page }) => {
     defaultDuration: 30,
     eventColor: "7",
   })
-  // After a reload the original client shows the saved calendar and the
-  // changed work hour as empty selects (the known defect above); the radios
-  // keep their saved values.
+  // After a reload the page shows every saved value. Before Radix Select
+  // 2.4, the calendar and the changed work hour showed as empty selects.
   await page.reload()
+  await expect(page.getByTestId("select-calendar")).toContainText(
+    "E2E Calendar (Primary)",
+  )
+  await expect(page.getByTestId("select-work-start")).toContainText("08:00")
   await expect(page.getByTestId("radio-duration-30")).toHaveAttribute(
     "data-state",
     "checked",
