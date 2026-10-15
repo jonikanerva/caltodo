@@ -122,10 +122,8 @@ const KNOWN_DEFECTS: Record<string, RegExp> = {
   "meta-viewport": /^meta\[name="viewport"\]$/,
   // The footer links differ from the text only by color.
   "link-in-text-block": /^(\.active|a\[href\$="(privacy|tos)"\])$/,
-  // The drag handles of @hello-pangea/dnd have no accessible name.
-  "aria-command-name": /^div\[data-rfd-drag-handle-draggable-id=/,
-  // The task checkboxes, the duration select, and the toast close button.
-  "button-name": /checkbox-complete-|^\.absolute$|placeholder|select-duration/,
+  // The duration select and the toast close button.
+  "button-name": /^\.absolute$|placeholder|select-duration/,
   // The Google icon of the sign-in button.
   "svg-img-alt": /^\.h-4$/,
   // The action pages of the Node server have no `lang`.
@@ -133,17 +131,24 @@ const KNOWN_DEFECTS: Record<string, RegExp> = {
 }
 
 // Known defects that axe names with a selector that changes with the page
-// state. These entries match the markup of the element instead, and
-// optionally also its selector.
+// state. For example, axe names the only drag handle of a one-task list
+// `.cursor-grab`, but a drag handle among several by its `data-rfd-…`
+// attribute. These entries match the markup of the element instead.
 interface MarkupDefect {
   readonly html: RegExp
-  readonly target?: RegExp
 }
 
 const KNOWN_DEFECT_MARKUP: Record<string, readonly MarkupDefect[]> = {
-  // The header navigation on a narrow screen hides the label text of its
-  // buttons, so the buttons and their links have no accessible name.
-  "button-name": [{ html: /^<button[^>]* data-testid="nav-(tasks|settings)"/ }],
+  // The drag handles of @hello-pangea/dnd have no accessible name.
+  "aria-command-name": [{ html: /^<div [^>]*data-rfd-drag-handle-draggable-id="/ }],
+  "button-name": [
+    // The header navigation on a narrow screen hides the label text of its
+    // buttons, so the buttons and their links have no accessible name.
+    { html: /^<button[^>]* data-testid="nav-(tasks|settings)"/ },
+    // The task checkboxes. Axe names a checkbox by its `data-testid` only
+    // when the event id is short.
+    { html: /^<button [^>]*role="checkbox"[^>]* data-testid="checkbox-complete-/ },
+  ],
   "link-name": [{ html: /^<a [^>]*href="\/(settings)?"/ }],
   // The contrast defects of the unchanged theme, element by element. A
   // contrast violation of any other element fails the test.
@@ -158,24 +163,33 @@ const KNOWN_DEFECT_MARKUP: Record<string, readonly MarkupDefect[]> = {
       html: /^<p class="text-center text-xs text-muted-foreground\/70">Copyright donut /,
     },
     { html: /^<a class="hover:text-muted-foreground( active)?" href="\/(privacy|tos)"/ },
-    // The time and the duration badges of a task card.
-    {
-      html: /^<div class="whitespace-nowrap inline-flex items-center rounded-md [^"]*(\[border-color:var\(--badge-outline\)\] shadow-xs gap-1 text-xs|border-transparent bg-secondary text-secondary-foreground gap-1)"/,
-      target: /^div\[data-rfd-draggable-id=/,
-    },
   ],
 }
 
 const isKnownDefect = (rule: string, target: string, html: string): boolean =>
   (KNOWN_DEFECTS[rule]?.test(target) ?? false) ||
-  (KNOWN_DEFECT_MARKUP[rule]?.some(
-    (defect) => defect.html.test(html) && (defect.target?.test(target) ?? true),
-  ) ??
-    false)
+  (KNOWN_DEFECT_MARKUP[rule]?.some((defect) => defect.html.test(html)) ?? false)
+
+// Waits until the CSS transitions and finite animations of the page end. A
+// theme change starts color transitions, and axe measures the colors of the
+// moment: in the middle of a transition, it reports a contrast that the
+// settled page does not have. A cancelled animation (an element that leaves
+// the page) also ends the wait.
+const waitForSettledPage = async (page: Page): Promise<void> => {
+  await page.evaluate(() =>
+    Promise.allSettled(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+        .map((animation) => animation.finished),
+    ).then(() => undefined),
+  )
+}
 
 // Fails on any axe violation of the page as it is now, except the known
 // defects above. Call it only after an assertion on the content of the state.
 export const expectNoAxeViolations = async (page: Page): Promise<void> => {
+  await waitForSettledPage(page)
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
   const violations = results.violations
     .map((violation) => ({
