@@ -40,7 +40,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Settings, Calendar, Clock, Palette, Loader2, Save, Trash2 } from "lucide-react"
+import {
+  Settings,
+  Calendar,
+  Clock,
+  Palette,
+  LoaderCircle,
+  Save,
+  Trash,
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { queryClient } from "@/lib/queryClient"
 import { calendarsQuery, settingsQuery } from "@/lib/queries"
@@ -493,7 +501,7 @@ export default function SettingsPage() {
                   data-testid="button-save-settings"
                 >
                   {updateMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <LoaderCircle className="h-4 w-4 animate-spin mr-2" />
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
@@ -507,7 +515,7 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Trash2 className="h-5 w-5 text-destructive" />
+            <Trash className="h-5 w-5 text-destructive" />
             Data Management
           </CardTitle>
           <CardDescription>

@@ -30,8 +30,8 @@ import {
   ChevronUp,
   RotateCcw,
   Clock,
-  AlertTriangle,
-  Loader2,
+  TriangleAlert,
+  LoaderCircle,
   Settings,
   RefreshCw,
   RotateCw,
@@ -324,7 +324,7 @@ export default function MainPage() {
                     htmlFor="urgent"
                     className="flex items-center gap-1 text-sm cursor-pointer"
                   >
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <TriangleAlert className="h-4 w-4 text-destructive" />
                     Urgent
                   </Label>
                 </div>
@@ -361,7 +361,7 @@ export default function MainPage() {
                 data-testid="button-create-task"
               >
                 {createTaskMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <LoaderCircle className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <Plus className="h-4 w-4 mr-2" />
                 )}
@@ -388,7 +388,7 @@ export default function MainPage() {
                   data-testid="button-reload-calendar"
                 >
                   {reloadCalendarMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <LoaderCircle className="h-4 w-4 animate-spin mr-2" />
                   ) : (
                     <RotateCw className="h-4 w-4 mr-2" />
                   )}
@@ -404,7 +404,7 @@ export default function MainPage() {
                   data-testid="button-reschedule-all"
                 >
                   {rescheduleAllMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <LoaderCircle className="h-4 w-4 animate-spin mr-2" />
                   ) : (
                     <RefreshCw className="h-4 w-4 mr-2" />
                   )}
