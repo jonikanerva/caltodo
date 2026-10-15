@@ -124,6 +124,17 @@ run = [
   "pnpm exec oxlint --type-aware --deny-warnings web/src packages/api-client/src packages/api-client/scripts e2e",
   # pnpm runs the packages in dependency order: the API client first.
   "pnpm --recursive --if-present run typecheck",
+  # One rustls crypto provider (STACK.md §7). With two providers, rustls has
+  # no process default and panics when SQLx builds a certificate verifier.
+  '''
+set -eu
+features=$(cargo tree --locked --workspace --target all --edges features --invert rustls --prefix none)
+if printf '%s\n' "$features" | grep --quiet '^rustls feature "ring"' &&
+  printf '%s\n' "$features" | grep --quiet '^rustls feature "aws_lc_rs"'; then
+  echo "rustls has two crypto providers (ring and aws-lc-rs); keep one (STACK.md §7)" >&2
+  exit 1
+fi
+''',
 ]
 
 [tasks."sqlx:check"]
