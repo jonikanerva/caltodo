@@ -25,8 +25,13 @@ cargo-deny = "0.20.2"
 # The local PostgreSQL server of development and of the tests: a Docker
 # container on 127.0.0.1:55473 (STACK.md §11). The tests create and drop
 # their own databases on this server; `caltodo` is the development database.
+# The image has the same PostgreSQL major version as production (STACK.md §15).
+# Each major version keeps its data in its own volume, because a data
+# directory of one major does not start on another.
 [env]
 CALTODO_PG_CONTAINER = "caltodo-pg"
+CALTODO_PG_IMAGE = "postgres:18"
+CALTODO_PG_VOLUME = "caltodo-pg-18"
 CALTODO_PG_URL = "postgres://postgres:postgres@127.0.0.1:55473"
 
 [tasks.setup]
@@ -43,16 +48,23 @@ run = [
 description = "Start the local PostgreSQL container and wait until it accepts connections"
 run = '''
 set -eu
+# A container of another image (an older major version) is replaced. Its
+# volume stays, so its data is not deleted.
+if [ -n "$(docker ps --all --quiet --filter "name=^${CALTODO_PG_CONTAINER}$")" ] &&
+  [ -z "$(docker ps --all --quiet --filter "name=^${CALTODO_PG_CONTAINER}$" --filter "ancestor=${CALTODO_PG_IMAGE}")" ]; then
+  docker rm --force "$CALTODO_PG_CONTAINER" >/dev/null
+fi
 if [ -z "$(docker ps --quiet --filter "name=^${CALTODO_PG_CONTAINER}$")" ]; then
   if [ -n "$(docker ps --all --quiet --filter "name=^${CALTODO_PG_CONTAINER}$")" ]; then
     docker start "$CALTODO_PG_CONTAINER" >/dev/null
   else
-    # Synthetic local credentials. The data stays in the named volume.
+    # Synthetic local credentials. The data stays in the named volume. From
+    # PostgreSQL 18 the image keeps its data under /var/lib/postgresql.
     docker run --detach --name "$CALTODO_PG_CONTAINER" \
       --publish 127.0.0.1:55473:5432 \
       --env POSTGRES_PASSWORD=postgres --env POSTGRES_DB=caltodo \
-      --volume caltodo-pg:/var/lib/postgresql/data \
-      postgres:17 -c fsync=off >/dev/null
+      --volume "$CALTODO_PG_VOLUME":/var/lib/postgresql \
+      "$CALTODO_PG_IMAGE" -c fsync=off >/dev/null
   fi
 fi
 for _ in $(seq 1 60); do
