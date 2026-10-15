@@ -10,7 +10,7 @@
   "engines": {
     "node": "^24.21.0"
   },
-  "packageManager": "pnpm@12.8.1",
+  "packageManager": "pnpm@12.11.2",
   "devDependencies": {
     "@types/node": "catalog:",
     "oxlint": "1.86.0",
