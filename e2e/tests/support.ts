@@ -1,21 +1,15 @@
 // The shared fixture of every journey.
 //
 // - The browser never reaches the network: a request to another host than
-//   the test server is aborted and fails the test, except the Google Fonts
-//   stylesheet of `index.html`.
+//   the test server is aborted and fails the test.
 // - A `securitypolicyviolation` event, a console error about the
-//   Content-Security-Policy, or an uncaught page error fails the test. One
-//   violation is expected: the production CSP of the Node server
-//   (`style-src 'self' 'unsafe-inline'`) blocks the Google Fonts stylesheet
-//   that `index.html` links, so the deployed app has always shown the local
-//   fallback fonts. The rewrite keeps both as they are (STACK.md §13).
+//   Content-Security-Policy, or an uncaught page error fails the test.
 import { AxeBuilder } from "@axe-core/playwright"
 import { test as base, expect, type Page } from "@playwright/test"
 
 export { expect }
 
 const REPORT_BINDING = "__caltodoReportCspViolation"
-const FONTS_ORIGIN = "https://fonts.googleapis.com"
 
 interface Violation {
   readonly directive: string
@@ -25,11 +19,6 @@ interface Violation {
 
 const isLoopback = (url: URL): boolean =>
   url.hostname === "127.0.0.1" || url.hostname === "localhost"
-
-// The known CSP violation of the unchanged page (see above): the stylesheet
-// element (`style-src-elem`) and the stylesheet fetch of axe (`connect-src`).
-const isKnownFontViolation = (violation: Violation): boolean =>
-  violation.blockedUri.startsWith(FONTS_ORIGIN)
 
 // The client address of each test. The server keeps its real rate limits
 // (120 API requests per minute per client) and trusts one
@@ -55,11 +44,9 @@ export const test = base.extend<{ problems: string[] }>({
     async ({ context }, use) => {
       const problems: string[] = []
       await context.exposeBinding(REPORT_BINDING, (_source, violation: Violation) => {
-        if (!isKnownFontViolation(violation)) {
-          problems.push(
-            `CSP violation: ${violation.directive} blocked ${violation.blockedUri} (${violation.sourceFile})`,
-          )
-        }
+        problems.push(
+          `CSP violation: ${violation.directive} blocked ${violation.blockedUri} (${violation.sourceFile})`,
+        )
       })
       await context.addInitScript((binding: string) => {
         document.addEventListener(
@@ -83,19 +70,13 @@ export const test = base.extend<{ problems: string[] }>({
         (url) => !isLoopback(url),
         async (route) => {
           const url = new URL(route.request().url())
-          if (url.origin !== FONTS_ORIGIN && url.origin !== "https://fonts.gstatic.com") {
-            problems.push(`unexpected request: ${url.origin}${url.pathname}`)
-          }
+          problems.push(`unexpected request: ${url.origin}${url.pathname}`)
           await route.abort("blockedbyclient")
         },
       )
       context.on("console", (message) => {
         const text = message.text()
-        if (
-          message.type() === "error" &&
-          /content security policy/i.test(text) &&
-          !text.includes(FONTS_ORIGIN)
-        ) {
+        if (message.type() === "error" && /content security policy/i.test(text)) {
           problems.push(`CSP console error: ${text}`)
         }
       })
