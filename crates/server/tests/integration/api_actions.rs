@@ -3,6 +3,7 @@
 
 use axum::http::header::CONTENT_TYPE;
 use axum::http::{Method, StatusCode};
+use caltodo::application::ports::GoogleError;
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -119,11 +120,12 @@ async fn the_page_reports_a_deleted_task(pool: PgPool) {
     assert!(page.text().contains("This task may have been deleted."));
 }
 
-/// Node parity (`fixtures/node/action_flow.golden.json`): the action is
-/// done, but the new link of the event retires the used link first, so the
-/// answer is 400 "Invalid or expired link.". The PR lists this defect.
+/// The Node server answered 400 "Invalid or expired link." here
+/// (`fixtures/node/action_flow.golden.json`), because the new link of the
+/// event retired the used link before the server consumed it (issue #5,
+/// item 1). The Rust server consumes the link first and answers success.
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
-async fn an_action_completes_the_task_and_answers_like_the_node_server(pool: PgPool) {
+async fn an_action_completes_the_task_and_answers_success(pool: PgPool) {
     let app = TestApp::new(pool);
     let owner = app.sign_in("sub-o", "o@example.com", "Owner").await;
     let (id, token) = task_with_link(&app, &owner).await;
@@ -135,8 +137,8 @@ async fn an_action_completes_the_task_and_answers_like_the_node_server(pool: PgP
                 .build(),
         )
         .await;
-    assert_eq!(reply.problem(StatusCode::BAD_REQUEST), "invalid_link");
-    assert_eq!(reply.json()["detail"], "Invalid or expired link.");
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
+    assert_eq!(reply.json(), json!({"success": true}));
     assert_eq!(
         app.calendar.event("primary", &id).unwrap().completion(),
         Some(true)
@@ -150,27 +152,91 @@ async fn an_action_completes_the_task_and_answers_like_the_node_server(pool: PgP
         .description
         .unwrap();
     assert!(!description.contains(&token));
+    // The used link works only once.
+    let again = app
+        .send(
+            owner
+                .request(Method::POST, &format!("/api/action/{token}"))
+                .json(&json!({"action": "complete"}))
+                .build(),
+        )
+        .await;
+    assert_eq!(again.problem(StatusCode::BAD_REQUEST), "invalid_link");
+    assert_eq!(again.json()["detail"], "Invalid or expired link.");
 }
 
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
-async fn the_html_form_gets_the_error_page_of_the_node_server(pool: PgPool) {
+async fn a_failed_action_keeps_the_link(pool: PgPool) {
+    let app = TestApp::new(pool);
+    let owner = app.sign_in("sub-o", "o@example.com", "Owner").await;
+    let (_, token) = task_with_link(&app, &owner).await;
+    let post = || {
+        owner
+            .request(Method::POST, &format!("/api/action/{token}"))
+            .json(&json!({"action": "reschedule"}))
+            .build()
+    };
+    app.calendar.fail_list(Some(GoogleError::Transport));
+    let failed = app.send(post()).await;
+    assert_eq!(
+        failed.problem(StatusCode::BAD_GATEWAY),
+        "google_unavailable"
+    );
+    // The link is not used, so the user can try again.
+    assert_eq!(unused_tokens(&app).await, 1);
+    app.calendar.fail_list(None);
+    let retry = app.send(post()).await;
+    assert_eq!(retry.status, StatusCode::OK, "{}", retry.text());
+}
+
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn two_concurrent_posts_of_one_link_give_one_success(pool: PgPool) {
+    let app = TestApp::new(pool);
+    let owner = app.sign_in("sub-o", "o@example.com", "Owner").await;
+    let (_, token) = task_with_link(&app, &owner).await;
+    let post = || {
+        owner
+            .request(Method::POST, &format!("/api/action/{token}"))
+            .json(&json!({"action": "complete"}))
+            .build()
+    };
+    let (first, second) = tokio::join!(app.send(post()), app.send(post()));
+    let (success, other) = if first.status == StatusCode::OK {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    assert_eq!(success.status, StatusCode::OK, "{}", success.text());
+    assert_eq!(other.problem(StatusCode::BAD_REQUEST), "invalid_link");
+    assert_eq!(unused_tokens(&app).await, 1);
+}
+
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_html_form_gets_the_confirmation_page(pool: PgPool) {
     let app = TestApp::new(pool);
     let owner = app.sign_in("sub-o", "o@example.com", "Owner").await;
     let (_, token) = task_with_link(&app, &owner).await;
     let csrf = owner.csrf.clone().unwrap();
     // A form post sends the CSRF token as a field, not as a header.
-    let reply = app
-        .send(
-            owner
-                .request(Method::POST, &format!("/api/action/{token}"))
-                .without_header("x-csrf-token")
-                .form(&[("csrfToken", &csrf), ("action", "reschedule")])
-                .accept_html()
-                .build(),
-        )
-        .await;
-    assert_eq!(reply.status, StatusCode::BAD_REQUEST);
+    let form = |action: &'static str| {
+        owner
+            .request(Method::POST, &format!("/api/action/{token}"))
+            .without_header("x-csrf-token")
+            .form(&[("csrfToken", csrf.as_str()), ("action", action)])
+            .accept_html()
+            .build()
+    };
+    let reply = app.send(form("reschedule")).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
     let page = reply.text();
+    assert!(page.contains("<title>Task rescheduled</title>"));
+    assert!(page.contains("<h1>Task rescheduled</h1>"));
+    assert!(page.contains("<p>Water &lt;plants&gt; has been updated.</p>"));
+
+    // The used link gets the error page of the Node server.
+    let again = app.send(form("complete")).await;
+    assert_eq!(again.status, StatusCode::BAD_REQUEST);
+    let page = again.text();
     assert!(page.contains("<title>Error</title>"));
     assert!(page.contains("<p>Invalid or expired link.</p>"));
 }

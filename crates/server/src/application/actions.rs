@@ -124,7 +124,7 @@ pub async fn action_page(
 }
 
 /// `POST /api/action/{token}`: completes or reschedules the task of a link,
-/// writes a new link into the event, and uses up the old link. Returns the
+/// uses up the old link, and writes a new link into the event. Returns the
 /// task title for the confirmation page.
 ///
 /// # Errors
@@ -184,6 +184,18 @@ pub async fn perform_action(
         }
     }
 
+    // Consume the token before the new link of the event retires the older
+    // tokens. Otherwise the retirement marks this token as used, and a
+    // successful action answers "Invalid or expired link.". The update is
+    // conditional, so of two concurrent requests only one gets success.
+    if !services
+        .store
+        .mark_action_token_used(&token.id, services.clock.now())
+        .await?
+    {
+        return Err(ActionError::InvalidLink);
+    }
+
     action_support::refresh_actions(
         services,
         &calendar,
@@ -193,19 +205,5 @@ pub async fn perform_action(
         task.details.as_deref(),
     )
     .await;
-
-    // `consumeActionToken`: the token must still be valid and unused.
-    let consumed = match valid_token(services, raw).await? {
-        Some(current) if current.user_id == *user => {
-            services
-                .store
-                .mark_action_token_used(&current.id, services.clock.now())
-                .await?
-        }
-        _ => false,
-    };
-    if !consumed {
-        return Err(ActionError::InvalidLink);
-    }
     Ok(task.title)
 }

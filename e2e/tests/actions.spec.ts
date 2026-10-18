@@ -28,10 +28,9 @@ test("the manage page completes the task", async ({ page }) => {
   await expect(page.getByText(`"${title}"`)).toBeVisible()
   await expectNoAxeViolations(page)
   await page.getByRole("button", { name: "Mark complete" }).click()
-  // The Node server answered this way too: the new link of the event retires
-  // the used link before the answer (see the PR, "parity quirks").
-  await expect(page.getByRole("heading", { name: "Something went wrong" })).toBeVisible()
-  await expect(page.getByText("Invalid or expired link.")).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Task completed" })).toBeVisible()
+  await expect(page.getByText(`${title} has been updated.`)).toBeVisible()
+  await expectNoAxeViolations(page)
   await page.getByRole("link", { name: "Go to Todo" }).click()
   await page.getByTestId("button-toggle-completed").click()
   await expect(
