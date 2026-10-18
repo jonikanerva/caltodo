@@ -14,7 +14,7 @@ Policy revision: 1
 - **Change risk:** assess the surfaces that each task affects against this rationale. A change to sign-in, sessions, token storage, the free-slot search, the reschedule job, the event format, or a migration is high risk. A risk label does not waive a required check or review.
 - **Shape:** one Rust service and one browser SPA in a monorepo, served from one origin. The service also serves the server-rendered action pages (`/action/{token}`).
 - **Critical execution paths:** server request decode, use case, the Google adapters, the free-slot search, and the response; the action link flow; the two daily jobs; browser route, API client facade, view, and render.
-- **Applicable UI states:** loading (skeletons), success, empty list, no calendar selected, no free slot, Google unavailable (an error toast), signed out (the sign-in page), and the action page states (confirm, done, invalid link, sign-in needed).
+- **Applicable UI states:** loading (skeletons), success, empty list, no calendar selected, no free slot, Google unavailable (an error toast after an action; an alert in place of the task list when the list does not load), signed out (the sign-in page), and the action page states (confirm, done, invalid link, sign-in needed).
 - **Product reason for Rust:** ADR 0001 (memory use and the owner's default stack).
 
 ### Repository layout and boundaries
