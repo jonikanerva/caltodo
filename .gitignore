@@ -24,7 +24,9 @@ coverage
 
 # misc
 .DS_Store
-.claude
+.claude/*
+!.claude/agents/
+!.claude/skills/
 *.tar.gz
 
 # Baseline screenshots of the visual comparison (see e2e/visual-compare)
