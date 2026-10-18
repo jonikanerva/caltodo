@@ -1,7 +1,5 @@
 # STACK.md — Rust / Axum backend + TypeScript / React / Vite frontend profile
 
-Policy revision: 1
-
 > A Rust service and a strict TypeScript SPA in one repository, served from one origin. Axum, Tokio, and Tower provide HTTP and concurrency. Utoipa exports OpenAPI 3.1; Hey API generates a TypeScript client with Zod validators. React, Vite, TanStack Router, and TanStack Query provide the browser application. Jiff represents time. PostgreSQL with SQLx keeps the durable data. One image contains the server binary and the built SPA files. **Normative** — MUST, MUST NOT, SHOULD, and MAY have the meanings in `DOCTRINE.md`; surface conflicts before deviating.
 >
 > This file adopts the agent-setup profile `stacks/STACK-RUST.md` (agent-setup commit `bebaca6`, 14 October 2026) with the project facts and the differences that §13 lists. The dependency freshness check (§3) and the infrastructure record (§15) come from the profile at agent-setup commit `74f4b3f` (15 October 2026), the version of `DOCTRINE.md` and `CLAUDE.md`. `DOCTRINE.md` defines P1–P9. `CLAUDE.md` defines agent operation and authority. This file gives their concrete application for this project.
