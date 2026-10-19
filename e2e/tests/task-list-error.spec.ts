@@ -140,7 +140,10 @@ test("a failed reload hides the old list", async ({ page }) => {
 
 test("a reload that Google fails shows an error, not a sync", async ({ page }) => {
   await showListThenReload(page, googleUnavailable)
-  await expect(page.getByText("Failed to sync calendar. Please try again.")).toBeVisible()
+  // `exact` keeps the live-region copy of the toast out of the match.
+  await expect(
+    page.getByText("Failed to sync calendar. Please try again.", { exact: true }),
+  ).toBeVisible()
   await expect(page.getByText("Calendar synced", { exact: true })).toHaveCount(0)
   await expectErrorInsteadOfList(page)
 })
