@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE app_sessions\n             SET user_id = $2, data = $3, expiry_date = $4\n             WHERE id = $1 AND expiry_date > now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Varchar",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b626b3d7239f35f73b2fd854a1ae2370fabaec63037418e21afb520cbcbd616b"
+}

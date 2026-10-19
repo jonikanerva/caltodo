@@ -1,5 +1,7 @@
 //! The queries on PostgreSQL (`server/storage.test.ts` and new cases).
 
+use std::sync::Arc;
+
 use caltodo::config::Secret;
 use caltodo::db::Store;
 use caltodo::db::action_tokens::NewActionToken;
@@ -10,8 +12,8 @@ use caltodo::domain::ids::{CalendarId, EventId, UserId};
 use caltodo::security::token_cipher::TokenCipher;
 use jiff::{SignedDuration, Timestamp};
 use sqlx::PgPool;
-use tower_sessions::SessionStore as _;
 use tower_sessions::session::{Id, Record};
+use tower_sessions::{Expiry, Session, SessionStore as _};
 
 use crate::support::ts;
 
@@ -502,4 +504,100 @@ async fn an_expired_session_does_not_load_and_the_job_deletes_it(pool: PgPool) {
     assert!(sessions.load(&expired.id).await.unwrap().is_none());
     assert_eq!(sessions.delete_expired(Timestamp::now()).await.unwrap(), 1);
     assert!(sessions.load(&live.id).await.unwrap().is_some());
+}
+
+async fn session_rows(pool: &PgPool) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM app_sessions")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// Issue #5 item 11, store level: `save` updates a row that exists and has
+/// not expired, and it never inserts one.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_session_save_never_creates_a_row(pool: PgPool) {
+    let sessions = PgSessionStore::new(pool.clone());
+    let future = Timestamp::now() + SignedDuration::from_hours(24);
+    let mut session = record(future, Some("u1"));
+    sessions.create(&mut session).await.unwrap();
+    sessions.delete(&session.id).await.unwrap();
+    sessions.save(&session).await.unwrap();
+    assert!(sessions.load(&session.id).await.unwrap().is_none());
+    assert_eq!(session_rows(&pool).await, 0);
+
+    // An expired row stays expired: a save does not renew it.
+    let mut expired = record(Timestamp::now() - SignedDuration::from_hours(1), Some("u2"));
+    sessions.create(&mut expired).await.unwrap();
+    let mut renewed = expired.clone();
+    renewed.expiry_date = time::OffsetDateTime::from_unix_timestamp(future.as_second()).unwrap();
+    sessions.save(&renewed).await.unwrap();
+    assert!(sessions.load(&expired.id).await.unwrap().is_none());
+    assert_eq!(session_rows(&pool).await, 1);
+}
+
+/// The session expiry of the server (`http::session::SessionSettings`).
+const EXPIRY: Option<Expiry> = Some(Expiry::OnInactivity(time::Duration::days(7)));
+
+/// Issue #5 item 11, through the `Session` API that the session middleware
+/// uses: request A loads a signed-in session, request B signs out, then A
+/// changes the session and the middleware saves it. The session stays
+/// deleted, and the cookie of A is no sign-in.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_request_in_flight_does_not_undo_a_sign_out(pool: PgPool) {
+    let store = Arc::new(PgSessionStore::new(pool.clone()));
+    let signed_in = Session::new(None, Arc::clone(&store), EXPIRY);
+    signed_in.insert("user_id", "u1").await.unwrap();
+    signed_in.insert("csrf_token", "abc").await.unwrap();
+    signed_in.save().await.unwrap();
+    let id = signed_in.id().unwrap();
+
+    let a = Session::new(Some(id), Arc::clone(&store), EXPIRY);
+    assert_eq!(
+        a.get::<String>("user_id").await.unwrap().as_deref(),
+        Some("u1")
+    );
+    let b = Session::new(Some(id), Arc::clone(&store), EXPIRY);
+    b.flush().await.unwrap();
+    assert_eq!(session_rows(&pool).await, 0);
+
+    a.insert("oauth_state", "state-1").await.unwrap();
+    a.save().await.unwrap();
+    assert_eq!(session_rows(&pool).await, 0, "the session stays deleted");
+    let next = Session::new(Some(id), Arc::clone(&store), EXPIRY);
+    assert_eq!(next.get::<String>("user_id").await.unwrap(), None);
+}
+
+/// Issue #5 item 11 for the sign-in id change: a request in flight with the
+/// session id from before the sign-in does not bring that id back. The
+/// sign-in (`http::session::sign_in`: clear, `cycle_id`, insert) still
+/// creates the new session.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_request_in_flight_does_not_bring_back_the_old_session_id(pool: PgPool) {
+    let store = Arc::new(PgSessionStore::new(pool.clone()));
+    let started = Session::new(None, Arc::clone(&store), EXPIRY);
+    started.insert("oauth_state", "state-1").await.unwrap();
+    started.save().await.unwrap();
+    let old = started.id().unwrap();
+
+    let a = Session::new(Some(old), Arc::clone(&store), EXPIRY);
+    assert!(a.get::<String>("oauth_state").await.unwrap().is_some());
+    let callback = Session::new(Some(old), Arc::clone(&store), EXPIRY);
+    callback.clear().await;
+    callback.cycle_id().await.unwrap();
+    callback.insert("user_id", "u2").await.unwrap();
+    callback.save().await.unwrap();
+    let new = callback.id().unwrap();
+    assert_ne!(new, old);
+
+    a.insert("pending_action_token", "t").await.unwrap();
+    a.save().await.unwrap();
+    assert!(store.load(&old).await.unwrap().is_none());
+    let user: Option<String> = sqlx::query_scalar("SELECT user_id FROM app_sessions WHERE id = $1")
+        .bind(new.to_string())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(user.as_deref(), Some("u2"));
+    assert_eq!(session_rows(&pool).await, 1);
 }

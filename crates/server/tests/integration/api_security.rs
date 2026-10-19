@@ -5,6 +5,7 @@ use axum::http::header::CONTENT_TYPE;
 use axum::http::{Method, StatusCode};
 use serde_json::json;
 use sqlx::PgPool;
+use tower::ServiceExt as _;
 
 use crate::support::{TestApp, request, settings};
 
@@ -225,6 +226,185 @@ async fn the_api_limit_is_120_per_minute(pool: PgPool) {
         StatusCode::OK,
         "operational routes have no limit"
     );
+}
+
+/// The number of rows in `app_sessions`.
+async fn session_rows(pool: &PgPool) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM app_sessions")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// Uses up the `/api` limit (120 per minute) of one client address.
+async fn exhaust_the_api_limit(app: &TestApp, address: &str) {
+    for _ in 0..120 {
+        let reply = app
+            .send(
+                request(Method::GET, "/api/auth/user")
+                    .header("x-forwarded-for", address)
+                    .build(),
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+    }
+}
+
+/// A JSON POST to `/api/tasks` with a body that never ends. A middleware
+/// that reads the body never answers it.
+fn endless_post(address: &str) -> axum::http::Request<axum::body::Body> {
+    let body = axum::body::Body::from_stream(futures_util::stream::pending::<
+        Result<axum::body::Bytes, std::io::Error>,
+    >());
+    axum::http::Request::builder()
+        .method(Method::POST)
+        .uri("/api/tasks")
+        .header("x-forwarded-for", address)
+        .header(CONTENT_TYPE, "application/json")
+        .body(body)
+        .unwrap()
+}
+
+/// Issue #5 item 9: the rate limit runs before the session layer and before
+/// the body read, the body parse, and the CSRF check. A limited client gets
+/// 429 for a body over the limit, a body that does not parse, a body that
+/// never ends, and a request without a CSRF token. The same request from
+/// another address shows the answer without the limit (the control).
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_rate_limit_runs_before_the_session_and_the_body(pool: PgPool) {
+    let app = TestApp::new(pool.clone());
+    let client = app.sign_in("sub-o", "o@example.com", "O").await;
+    exhaust_the_api_limit(&app, "6.6.6.6").await;
+    let rows = session_rows(&pool).await;
+
+    let big_json = format!(r#"{{"title":"{}"}}"#, "a".repeat(100 * 1024)).into_bytes();
+    let cases = [
+        (
+            "a body over the limit",
+            big_json,
+            StatusCode::PAYLOAD_TOO_LARGE,
+        ),
+        (
+            "a body that does not parse",
+            b"{broken".to_vec(),
+            StatusCode::BAD_REQUEST,
+        ),
+    ];
+    for (case, body, unlimited) in cases {
+        let post = |address: &str| {
+            client
+                .request(Method::POST, "/api/tasks")
+                .header("x-forwarded-for", address)
+                .raw(CONTENT_TYPE.as_str(), "application/json", body.clone())
+                .build()
+        };
+        let control = app.send(post("6.6.6.7")).await;
+        assert_eq!(control.status, unlimited, "control: {case}");
+        let limited = app.send(post("6.6.6.6")).await;
+        assert_eq!(
+            limited.problem(StatusCode::TOO_MANY_REQUESTS),
+            "rate_limited",
+            "{case}"
+        );
+        assert_eq!(limited.header("set-cookie"), None, "{case}");
+    }
+
+    let without_csrf = |address: &str| {
+        client
+            .request(Method::POST, "/api/auth/logout")
+            .header("x-forwarded-for", address)
+            .without_header("x-csrf-token")
+            .build()
+    };
+    let control = app.send(without_csrf("6.6.6.7")).await;
+    assert_eq!(control.problem(StatusCode::FORBIDDEN), "csrf_rejected");
+    let limited = app.send(without_csrf("6.6.6.6")).await;
+    assert_eq!(
+        limited.problem(StatusCode::TOO_MANY_REQUESTS),
+        "rate_limited"
+    );
+
+    // A body that never ends: the limited request answers at once, and the
+    // same request without the limit waits for the body.
+    let limited = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        app.router.clone().oneshot(endless_post("6.6.6.6")),
+    )
+    .await
+    .expect("the limited request answers without the body")
+    .unwrap();
+    assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+    let control = tokio::time::timeout(
+        std::time::Duration::from_millis(300),
+        app.router.clone().oneshot(endless_post("6.6.6.8")),
+    )
+    .await;
+    assert!(control.is_err(), "without the limit the body is read");
+
+    // A sign-in start writes a session row; a limited start does not.
+    assert_eq!(
+        session_rows(&pool).await,
+        rows,
+        "the limited requests wrote no session"
+    );
+    let start = |address: &str| {
+        request(Method::GET, "/api/auth/google")
+            .header("x-forwarded-for", address)
+            .build()
+    };
+    let control = app.send(start("6.6.6.9")).await;
+    assert_eq!(control.status, StatusCode::FOUND);
+    assert_eq!(session_rows(&pool).await, rows + 1);
+    let limited = app.send(start("6.6.6.6")).await;
+    assert_eq!(
+        limited.problem(StatusCode::TOO_MANY_REQUESTS),
+        "rate_limited"
+    );
+    assert_eq!(limited.header("set-cookie"), None);
+    assert_eq!(session_rows(&pool).await, rows + 1);
+}
+
+/// Issue #5 item 9: each request to a sign-in route counts exactly once in
+/// the sign-in limit (25 per 15 minutes, `STACK.md` §15). The Node server
+/// mounted the same limiter twice on the callback path, so there the
+/// callback counted twice.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn each_sign_in_request_counts_once(pool: PgPool) {
+    let app = TestApp::new(pool);
+    let send = |path: &str| {
+        app.send(
+            request(Method::GET, path)
+                .header("x-forwarded-for", "4.4.4.4")
+                .build(),
+        )
+    };
+    // The start and the callback share one counter: 13 starts and 12
+    // callbacks use the 25 requests.
+    for n in 0..25_u32 {
+        let path = if n % 2 == 0 {
+            "/api/auth/google"
+        } else {
+            "/api/auth/google/callback"
+        };
+        let reply = send(path).await;
+        assert_eq!(reply.status, StatusCode::FOUND, "request {n} to {path}");
+        assert_eq!(reply.header("ratelimit-limit"), Some("25"));
+        let remaining = (24 - n).to_string();
+        assert_eq!(
+            reply.header("ratelimit-remaining"),
+            Some(remaining.as_str()),
+            "request {n} to {path}"
+        );
+    }
+    for path in ["/api/auth/google/callback", "/api/auth/google"] {
+        let limited = send(path).await;
+        assert_eq!(
+            limited.problem(StatusCode::TOO_MANY_REQUESTS),
+            "rate_limited",
+            "{path}"
+        );
+        assert_eq!(limited.header("ratelimit-policy"), Some("25;w=900"));
+    }
 }
 
 const HEADERS: [(&str, &str); 11] = [
