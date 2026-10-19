@@ -49,4 +49,4 @@ Low. A revert to the Node server uses `user_sessions` again. The users sign in o
 The owner ended the Node rollback path (issue #5, item 17). Migration `0003_drop_user_sessions.sql` drops `user_sessions` and its rows.
 
 - Account deletion deletes the rows of the user in `app_sessions` only (decision 5).
-- A revert to the Node server is no longer possible. The cost of reversal above no longer applies. The restore path for the dropped rows is a Railway PostgreSQL backup.
+- A revert to the Node server is no longer possible. The cost of reversal above no longer applies. The dropped rows have no restore path: the database has no backup (Railway Hobby plan, `STACK.md` §5).

@@ -1,6 +1,6 @@
 # ADR 0001: The server is a Rust program
 
-- Status: accepted
+- Status: accepted; the revert to the Node server is superseded (update of 2026-10-19)
 - Date: 2026-10-14
 
 ## Context
@@ -37,3 +37,7 @@ Medium. A revert of the merge commit restores the Node server and its build. The
 ## Reassessment
 
 Reassess when the Rust server fails to build or to start on Railway, when Railway's memory metric is above the `STACK.md` §4 budget, or when a dependency in `STACK.md` §6 loses maintenance.
+
+## Update 2026-10-19: no revert to the Node server
+
+The owner ended the Node rollback path on 2026-10-19 (issue #5, item 17). Migration `0003_drop_user_sessions.sql` drops the Node session table `user_sessions` (ADR 0005). The consequence "A revert to the Node server stays possible" and the cost of reversal above no longer apply. A defective release is fixed with a new PR or a revert PR of the Rust change (`STACK.md` §15).

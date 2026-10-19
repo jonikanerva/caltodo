@@ -1,6 +1,6 @@
 # ADR 0003: An SQLx baseline of the Drizzle schema, and naive timestamps
 
-- Status: accepted
+- Status: accepted; the revert to the Node server is superseded (update of 2026-10-19)
 - Date: 2026-10-14
 
 ## Context
@@ -32,3 +32,7 @@ The owner requires an additive schema change only, and a baseline that is idempo
 - A change of `TZ` on Railway changes only the job times. It does not change the meaning of stored values.
 - A revert to the Node server works on the existing database. It does not work on a new empty database that only SQLx set up: the Drizzle migration `0003` has no `IF NOT EXISTS`. ADR 0005 records this limit.
 - Never edit a released migration. SQLx checks the checksum of each applied file.
+
+## Update 2026-10-19: no revert to the Node server
+
+The owner ended the Node rollback path on 2026-10-19 (issue #5, item 17). Migration `0003_drop_user_sessions.sql` drops the Node session table `user_sessions` (ADR 0005). The rejected alternative and the consequence about a revert to the Node server no longer apply. The naive timestamps keep their meaning (decision 4). The comparison of the production schema with the Drizzle snapshot was a check of the first release; after migration `0003`, the production schema is the Drizzle schema without `user_sessions`.
