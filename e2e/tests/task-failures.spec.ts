@@ -134,3 +134,71 @@ test("an urgent task that did not move shows a warning", async ({ page }) => {
   await expect(page.getByTestId("input-task-title")).toHaveValue("")
   await expect(page.getByTestId(`card-task-${second.id}`)).toBeVisible()
 })
+
+// Answers each PATCH of the task `id` with a Problem Details failure.
+const failCompletion = async (
+  page: Page,
+  id: string,
+  problem: { status: number; title: string; detail: string; code: string },
+): Promise<void> => {
+  await page.route(`**/api/tasks/${id}`, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.fallback()
+      return
+    }
+    await route.fulfill({
+      status: problem.status,
+      contentType: "application/problem+json",
+      body: JSON.stringify({ type: "about:blank", ...problem }),
+    })
+  })
+}
+
+// Issue #29: a Google failure is no missing task.
+test("a completion that Google fails shows the Google error", async ({ page }) => {
+  await answerSettings(page)
+  const list = await answerTaskList(page, () => [first, second])
+  await failCompletion(page, first.id, {
+    status: 502,
+    title: "Bad Gateway",
+    detail: "Google Calendar is unavailable. Try again later.",
+    code: "google_unavailable",
+  })
+  await page.goto("/")
+  await expect(page.getByTestId(`card-task-${first.id}`)).toBeVisible()
+  const loads = list.count()
+  await page.getByTestId(`checkbox-complete-${first.id}`).click()
+  await expect(
+    page.getByText("Google Calendar is unavailable. Try again later.", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText("Task not found")).toHaveCount(0)
+  // The page reads the list again; the task is still incomplete.
+  await expect.poll(list.count).toBeGreaterThan(loads)
+  await expect(page.getByTestId(`checkbox-complete-${first.id}`)).toBeEnabled()
+  await expect(page.getByTestId(`checkbox-complete-${first.id}`)).not.toBeChecked()
+})
+
+test("a completion of a missing task shows an error and reloads the list", async ({
+  page,
+}) => {
+  await answerSettings(page)
+  let gone = false
+  const list = await answerTaskList(page, () => (gone ? [second] : [first, second]))
+  await failCompletion(page, first.id, {
+    status: 404,
+    title: "Not Found",
+    detail: "Task not found",
+    code: "task_not_found",
+  })
+  await page.goto("/")
+  await expect(page.getByTestId(`card-task-${first.id}`)).toBeVisible()
+  const loads = list.count()
+  gone = true
+  await page.getByTestId(`checkbox-complete-${first.id}`).click()
+  await expect(
+    page.getByText("Failed to update task. Please try again.", { exact: true }),
+  ).toBeVisible()
+  await expect.poll(list.count).toBeGreaterThan(loads)
+  await expect(page.getByTestId(`card-task-${first.id}`)).toHaveCount(0)
+  await expect(page.getByTestId(`card-task-${second.id}`)).toBeVisible()
+})
