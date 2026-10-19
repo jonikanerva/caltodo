@@ -66,8 +66,9 @@ pub enum AppError {
     TaskNotFound,
     #[error("No free time slots available in the next 90 days.")]
     NoFreeSlot,
-    #[error("No tasks found to reorder")]
-    NoTasksToReorder,
+    /// A requested task event has no valid start and end time.
+    #[error("Invalid event time range.")]
+    InvalidEventTime,
     #[error("Failed to create calendar event")]
     EventNotCreated,
     #[error("Failed to load created event")]
@@ -96,7 +97,7 @@ impl AppError {
             Self::Google(error) => google_tag(*error),
             Self::TaskNotFound => "task_not_found",
             Self::NoFreeSlot => "no_free_slot",
-            Self::NoTasksToReorder => "no_tasks_to_reorder",
+            Self::InvalidEventTime => "invalid_event_time",
             Self::EventNotCreated => "event_not_created",
             Self::CreatedEventMissing => "created_event_missing",
             Self::CreatedEventInvalid => "created_event_invalid",

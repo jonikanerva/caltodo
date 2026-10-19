@@ -96,6 +96,47 @@ export type CreateTaskRequest = {
 };
 
 /**
+ * The answer of `POST /api/tasks`: the fields of [`CalendarTask`] and
+ * `urgentMoveFailed`.
+ *
+ * The object is flat on purpose. A browser tab with the previous bundle
+ * validates this answer as a `CalendarTask` and ignores the extra field,
+ * so it does not report a created task as a failure (a retry would create
+ * the task twice). The `CalendarTask` fields are repeated, because
+ * `#[serde(flatten)]` gives an `allOf` schema.
+ */
+export type CreatedTask = {
+    /**
+     * The Google Calendar event id.
+     */
+    id: string;
+    title: string;
+    details: string | null;
+    /**
+     * The duration in whole minutes; `null` when the event ends at or before
+     * its start.
+     */
+    duration: number | null;
+    scheduledStart: string;
+    scheduledEnd: string;
+    completed: boolean;
+    completedAt: string | null;
+    /**
+     * The position among the incomplete tasks; 0 for a completed task.
+     */
+    priority: number;
+    /**
+     * `true` when the task is urgent and the other tasks were not all moved
+     * after it. The task exists, but it can be in a later slot than the
+     * other tasks, or two tasks can overlap. `false` for a task that is not
+     * urgent. The server always sends it. The schema does not require it,
+     * because the server before this field answered without it: a client
+     * reads a missing value as `false` (`STACK.md` §2.1).
+     */
+    urgentMoveFailed?: boolean;
+};
+
+/**
  * An RFC 9457 Problem Details body with the application `code` extension.
  */
 export type Problem = {
@@ -121,7 +162,7 @@ export type Problem = {
 /**
  * The stable application code of a public failure.
  */
-export type ProblemCode = 'invalid_request' | 'invalid_task_ids' | 'invalid_settings' | 'invalid_action' | 'no_calendar' | 'no_settings' | 'invalid_link' | 'invalid_event_time' | 'unauthenticated' | 'csrf_rejected' | 'forbidden' | 'not_found' | 'task_not_found' | 'no_tasks_to_reorder' | 'no_free_slot' | 'payload_too_large' | 'rate_limited' | 'internal_error' | 'calendar_unavailable' | 'event_not_created' | 'google_unavailable' | 'google_reauthorization_required' | 'sign_in_failed';
+export type ProblemCode = 'invalid_request' | 'invalid_task_ids' | 'invalid_settings' | 'invalid_action' | 'no_calendar' | 'no_settings' | 'invalid_link' | 'invalid_event_time' | 'unauthenticated' | 'csrf_rejected' | 'forbidden' | 'not_found' | 'task_not_found' | 'no_free_slot' | 'payload_too_large' | 'rate_limited' | 'internal_error' | 'calendar_unavailable' | 'event_not_created' | 'google_unavailable' | 'google_reauthorization_required' | 'sign_in_failed';
 
 /**
  * The answer of `POST /api/tasks/reschedule-all`.
@@ -288,7 +329,7 @@ export type PerformActionErrors = {
      */
     403: Problem;
     /**
-     * Problem `task_not_found` or `no_tasks_to_reorder`.
+     * Problem `task_not_found`: a requested task does not exist or is no task.
      */
     404: Problem;
     /**
@@ -588,9 +629,9 @@ export type CreateTaskError = CreateTaskErrors[keyof CreateTaskErrors];
 
 export type CreateTaskResponses = {
     /**
-     * The created task.
+     * The created task. `urgentMoveFailed` reports an urgent task that did not move to the front.
      */
-    200: CalendarTask;
+    200: CreatedTask;
 };
 
 export type CreateTaskResponse = CreateTaskResponses[keyof CreateTaskResponses];
@@ -616,6 +657,10 @@ export type BulkCompleteTasksErrors = {
      */
     403: Problem;
     /**
+     * Problem `task_not_found`: a requested task does not exist or is no task.
+     */
+    404: Problem;
+    /**
      * Problem `payload_too_large`: more than 100 KiB of JSON or 50 KiB of form data.
      */
     413: Problem;
@@ -627,13 +672,17 @@ export type BulkCompleteTasksErrors = {
      * Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.
      */
     500: Problem;
+    /**
+     * Problem `google_unavailable` or `google_reauthorization_required`.
+     */
+    502: Problem;
 };
 
 export type BulkCompleteTasksError = BulkCompleteTasksErrors[keyof BulkCompleteTasksErrors];
 
 export type BulkCompleteTasksResponses = {
     /**
-     * Done. The answer does not say which tasks failed.
+     * Every task is complete.
      */
     200: Success;
 };
@@ -706,7 +755,7 @@ export type ReorderTasksErrors = {
      */
     403: Problem;
     /**
-     * Problem `task_not_found` or `no_tasks_to_reorder`.
+     * Problem `task_not_found`: a requested task does not exist or is no task.
      */
     404: Problem;
     /**
@@ -721,13 +770,17 @@ export type ReorderTasksErrors = {
      * Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.
      */
     500: Problem;
+    /**
+     * Problem `google_unavailable` or `google_reauthorization_required`.
+     */
+    502: Problem;
 };
 
 export type ReorderTasksError = ReorderTasksErrors[keyof ReorderTasksErrors];
 
 export type ReorderTasksResponses = {
     /**
-     * The tasks have the requested order. A task that could not move is skipped.
+     * Every task moved to its slot of the requested order.
      */
     200: Success;
 };
@@ -801,7 +854,7 @@ export type UpdateTaskErrors = {
      */
     403: Problem;
     /**
-     * Problem `task_not_found` or `no_tasks_to_reorder`.
+     * Problem `task_not_found`: a requested task does not exist or is no task.
      */
     404: Problem;
     /**
@@ -855,7 +908,7 @@ export type CompleteTaskErrors = {
      */
     403: Problem;
     /**
-     * Problem `task_not_found` or `no_tasks_to_reorder`.
+     * Problem `task_not_found`: a requested task does not exist or is no task.
      */
     404: Problem;
     /**
@@ -905,7 +958,7 @@ export type RescheduleTaskErrors = {
      */
     403: Problem;
     /**
-     * Problem `task_not_found` or `no_tasks_to_reorder`.
+     * Problem `task_not_found`: a requested task does not exist or is no task.
      */
     404: Problem;
     /**

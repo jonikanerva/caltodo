@@ -11,7 +11,7 @@ use caltodo_domain::ids::EventId;
 
 use super::AppState;
 use super::dto::{
-    CalendarListItem, CalendarTask, CreateTaskRequest, RescheduleAllResult, Success,
+    CalendarListItem, CalendarTask, CreateTaskRequest, CreatedTask, RescheduleAllResult, Success,
     TaskIdsRequest, UpdateSettingsRequest, UpdateTaskRequest, UserSettings,
 };
 use super::errors::{Problem, ProblemCode, app_problem};
@@ -63,7 +63,7 @@ pub(super) async fn list(State(state): State<AppState>, signed_in: SignedIn) -> 
 }
 
 /// Creates a task in the first free slot. An urgent task then moves to the
-/// front of the schedule.
+/// front of the schedule; the answer reports a failed move.
 #[utoipa::path(
     post,
     path = "/api/tasks",
@@ -72,7 +72,7 @@ pub(super) async fn list(State(state): State<AppState>, signed_in: SignedIn) -> 
     security(("csrfToken" = [])),
     request_body = CreateTaskRequest,
     responses(
-        (status = 200, description = "The created task.", body = CalendarTask),
+        (status = 200, description = "The created task. `urgentMoveFailed` reports an urgent task that did not move to the front.", body = CreatedTask),
         BadRequest,
         Unauthenticated,
         CsrfRejected,
@@ -92,7 +92,9 @@ pub(super) async fn create(
         return Problem::new(ProblemCode::InvalidRequest).into_response();
     };
     match tasks::create_task(&state.services, &signed_in.user.id, &input).await {
-        Ok(task) => Json(CalendarTask::from(&task)).into_response(),
+        Ok(created) => {
+            Json(CreatedTask::new(&created.task, created.urgent_move_failed)).into_response()
+        }
         Err(error) => failure(&error, "Failed to create task"),
     }
 }
@@ -137,6 +139,9 @@ pub(super) async fn update(
 }
 
 /// Gives the tasks the order of `taskIds` by swapping their time slots.
+///
+/// Every task is read before the first move: a missing task changes
+/// nothing. A failed move stops the request; the moves before it stay.
 #[utoipa::path(
     post,
     path = "/api/tasks/reorder",
@@ -145,14 +150,15 @@ pub(super) async fn update(
     security(("csrfToken" = [])),
     request_body = TaskIdsRequest,
     responses(
-        (status = 200, description = "The tasks have the requested order. A task that could not move is skipped.", body = Success),
+        (status = 200, description = "Every task moved to its slot of the requested order.", body = Success),
         BadRequest,
         Unauthenticated,
         CsrfRejected,
         NotFoundProblem,
         PayloadTooLarge,
         RateLimited,
-        InternalError
+        InternalError,
+        GoogleFailure
     )
 )]
 pub(super) async fn reorder(
@@ -169,7 +175,10 @@ pub(super) async fn reorder(
     }
 }
 
-/// Completes each task. A task that fails does not stop the others.
+/// Completes each task.
+///
+/// Every task is read before the first change: a missing task changes
+/// nothing. A failed change stops the request; the changes before it stay.
 #[utoipa::path(
     post,
     path = "/api/tasks/bulk-complete",
@@ -178,13 +187,15 @@ pub(super) async fn reorder(
     security(("csrfToken" = [])),
     request_body = TaskIdsRequest,
     responses(
-        (status = 200, description = "Done. The answer does not say which tasks failed.", body = Success),
+        (status = 200, description = "Every task is complete.", body = Success),
         BadRequest,
         Unauthenticated,
         CsrfRejected,
+        NotFoundProblem,
         PayloadTooLarge,
         RateLimited,
-        InternalError
+        InternalError,
+        GoogleFailure
     )
 )]
 pub(super) async fn bulk_complete(

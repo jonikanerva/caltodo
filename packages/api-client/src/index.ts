@@ -27,6 +27,7 @@ import type {
   CalendarListItem,
   CalendarTask,
   CreateTaskRequest,
+  CreatedTask,
   ProblemCode,
   RescheduleAllResult,
   UpdateSettingsRequest,
@@ -46,6 +47,13 @@ export type {
   UpdateSettingsRequest,
   UserSettings,
 } from "./generated/types.gen.js"
+
+// The answer of `createTask`. The server sends `urgentMoveFailed` always.
+// The contract keeps it optional, because the server before the field
+// answered the plain task (a rollback); the facade reads that as `false`.
+export type CreatedTaskResult = Omit<CreatedTask, "urgentMoveFailed"> & {
+  urgentMoveFailed: boolean
+}
 
 // The schema of the settings form: the request body of `PATCH /api/settings`.
 export const updateSettingsRequestSchema = zUpdateSettingsRequest
@@ -67,7 +75,6 @@ const PROBLEM_STATUS = {
   forbidden: 403,
   not_found: 404,
   task_not_found: 404,
-  no_tasks_to_reorder: 404,
   no_free_slot: 409,
   payload_too_large: 413,
   rate_limited: 429,
@@ -220,8 +227,10 @@ export const createApi = (config: ApiConfig) => {
       unwrap<CalendarListItem[]>(sdk.listCalendars(options(signal))),
     fetchTasks: (signal?: AbortSignal) =>
       unwrap<CalendarTask[]>(sdk.listTasks(options(signal))),
-    createTask: (body: CreateTaskRequest) =>
-      unwrap<CalendarTask>(sdk.createTask({ ...options(), body })),
+    createTask: async (body: CreateTaskRequest): Promise<CreatedTaskResult> => {
+      const created = await unwrap<CreatedTask>(sdk.createTask({ ...options(), body }))
+      return { ...created, urgentMoveFailed: created.urgentMoveFailed ?? false }
+    },
     updateTask: (id: string, completed: boolean) =>
       unwrap<CalendarTask>(
         sdk.updateTask({ ...options(), path: { id }, body: { completed } }),

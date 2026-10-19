@@ -119,9 +119,19 @@ export default function MainPage() {
       }
       return createTask(body)
     },
-    onSuccess: () => {
+    onSuccess: ({ urgentMoveFailed }) => {
       void queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
       setNewTask({ title: "", details: "", urgent: false })
+      if (urgentMoveFailed) {
+        // The task exists, so the form clears; a retry would create it twice.
+        toast({
+          title: "Task created",
+          description:
+            "Your task has been scheduled, but other tasks could not be moved after it.",
+          variant: "destructive",
+        })
+        return
+      }
       toast({
         title: "Task created",
         description: hasCalendar
@@ -179,6 +189,15 @@ export default function MainPage() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
+    },
+    onError: () => {
+      // A failed reorder can stop after some moves: show the real order.
+      void queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
+      toast({
+        title: "Error",
+        description: "Failed to reorder tasks. Please try again.",
+        variant: "destructive",
+      })
     },
   })
 

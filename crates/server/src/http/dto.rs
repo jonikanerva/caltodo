@@ -147,6 +147,75 @@ impl From<&Task> for CalendarTask {
     }
 }
 
+/// The answer of `POST /api/tasks`: the fields of [`CalendarTask`] and
+/// `urgentMoveFailed`.
+///
+/// The object is flat on purpose. A browser tab with the previous bundle
+/// validates this answer as a `CalendarTask` and ignores the extra field,
+/// so it does not report a created task as a failure (a retry would create
+/// the task twice). The `CalendarTask` fields are repeated, because
+/// `#[serde(flatten)]` gives an `allOf` schema.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedTask {
+    /// The Google Calendar event id.
+    pub id: String,
+    pub title: String,
+    #[schema(required = true)]
+    pub details: Option<String>,
+    /// The duration in whole minutes; `null` when the event ends at or before
+    /// its start.
+    #[schema(required = true)]
+    pub duration: Option<i32>,
+    pub scheduled_start: String,
+    pub scheduled_end: String,
+    pub completed: bool,
+    #[schema(required = true)]
+    pub completed_at: Option<String>,
+    /// The position among the incomplete tasks; 0 for a completed task.
+    #[schema(minimum = 0)]
+    pub priority: u32,
+    /// `true` when the task is urgent and the other tasks were not all moved
+    /// after it. The task exists, but it can be in a later slot than the
+    /// other tasks, or two tasks can overlap. `false` for a task that is not
+    /// urgent. The server always sends it. The schema does not require it,
+    /// because the server before this field answered without it: a client
+    /// reads a missing value as `false` (`STACK.md` §2.1).
+    #[schema(required = false)]
+    pub urgent_move_failed: bool,
+}
+
+impl CreatedTask {
+    #[must_use]
+    pub fn new(task: &Task, urgent_move_failed: bool) -> Self {
+        // No `..` in the pattern: a new `CalendarTask` field fails the
+        // build here until this answer has it too.
+        let CalendarTask {
+            id,
+            title,
+            details,
+            duration,
+            scheduled_start,
+            scheduled_end,
+            completed,
+            completed_at,
+            priority,
+        } = CalendarTask::from(task);
+        Self {
+            id,
+            title,
+            details,
+            duration,
+            scheduled_start,
+            scheduled_end,
+            completed,
+            completed_at,
+            priority,
+            urgent_move_failed,
+        }
+    }
+}
+
 /// The counters of "Reschedule all".
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

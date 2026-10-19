@@ -58,8 +58,6 @@ pub enum ProblemCode {
     NotFound,
     /// The task event does not exist or is no task (404).
     TaskNotFound,
-    /// No requested task exists (404).
-    NoTasksToReorder,
     /// No free slot in the next 90 days (409).
     NoFreeSlot,
     /// The body is larger than the limit (413).
@@ -82,7 +80,7 @@ pub enum ProblemCode {
 
 impl ProblemCode {
     /// Every code, in declaration order.
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 22] = [
         Self::InvalidRequest,
         Self::InvalidTaskIds,
         Self::InvalidSettings,
@@ -96,7 +94,6 @@ impl ProblemCode {
         Self::Forbidden,
         Self::NotFound,
         Self::TaskNotFound,
-        Self::NoTasksToReorder,
         Self::NoFreeSlot,
         Self::PayloadTooLarge,
         Self::RateLimited,
@@ -121,7 +118,7 @@ impl ProblemCode {
             | Self::InvalidEventTime => StatusCode::BAD_REQUEST,
             Self::Unauthenticated => StatusCode::UNAUTHORIZED,
             Self::CsrfRejected | Self::Forbidden => StatusCode::FORBIDDEN,
-            Self::NotFound | Self::TaskNotFound | Self::NoTasksToReorder => StatusCode::NOT_FOUND,
+            Self::NotFound | Self::TaskNotFound => StatusCode::NOT_FOUND,
             Self::NoFreeSlot => StatusCode::CONFLICT,
             Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
@@ -166,7 +163,6 @@ impl ProblemCode {
             Self::Forbidden => "Unauthorized.",
             Self::NotFound => "No API route has this path and method.",
             Self::TaskNotFound => "Task not found",
-            Self::NoTasksToReorder => "No tasks found to reorder",
             Self::NoFreeSlot => "No free time slots available in the next 90 days.",
             Self::PayloadTooLarge => "The request body is too large.",
             Self::RateLimited => "Too many requests, please try again later.",
@@ -283,7 +279,7 @@ pub fn app_problem(error: &AppError, fallback: &'static str) -> Problem {
         AppError::Google(error) => Problem::from(*error),
         AppError::TaskNotFound => Problem::new(ProblemCode::TaskNotFound),
         AppError::NoFreeSlot => Problem::new(ProblemCode::NoFreeSlot),
-        AppError::NoTasksToReorder => Problem::new(ProblemCode::NoTasksToReorder),
+        AppError::InvalidEventTime => Problem::new(ProblemCode::InvalidEventTime),
         AppError::EventNotCreated => Problem::new(ProblemCode::EventNotCreated),
         AppError::CreatedEventMissing => {
             Problem::with_detail(ProblemCode::InternalError, "Failed to load created event")
