@@ -41,7 +41,7 @@ Preferred communication style: simple, everyday language.
 
 **Font Family:**
 
-- Primary: Inter (Google Fonts) - clean, readable, modern
+- Primary: Inter (self-hosted from `@fontsource-variable/inter`) - clean, readable, modern
 - Load weights: 400 (regular), 500 (medium), 600 (semibold)
 
 **Hierarchy:**

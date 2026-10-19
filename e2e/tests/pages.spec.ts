@@ -32,3 +32,33 @@ test("the header navigates and toggles the theme", async ({ page }) => {
     .toBe(!dark)
   await expectNoAxeViolations(page)
 })
+
+// The app font loads from the app origin (issue #5, item 15). The old Google
+// Fonts stylesheet was blocked by the CSP, so the page showed a fallback font.
+test("the page uses the Inter font from the app origin", async ({ page }) => {
+  await page.goto("/")
+  await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible()
+  const font = await page.evaluate(async () => {
+    await document.fonts.ready
+    // `document.fonts.check()` is true when no face matches, so check the
+    // loaded faces and the font files instead.
+    const faces = [...document.fonts]
+      .filter((face) => face.family.replaceAll('"', "") === "Inter Variable")
+      .map((face) => face.status)
+    const files = performance
+      .getEntriesByType("resource")
+      .map((entry) => new URL(entry.name))
+      .filter((url) => url.pathname.endsWith(".woff2"))
+      .map((url) => url.origin)
+    return {
+      body: getComputedStyle(document.body).fontFamily,
+      faces,
+      files,
+      origin: location.origin,
+    }
+  })
+  expect(font.body.startsWith('"Inter Variable"')).toBe(true)
+  expect(font.faces).toContain("loaded")
+  expect(font.files.length).toBeGreaterThan(0)
+  expect(font.files.every((origin) => origin === font.origin)).toBe(true)
+})
