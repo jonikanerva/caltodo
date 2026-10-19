@@ -536,9 +536,8 @@ async fn a_session_save_never_creates_a_row(pool: PgPool) {
     assert_eq!(session_rows(&pool).await, 1);
 }
 
-fn expiry() -> Option<Expiry> {
-    Some(Expiry::OnInactivity(time::Duration::days(7)))
-}
+/// The session expiry of the server (`http::session::SessionSettings`).
+const EXPIRY: Option<Expiry> = Some(Expiry::OnInactivity(time::Duration::days(7)));
 
 /// Issue #5 item 11, through the `Session` API that the session middleware
 /// uses: request A loads a signed-in session, request B signs out, then A
@@ -547,25 +546,25 @@ fn expiry() -> Option<Expiry> {
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
 async fn a_request_in_flight_does_not_undo_a_sign_out(pool: PgPool) {
     let store = Arc::new(PgSessionStore::new(pool.clone()));
-    let signed_in = Session::new(None, Arc::clone(&store), expiry());
+    let signed_in = Session::new(None, Arc::clone(&store), EXPIRY);
     signed_in.insert("user_id", "u1").await.unwrap();
     signed_in.insert("csrf_token", "abc").await.unwrap();
     signed_in.save().await.unwrap();
     let id = signed_in.id().unwrap();
 
-    let a = Session::new(Some(id), Arc::clone(&store), expiry());
+    let a = Session::new(Some(id), Arc::clone(&store), EXPIRY);
     assert_eq!(
         a.get::<String>("user_id").await.unwrap().as_deref(),
         Some("u1")
     );
-    let b = Session::new(Some(id), Arc::clone(&store), expiry());
+    let b = Session::new(Some(id), Arc::clone(&store), EXPIRY);
     b.flush().await.unwrap();
     assert_eq!(session_rows(&pool).await, 0);
 
     a.insert("oauth_state", "state-1").await.unwrap();
     a.save().await.unwrap();
     assert_eq!(session_rows(&pool).await, 0, "the session stays deleted");
-    let next = Session::new(Some(id), Arc::clone(&store), expiry());
+    let next = Session::new(Some(id), Arc::clone(&store), EXPIRY);
     assert_eq!(next.get::<String>("user_id").await.unwrap(), None);
 }
 
@@ -576,14 +575,14 @@ async fn a_request_in_flight_does_not_undo_a_sign_out(pool: PgPool) {
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
 async fn a_request_in_flight_does_not_bring_back_the_old_session_id(pool: PgPool) {
     let store = Arc::new(PgSessionStore::new(pool.clone()));
-    let started = Session::new(None, Arc::clone(&store), expiry());
+    let started = Session::new(None, Arc::clone(&store), EXPIRY);
     started.insert("oauth_state", "state-1").await.unwrap();
     started.save().await.unwrap();
     let old = started.id().unwrap();
 
-    let a = Session::new(Some(old), Arc::clone(&store), expiry());
+    let a = Session::new(Some(old), Arc::clone(&store), EXPIRY);
     assert!(a.get::<String>("oauth_state").await.unwrap().is_some());
-    let callback = Session::new(Some(old), Arc::clone(&store), expiry());
+    let callback = Session::new(Some(old), Arc::clone(&store), EXPIRY);
     callback.clear().await;
     callback.cycle_id().await.unwrap();
     callback.insert("user_id", "u2").await.unwrap();
