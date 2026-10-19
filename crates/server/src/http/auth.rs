@@ -150,7 +150,12 @@ pub(super) async fn current(
 ) -> Response {
     let user = match current_user(&state, &session).await {
         Ok(Some(user)) => user,
-        Ok(None) => return Problem::new(ProblemCode::Unauthenticated).into_response(),
+        // The Node text of this route; the other routes answer the
+        // `requireAuth` text "Unauthorized" (ADR 0004).
+        Ok(None) => {
+            return Problem::with_detail(ProblemCode::Unauthenticated, "Not authenticated")
+                .into_response();
+        }
         Err(failed) => return failed.into_response(),
     };
     match ensure_csrf_token(&session).await {

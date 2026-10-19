@@ -62,6 +62,9 @@ async fn without_a_session_the_user_route_is_401(pool: PgPool) {
         .send(request(Method::GET, "/api/auth/user").build())
         .await;
     assert_eq!(reply.problem(StatusCode::UNAUTHORIZED), "unauthenticated");
+    // Issue #5 item 8: the Node texts. `authRoutes.ts` answered this route
+    // with "Not authenticated"; `requireAuth` answered "Unauthorized".
+    assert_eq!(reply.json()["detail"], "Not authenticated");
     for path in ["/api/tasks", "/api/settings", "/api/calendars"] {
         let reply = app.send(request(Method::GET, path).build()).await;
         assert_eq!(
@@ -69,6 +72,7 @@ async fn without_a_session_the_user_route_is_401(pool: PgPool) {
             "unauthenticated",
             "{path}"
         );
+        assert_eq!(reply.json()["detail"], "Unauthorized", "{path}");
     }
 }
 
