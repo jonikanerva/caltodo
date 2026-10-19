@@ -41,6 +41,6 @@ The Rust server needs an explicit migration step (`STACK-RUST.md` §5), a new bu
 
 The owner ended the Node rollback path (issue #5, item 17). Migration `0003_drop_user_sessions.sql` drops the Node session table `user_sessions`. The rollback section above no longer applies: the fast path to the Node deployment and the revert to the Node build are not recovery paths, and the limit on a new empty database has no effect.
 
-- Recovery is a Railway rollback to a previous Rust deployment, or a revert on a feature branch, and Railway PostgreSQL backups for data (`STACK.md` §15).
+- Recovery is a new PR or a revert PR on a feature branch (owner decision 2026-10-19). The Railway rollback button is not used after a release with a migration. The database has no backup: the owner uses the Railway Hobby plan, which has no database backups, and accepts the risk of data loss (`STACK.md` §5, §15).
 - A Railway rollback works only to a deployment that knows every applied migration. `caltodo migrate` of an older release stops on a newer migration, and Railway keeps the current deployment live. After migration `0003`, a rollback to a deployment before it does not start.
 - The release check of the production schema against the Drizzle snapshot does not apply after migration `0003`.
