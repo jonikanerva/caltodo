@@ -4,7 +4,7 @@
 //! SQLx 0.9, so this small adapter implements the store trait on the same
 //! pool. The record data is JSON; the store copies the signed-in user id of
 //! the data into `user_id`, so the account deletion can find the sessions
-//! of a user.
+//! of a user. Only `create` inserts a row; `save` only updates one.
 
 use jiff::Timestamp;
 use serde_json::Value;
@@ -102,14 +102,26 @@ impl SessionStore for PgSessionStore {
         ))
     }
 
+    /// Updates a session that exists and has not expired. It never inserts.
+    ///
+    /// tower-sessions 0.15 (`Session::save`) calls `save` for a session id
+    /// from the request cookie. A new session, a session after `cycle_id`,
+    /// and a session whose row did not load go to `create`. In this server
+    /// each change of session data loads the row first (`Session::clear`
+    /// does not, but `sign_in` follows it with `cycle_id`). If the row is gone
+    /// when the request ends (sign-out, the sign-in id change, or account
+    /// deletion in a concurrent request), an insert would bring the old
+    /// data back, with the user id, and sign the browser in again (issue #5
+    /// item 11). So zero updated rows write nothing. The result is still
+    /// `Ok`: an error makes tower-sessions replace the answer of the request
+    /// with an empty 500, although the request itself succeeded. The cookie
+    /// of that answer names a session that does not exist, so the next
+    /// request starts a new, signed-out session.
     async fn save(&self, record: &Record) -> session_store::Result<()> {
         sqlx::query!(
-            "INSERT INTO app_sessions (id, user_id, data, expiry_date)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (id) DO UPDATE SET
-               user_id = EXCLUDED.user_id,
-               data = EXCLUDED.data,
-               expiry_date = EXCLUDED.expiry_date",
+            "UPDATE app_sessions
+             SET user_id = $2, data = $3, expiry_date = $4
+             WHERE id = $1 AND expiry_date > now()",
             record.id.to_string(),
             user_id(record),
             data(record)?,
