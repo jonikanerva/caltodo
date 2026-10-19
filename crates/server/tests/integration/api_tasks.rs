@@ -465,20 +465,41 @@ async fn bulk_complete_reports_success_even_for_missing_tasks(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
-async fn reload_only_checks_the_calendar(pool: PgPool) {
+async fn reload_reads_the_task_list_from_google(pool: PgPool) {
     let app = TestApp::new(pool);
     let client = app.sign_in("sub-l", "l@example.com", "L").await;
     let missing = app
         .send(client.request(Method::POST, "/api/tasks/reload").build())
         .await;
     assert_eq!(missing.problem(StatusCode::BAD_REQUEST), "no_calendar");
+    assert_eq!(app.calendar.calls(), Vec::<CalendarCall>::new());
     app.configure_calendar(&client, "UTC").await;
     app.calendar.clear_calls();
     let reply = app
         .send(client.request(Method::POST, "/api/tasks/reload").build())
         .await;
     assert_eq!(reply.json(), json!({"success": true}));
-    assert_eq!(app.calendar.calls(), Vec::<CalendarCall>::new());
+    let calls = app.calendar.calls();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert!(
+        matches!(&calls[0], CalendarCall::List { calendar, .. } if calendar == "primary"),
+        "{calls:?}"
+    );
+}
+
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_failed_google_read_fails_the_reload(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    app.calendar.fail_list(Some(GoogleError::Transport));
+    let reply = app
+        .send(client.request(Method::POST, "/api/tasks/reload").build())
+        .await;
+    assert_eq!(reply.problem(StatusCode::BAD_GATEWAY), "google_unavailable");
+    app.calendar.fail_list(Some(GoogleError::TooManyPages));
+    let reply = app
+        .send(client.request(Method::POST, "/api/tasks/reload").build())
+        .await;
+    assert_eq!(reply.problem(StatusCode::BAD_GATEWAY), "google_unavailable");
 }
 
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]

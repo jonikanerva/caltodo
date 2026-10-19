@@ -233,7 +233,7 @@ export const zBulkCompleteTasksBody = zTaskIdsRequest;
 export const zBulkCompleteTasksResponse = zSuccess;
 
 /**
- * A calendar is configured.
+ * Google Calendar answered the task read.
  */
 export const zReloadTasksResponse = zSuccess;
 
