@@ -349,6 +349,11 @@ async fn answers_match_the_document(pool: PgPool) {
         .await;
     assert_eq!(google.status, StatusCode::BAD_GATEWAY);
     assert_documented(&doc, &Method::GET, "/api/tasks", &google);
+    let reload = app
+        .send(client.request(Method::POST, "/api/tasks/reload").build())
+        .await;
+    assert_eq!(reload.status, StatusCode::BAD_GATEWAY);
+    assert_documented(&doc, &Method::POST, "/api/tasks/reload", &reload);
     app.calendar.fail_list(None);
     sqlx::query("UPDATE user_settings SET work_start_hour = 17, work_end_hour = 9")
         .execute(&app.pool)

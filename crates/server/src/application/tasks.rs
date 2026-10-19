@@ -118,6 +118,15 @@ pub async fn list_tasks(services: &Services, user: &UserId) -> Result<Vec<Task>,
         Err(AppError::NoCalendar) => return Ok(Vec::new()),
         Err(error) => return Err(error),
     };
+    read_tasks(services, user, &settings).await
+}
+
+/// The task list of the configured calendar, read from Google Calendar.
+async fn read_tasks(
+    services: &Services,
+    user: &UserId,
+    settings: &CalendarSettings,
+) -> Result<Vec<Task>, AppError> {
     let calendar = open_calendar(services, user).await?;
     let now = services.clock.now();
     let events = calendar
@@ -369,7 +378,7 @@ async fn read_task(
 ///
 /// The first failure in the requested order: [`AppError::TaskNotFound`] for
 /// a deleted, cancelled, or foreign event, or a Google failure.
-async fn read_tasks(
+async fn read_requested_tasks(
     calendar: &UserCalendar<'_>,
     calendar_id: &CalendarId,
     ids: &[EventId],
@@ -522,21 +531,24 @@ pub async fn bulk_complete(
     let Some(calendar) = UserCalendar::open(services, user).await? else {
         return Err(AppError::TaskNotFound);
     };
-    let events = read_tasks(&calendar, &settings.calendar, ids).await?;
+    let events = read_requested_tasks(&calendar, &settings.calendar, ids).await?;
     for (id, event) in ids.iter().zip(&events) {
         apply_completion(&calendar, &settings.calendar, id, event, true).await?;
     }
     Ok(())
 }
 
-/// `POST /api/tasks/reload`: checks the calendar setting only. The Node
-/// server did nothing else either; the client then reloads the task list.
+/// `POST /api/tasks/reload`: reads the task list from Google Calendar, like
+/// `GET /api/tasks`, and reports whether the read succeeded. The Node server
+/// checked the calendar setting only, so a Google failure showed as a
+/// successful sync. The client then reloads the task list.
 ///
 /// # Errors
 ///
-/// No calendar.
+/// No calendar, no calendar access, or Google fails.
 pub async fn reload(services: &Services, user: &UserId) -> Result<(), AppError> {
-    calendar_settings(services, user).await.map(|_| ())
+    let settings = calendar_settings(services, user).await?;
+    read_tasks(services, user, &settings).await.map(|_| ())
 }
 
 /// `POST /api/tasks/reorder`: gives the tasks the slots of the requested
@@ -556,7 +568,7 @@ pub async fn reorder(services: &Services, user: &UserId, ids: &[EventId]) -> Res
     let Some(calendar) = UserCalendar::open(services, user).await? else {
         return Err(AppError::TaskNotFound);
     };
-    let events = read_tasks(&calendar, &settings.calendar, ids).await?;
+    let events = read_requested_tasks(&calendar, &settings.calendar, ids).await?;
     let lookups = ids
         .iter()
         .zip(&events)

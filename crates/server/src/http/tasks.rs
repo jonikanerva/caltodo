@@ -241,7 +241,7 @@ pub(super) async fn reschedule_all(State(state): State<AppState>, signed_in: Sig
     }
 }
 
-/// Checks that a calendar is configured; the client then reloads the list.
+/// Reads the tasks from Google Calendar; the client then reloads the list.
 #[utoipa::path(
     post,
     path = "/api/tasks/reload",
@@ -249,12 +249,13 @@ pub(super) async fn reschedule_all(State(state): State<AppState>, signed_in: Sig
     tag = "tasks",
     security(("csrfToken" = [])),
     responses(
-        (status = 200, description = "A calendar is configured.", body = Success),
+        (status = 200, description = "Google Calendar answered the task read.", body = Success),
         BadRequest,
         Unauthenticated,
         CsrfRejected,
         RateLimited,
-        InternalError
+        InternalError,
+        GoogleFailure
     )
 )]
 pub(super) async fn reload(State(state): State<AppState>, signed_in: SignedIn) -> Response {

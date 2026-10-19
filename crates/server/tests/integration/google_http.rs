@@ -185,6 +185,67 @@ async fn an_endless_list_fails_instead_of_stopping_silently() {
 }
 
 #[tokio::test]
+async fn lists_every_calendar_page() {
+    let (base, seen) = serve(|request, _| {
+        let page2 = request
+            .query
+            .as_deref()
+            .unwrap_or_default()
+            .contains("pageToken=c2");
+        let mut body = if page2 {
+            json!({"items": [{"id": "team@group.calendar.google.com", "summary": "Team"}]})
+        } else {
+            json!({"items": [{"id": "me@example.com", "summary": "Me", "primary": true}]})
+        };
+        if !page2 {
+            body["nextPageToken"] = json!("c2");
+        }
+        json_reply(200, &body)
+    })
+    .await;
+    let calendar = GoogleCalendar::new(client(), &format!("{base}/calendar/v3")).unwrap();
+    let calendars = calendar.list_calendars(&token()).await.unwrap();
+    assert_eq!(
+        calendars
+            .iter()
+            .map(|c| (c.id.as_str(), c.summary.as_str(), c.primary))
+            .collect::<Vec<_>>(),
+        [
+            ("me@example.com", "Me", true),
+            ("team@group.calendar.google.com", "Team", false)
+        ]
+    );
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 2);
+    assert_eq!(seen[0].path, "/calendar/v3/users/me/calendarList");
+    assert_eq!(seen[0].query.as_deref(), Some("maxResults=250"));
+    assert_eq!(
+        seen[1].query.as_deref(),
+        Some("maxResults=250&pageToken=c2")
+    );
+}
+
+#[tokio::test]
+async fn an_endless_calendar_list_fails_instead_of_stopping_silently() {
+    let (base, seen) = serve(|_, index| {
+        json_reply(
+            200,
+            &json!({"items": [{"id": format!("c{index}")}], "nextPageToken": format!("c{index}")}),
+        )
+    })
+    .await;
+    let calendar = GoogleCalendar::new(client(), &base).unwrap();
+    assert_eq!(
+        calendar.list_calendars(&token()).await,
+        Err(GoogleError::TooManyPages)
+    );
+    assert_eq!(
+        seen.lock().unwrap().len(),
+        caltodo::google::calendar::MAX_CALENDAR_PAGES
+    );
+}
+
+#[tokio::test]
 async fn maps_failures_without_their_text() {
     for (status, expected) in [
         (401, GoogleError::Unauthorized),

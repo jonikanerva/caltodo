@@ -693,13 +693,17 @@ export type ReloadTasksErrors = {
      * Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.
      */
     500: Problem;
+    /**
+     * Problem `google_unavailable` or `google_reauthorization_required`.
+     */
+    502: Problem;
 };
 
 export type ReloadTasksError = ReloadTasksErrors[keyof ReloadTasksErrors];
 
 export type ReloadTasksResponses = {
     /**
-     * A calendar is configured.
+     * Google Calendar answered the task read.
      */
     200: Success;
 };

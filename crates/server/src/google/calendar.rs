@@ -19,6 +19,12 @@ pub const API_BASE: &str = "https://www.googleapis.com/calendar/v3";
 /// default of 250 events, so the limit is 10 000 events. A longer list
 /// fails instead of being cut silently.
 pub const MAX_EVENT_PAGES: usize = 40;
+/// The most result pages of one calendar list. The page size is the Google
+/// maximum of 250 calendars, so the limit is 2 500 calendars. A longer list
+/// fails instead of being cut silently.
+pub const MAX_CALENDAR_PAGES: usize = 10;
+/// The page size of `calendarList.list` (the Google maximum).
+const CALENDAR_PAGE_SIZE: &str = "250";
 
 /// The Calendar API client.
 #[derive(Debug, Clone)]
@@ -121,15 +127,31 @@ impl GoogleCalendar {
     }
 
     async fn calendar_list(&self, token: &Secret) -> Result<Vec<CalendarSummary>, GoogleError> {
-        let url = self.url(&["users", "me", "calendarList"]);
-        let bytes = self.request(Method::GET, url, token, None).await?;
-        let page: CalendarListPage = decode_object(&bytes)?;
-        Ok(page
-            .items
-            .unwrap_or_default()
-            .into_iter()
-            .map(CalendarSummary::from)
-            .collect())
+        let mut calendars = Vec::new();
+        let mut page_token: Option<String> = None;
+        for _ in 0..MAX_CALENDAR_PAGES {
+            let mut url = self.url(&["users", "me", "calendarList"]);
+            {
+                let mut query = url.query_pairs_mut();
+                query.append_pair("maxResults", CALENDAR_PAGE_SIZE);
+                if let Some(page) = &page_token {
+                    query.append_pair("pageToken", page);
+                }
+            }
+            let bytes = self.request(Method::GET, url, token, None).await?;
+            let page: CalendarListPage = decode_object(&bytes)?;
+            calendars.extend(
+                page.items
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(CalendarSummary::from),
+            );
+            match page.next_page_token.filter(|next| !next.is_empty()) {
+                Some(next) => page_token = Some(next),
+                None => return Ok(calendars),
+            }
+        }
+        Err(GoogleError::TooManyPages)
     }
 }
 

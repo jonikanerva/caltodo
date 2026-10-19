@@ -139,7 +139,7 @@ export const bulkCompleteTasks = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * Checks that a calendar is configured; the client then reloads the list.
+ * Reads the tasks from Google Calendar; the client then reloads the list.
  */
 export const reloadTasks = <ThrowOnError extends boolean = false>(options?: Options<ReloadTasksData, ThrowOnError>): RequestResult<ReloadTasksResponses, ReloadTasksErrors, ThrowOnError> => (options?.client ?? client).post<ReloadTasksResponses, ReloadTasksErrors, ThrowOnError>({
     responseValidator: async (data) => await zReloadTasksResponse.parseAsync(data),

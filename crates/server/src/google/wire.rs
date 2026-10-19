@@ -75,6 +75,7 @@ pub struct EventPage {
 #[serde(rename_all = "camelCase")]
 pub struct CalendarListPage {
     pub items: Option<Vec<CalendarListEntryJson>>,
+    pub next_page_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

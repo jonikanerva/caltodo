@@ -834,11 +834,11 @@
         "tags": [
           "tasks"
         ],
-        "summary": "Checks that a calendar is configured; the client then reloads the list.",
+        "summary": "Reads the tasks from Google Calendar; the client then reloads the list.",
         "operationId": "reloadTasks",
         "responses": {
           "200": {
-            "description": "A calendar is configured.",
+            "description": "Google Calendar answered the task read.",
             "content": {
               "application/json": {
                 "schema": {
@@ -889,6 +889,16 @@
           },
           "500": {
             "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
             "content": {
               "application/problem+json": {
                 "schema": {
