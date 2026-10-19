@@ -20,10 +20,14 @@
 //!
 //! Each limiter keeps at most [`MAX_CLIENTS`] counters in memory. When a new
 //! client arrives and the limiter is full, the limiter removes the expired
-//! counters. It never removes a live counter, because then a client with
-//! many addresses could give a limited address a new window (issue #5 item
-//! 10). If no counter has expired, the new client gets 429 until the oldest
-//! window ends. The tracked clients keep their counters.
+//! counters. If none has expired, it removes the live counter with the
+//! lowest count (on a tie, the one with the oldest window start), and then
+//! counts the new client. A full limiter never refuses a new client, so a
+//! flood of new addresses cannot block real users. The flood addresses
+//! have low counts and remove each other, so a counter close to its limit
+//! stays (issue #5 item 10). To remove a counter with count `c`, a client
+//! must first raise every other counter to at least `c`, which uses up the
+//! budget of those addresses.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -58,7 +62,7 @@ struct Clients {
     counters: HashMap<IpAddr, (Instant, u32)>,
     /// No window in `counters` starts before this instant. A full limiter
     /// uses it to skip the scan for expired counters while none can have
-    /// expired, so a flood of new addresses costs no full scan per request.
+    /// expired. A removal can only make the bound less tight, never wrong.
     earliest_start: Option<Instant>,
 }
 
@@ -68,6 +72,19 @@ impl Clients {
         self.counters
             .retain(|_, (start, _)| now.duration_since(*start) < window);
         self.earliest_start = self.counters.values().map(|(start, _)| *start).min();
+    }
+
+    /// Removes the live counter with the lowest count; on a tie, the one
+    /// with the oldest window start. One scan of at most the capacity.
+    fn remove_lowest(&mut self) {
+        let lowest = self
+            .counters
+            .iter()
+            .min_by_key(|(_, (start, count))| (*count, *start))
+            .map(|(client, _)| *client);
+        if let Some(client) = lowest {
+            self.counters.remove(&client);
+        }
     }
 }
 
@@ -112,13 +129,10 @@ impl Limiter {
                 clients.remove_expired(now, window);
             }
             if clients.counters.len() >= self.capacity {
-                // Full of live counters: refuse the new client and keep
-                // every counter. A slot can free when the oldest window
-                // ends.
-                let left = clients.earliest_start.map_or(window, |start| {
-                    window.saturating_sub(now.duration_since(start))
-                });
-                return self.decision(false, 0, left);
+                // Full of live counters. Refusing the new client would let
+                // a flood of addresses block every real user, so the least
+                // used counter makes room.
+                clients.remove_lowest();
             }
         }
         clients.earliest_start = Some(clients.earliest_start.map_or(now, |start| start.min(now)));
@@ -343,18 +357,10 @@ mod tests {
         let limiter = Limiter::new(1, Duration::from_secs(60));
         let t0 = Instant::now();
         let full = u32::try_from(MAX_CLIENTS).unwrap();
-        for n in 0..full {
+        for n in 0..full + 5 {
             assert!(limiter.check(IpAddr::from(n.to_be_bytes()), t0).allowed);
         }
-        for n in full..full + 5 {
-            assert!(!limiter.check(IpAddr::from(n.to_be_bytes()), t0).allowed);
-        }
         assert_eq!(limiter.len(), MAX_CLIENTS);
-        assert_eq!(
-            count(&limiter, "0.0.0.0"),
-            Some(1),
-            "the first counter stays"
-        );
         // After the window, the expired counters make room.
         assert!(
             limiter
@@ -364,50 +370,92 @@ mod tests {
         assert_eq!(limiter.len(), 1);
     }
 
-    /// Issue #5 item 10: new addresses cannot push a live counter out.
+    /// Issue #5 item 10: a full limiter of live counters removes the counter
+    /// with the lowest count (on a tie, the oldest window start) and counts
+    /// the new client.
     #[test]
-    fn a_full_limiter_refuses_a_new_client_and_keeps_every_counter() {
+    fn a_full_limiter_removes_the_lowest_count_and_admits_the_new_client() {
         let limiter = Limiter::with_capacity(2, Duration::from_secs(60), 3);
         let t0 = Instant::now();
         let at = |seconds: u64| t0 + Duration::from_secs(seconds);
         assert!(limiter.check(ip("10.0.0.1"), at(0)).allowed);
+        assert!(limiter.check(ip("10.0.0.1"), at(1)).allowed);
         assert!(limiter.check(ip("10.0.0.2"), at(10)).allowed);
         assert!(limiter.check(ip("10.0.0.3"), at(20)).allowed);
-        assert!(limiter.check(ip("10.0.0.1"), at(30)).allowed);
-        assert!(!limiter.check(ip("10.0.0.1"), at(31)).allowed);
 
-        let refused = limiter.check(ip("10.0.0.4"), at(40));
+        let admitted = limiter.check(ip("10.0.0.4"), at(30));
         assert_eq!(
-            refused,
+            admitted,
             Decision {
-                allowed: false,
+                allowed: true,
                 limit: 2,
-                remaining: 0,
-                reset_seconds: 20,
+                remaining: 1,
+                reset_seconds: 60,
                 window_seconds: 60,
-            },
-            "the oldest window (10.0.0.1) ends in 20 seconds"
+            }
         );
-        // A flood of new addresses changes no counter.
-        for n in 0..100_u8 {
-            assert!(!limiter.check(IpAddr::from([172, 16, 0, n]), at(45)).allowed);
+        assert_eq!(limiter.len(), 3);
+        assert_eq!(
+            count(&limiter, "10.0.0.1"),
+            Some(2),
+            "the highest count stays"
+        );
+        assert_eq!(
+            count(&limiter, "10.0.0.2"),
+            None,
+            "count 1 and the oldest start of the two counters with count 1"
+        );
+        assert_eq!(count(&limiter, "10.0.0.3"), Some(1));
+        assert_eq!(count(&limiter, "10.0.0.4"), Some(1));
+    }
+
+    /// Issue #5 item 10 and the review of the fail-closed version: a flood of
+    /// new addresses with one request each neither blocks a real new client
+    /// nor resets a counter close to its limit. The removal of the oldest
+    /// counter reset the limited client here; a refusal of new clients
+    /// blocked the real new client.
+    #[test]
+    fn a_limited_counter_survives_a_flood_and_new_clients_get_in() {
+        let limiter = Limiter::with_capacity(5, Duration::from_secs(60), 3);
+        let t0 = Instant::now();
+        let at = |seconds: u64| t0 + Duration::from_secs(seconds);
+        for _ in 0..5 {
+            assert!(limiter.check(ip("10.0.0.1"), at(0)).allowed);
+        }
+        assert!(!limiter.check(ip("10.0.0.1"), at(1)).allowed);
+
+        for n in 0..1_000_u16 {
+            let [high, low] = n.to_be_bytes();
+            let flood = limiter.check(IpAddr::from([172, 16, high, low]), at(2));
+            assert!(flood.allowed, "flood address {n} is counted");
         }
         assert_eq!(limiter.len(), 3);
-        assert_eq!(count(&limiter, "10.0.0.1"), Some(3));
-        assert_eq!(count(&limiter, "10.0.0.2"), Some(1));
-        assert_eq!(count(&limiter, "10.0.0.3"), Some(1));
-        assert_eq!(count(&limiter, "10.0.0.4"), None);
+        assert_eq!(count(&limiter, "10.0.0.1"), Some(6));
         assert!(
-            !limiter.check(ip("10.0.0.1"), at(50)).allowed,
+            !limiter.check(ip("10.0.0.1"), at(3)).allowed,
             "the limited client stays limited"
         );
-        assert!(limiter.check(ip("10.0.0.2"), at(50)).allowed);
+        assert!(
+            limiter.check(ip("192.0.2.1"), at(4)).allowed,
+            "a real new client gets in"
+        );
+        assert_eq!(count(&limiter, "10.0.0.1"), Some(7));
+    }
 
-        // The window of 10.0.0.1 ends at 60 s: its counter goes, and the new
-        // client gets its place. The live counters stay.
-        assert!(limiter.check(ip("10.0.0.4"), at(60)).allowed);
+    /// An expired counter goes before a live counter with a lower count.
+    #[test]
+    fn expired_counters_go_first() {
+        let limiter = Limiter::with_capacity(5, Duration::from_secs(60), 3);
+        let t0 = Instant::now();
+        let at = |seconds: u64| t0 + Duration::from_secs(seconds);
+        for _ in 0..4 {
+            assert!(limiter.check(ip("10.0.0.1"), at(0)).allowed);
+        }
+        assert!(limiter.check(ip("10.0.0.2"), at(30)).allowed);
+        assert!(limiter.check(ip("10.0.0.3"), at(40)).allowed);
+        assert!(limiter.check(ip("10.0.0.4"), at(65)).allowed);
         assert_eq!(count(&limiter, "10.0.0.1"), None);
-        assert_eq!(count(&limiter, "10.0.0.2"), Some(2));
+        assert_eq!(count(&limiter, "10.0.0.2"), Some(1));
         assert_eq!(count(&limiter, "10.0.0.3"), Some(1));
         assert_eq!(count(&limiter, "10.0.0.4"), Some(1));
     }
@@ -420,18 +468,21 @@ mod tests {
         let t0 = Instant::now();
         let at = |seconds: u64| t0 + Duration::from_secs(seconds);
         assert!(limiter.check(ip("10.0.0.1"), at(0)).allowed);
-        assert!(limiter.check(ip("10.0.0.1"), at(61)).allowed);
+        for _ in 0..3 {
+            assert!(limiter.check(ip("10.0.0.1"), at(61)).allowed);
+        }
         assert!(limiter.check(ip("10.0.0.2"), at(62)).allowed);
         assert!(limiter.check(ip("10.0.0.3"), at(63)).allowed);
-        let refused = limiter.check(ip("10.0.0.4"), at(64));
-        assert!(!refused.allowed);
-        assert_eq!(
-            refused.reset_seconds, 57,
-            "the oldest window started at 61 s"
-        );
-        assert_eq!(count(&limiter, "10.0.0.1"), Some(1));
-        assert!(limiter.check(ip("10.0.0.4"), at(121)).allowed);
+        // The limiter first saw 10.0.0.1 more than one window ago, but its
+        // window started again at 61 s: it is live and has the highest count.
+        assert!(limiter.check(ip("10.0.0.4"), at(64)).allowed);
+        assert_eq!(count(&limiter, "10.0.0.1"), Some(3));
+        assert_eq!(count(&limiter, "10.0.0.2"), None);
+        assert_eq!(count(&limiter, "10.0.0.3"), Some(1));
+        // At 121 s the window of 10.0.0.1 has ended, so it goes first.
+        assert!(limiter.check(ip("10.0.0.5"), at(121)).allowed);
         assert_eq!(count(&limiter, "10.0.0.1"), None);
+        assert_eq!(count(&limiter, "10.0.0.3"), Some(1));
         assert_eq!(limiter.len(), 3);
     }
 
