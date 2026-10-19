@@ -31,13 +31,13 @@ function Footer() {
   return (
     <footer className="border-t bg-background">
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <p className="text-center text-xs text-muted-foreground/70">
+        <p className="text-center text-xs text-muted-foreground">
           Copyright donut <span aria-hidden="true">&copy;</span> {year}.{" "}
-          <Link to="/privacy" className="hover:text-muted-foreground">
+          <Link to="/privacy" className="hover:text-foreground">
             Privacy Policy
           </Link>
           .{" "}
-          <Link to="/tos" className="hover:text-muted-foreground">
+          <Link to="/tos" className="hover:text-foreground">
             TOS
           </Link>
           .
@@ -82,7 +82,7 @@ function AppLayout({ children }: { children: ReactNode }) {
                 data-testid="nav-tasks"
               >
                 <ListTodo className="h-4 w-4" />
-                <span className="hidden sm:inline">Tasks</span>
+                <span className="sr-only sm:not-sr-only">Tasks</span>
               </Button>
             </Link>
             <Link to="/settings">
@@ -93,7 +93,7 @@ function AppLayout({ children }: { children: ReactNode }) {
                 data-testid="nav-settings"
               >
                 <Settings className="h-4 w-4" />
-                <span className="hidden sm:inline">Settings</span>
+                <span className="sr-only sm:not-sr-only">Settings</span>
               </Button>
             </Link>
           </nav>

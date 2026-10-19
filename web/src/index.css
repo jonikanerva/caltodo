@@ -25,7 +25,10 @@
   --popover: 0 0% 94%;
   --popover-foreground: 0 0% 9%;
   --popover-border: 0 0% 90%;
-  --primary: 217 91% 60%;
+  /* WCAG AA text contrast (STACK.md §11): the button text on --primary is
+   * 4.84:1, and the button text on --destructive is 4.66:1. Red text on the
+   * background is 4.87:1. */
+  --primary: 217 91% 50%;
   --primary-foreground: 0 0% 98%;
   --secondary: 0 0% 90%;
   --secondary-foreground: 0 0% 9%;
@@ -33,7 +36,7 @@
   --muted-foreground: 0 0% 45%;
   --accent: 217 12% 90%;
   --accent-foreground: 0 0% 9%;
-  --destructive: 0 84% 60%;
+  --destructive: 0 84% 48%;
   --destructive-foreground: 0 0% 98%;
   --input: 0 0% 78%;
   --ring: 217 91% 60%;
@@ -126,7 +129,11 @@
   --popover: 0 0% 13%;
   --popover-foreground: 0 0% 98%;
   --popover-border: 0 0% 16%;
-  --primary: 217 91% 60%;
+  /* WCAG AA text contrast (STACK.md §11): the button text on --primary is
+   * 4.84:1. Red text on the background needs a light red (4.96:1), and white
+   * text on that red is below 4.5:1, so the destructive buttons and toasts
+   * use dark text (4.96:1). */
+  --primary: 217 91% 50%;
   --primary-foreground: 0 0% 98%;
   --secondary: 0 0% 16%;
   --secondary-foreground: 0 0% 98%;
@@ -135,7 +142,7 @@
   --accent: 217 12% 15%;
   --accent-foreground: 0 0% 98%;
   --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 98%;
+  --destructive-foreground: 0 0% 7%;
   --input: 0 0% 28%;
   --ring: 217 91% 60%;
   --chart-1: 217 91% 70%;
