@@ -7,8 +7,12 @@
 //! | `/api/auth/google`, `/api/auth/google/callback` | 25 per 15 minutes |
 //! | `/api/action/…` and `/action/…` (one shared counter) | 40 per 15 minutes |
 //!
-//! A request passes each matching limiter in that order and counts in each.
-//! The first full limiter answers 429. A window starts at the first request
+//! A request passes each matching limiter in that order and counts once in
+//! each. The sign-in callback thus counts once in the sign-in limit; the
+//! Node server mounted that limiter twice on the callback path. The first
+//! full limiter answers 429. The middleware runs before the session layer
+//! and the body middleware (`http/mod.rs`), so a limited request loads no
+//! session and reads no body. A window starts at the first request
 //! of a client and lasts its full length (fixed window). The client address
 //! is the last `X-Forwarded-For` entry, which Railway's proxy adds (Express
 //! `trust proxy 1`), or else the peer address. An IPv6 address counts by its
