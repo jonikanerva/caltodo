@@ -108,7 +108,7 @@ export const listTasks = <ThrowOnError extends boolean = false>(options?: Option
 
 /**
  * Creates a task in the first free slot. An urgent task then moves to the
- * front of the schedule.
+ * front of the schedule; the answer reports a failed move.
  */
 export const createTask = <ThrowOnError extends boolean = false>(options: Options<CreateTaskData, ThrowOnError>): RequestResult<CreateTaskResponses, CreateTaskErrors, ThrowOnError> => (options.client ?? client).post<CreateTaskResponses, CreateTaskErrors, ThrowOnError>({
     responseValidator: async (data) => await zCreateTaskResponse.parseAsync(data),
@@ -122,7 +122,10 @@ export const createTask = <ThrowOnError extends boolean = false>(options: Option
 });
 
 /**
- * Completes each task. A task that fails does not stop the others.
+ * Completes each task.
+ *
+ * Every task is read before the first change: a missing task changes
+ * nothing. A failed change stops the request; the changes before it stay.
  */
 export const bulkCompleteTasks = <ThrowOnError extends boolean = false>(options: Options<BulkCompleteTasksData, ThrowOnError>): RequestResult<BulkCompleteTasksResponses, BulkCompleteTasksErrors, ThrowOnError> => (options.client ?? client).post<BulkCompleteTasksResponses, BulkCompleteTasksErrors, ThrowOnError>({
     responseValidator: async (data) => await zBulkCompleteTasksResponse.parseAsync(data),
@@ -147,6 +150,9 @@ export const reloadTasks = <ThrowOnError extends boolean = false>(options?: Opti
 
 /**
  * Gives the tasks the order of `taskIds` by swapping their time slots.
+ *
+ * Every task is read before the first move: a missing task changes
+ * nothing. A failed move stops the request; the moves before it stay.
  */
 export const reorderTasks = <ThrowOnError extends boolean = false>(options: Options<ReorderTasksData, ThrowOnError>): RequestResult<ReorderTasksResponses, ReorderTasksErrors, ThrowOnError> => (options.client ?? client).post<ReorderTasksResponses, ReorderTasksErrors, ThrowOnError>({
     responseValidator: async (data) => await zReorderTasksResponse.parseAsync(data),

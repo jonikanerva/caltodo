@@ -175,7 +175,7 @@ pub struct ForbiddenProblem(pub Problem);
 #[derive(Debug, IntoResponses)]
 #[response(
     status = 404,
-    description = "Problem `task_not_found` or `no_tasks_to_reorder`.",
+    description = "Problem `task_not_found`: a requested task does not exist or is no task.",
     content_type = "application/problem+json"
 )]
 pub struct NotFoundProblem(pub Problem);

@@ -69,11 +69,17 @@ struct CalendarState {
     /// The access tokens that the fake accepts; empty accepts every token.
     valid_tokens: BTreeSet<String>,
     fail_list: Option<GoogleError>,
+    /// The number of list calls that still succeed before `fail_lists_later`
+    /// applies, and its error.
+    fail_lists_later: Option<(usize, GoogleError)>,
     fail_calendars: Option<GoogleError>,
     fail_insert: Option<GoogleError>,
     fail_patch: BTreeSet<String>,
     fail_description_patch: bool,
     fail_get: BTreeMap<String, GoogleError>,
+    /// Per event: the number of gets that still succeed, and the error of
+    /// every later get.
+    fail_gets_later: BTreeMap<String, (usize, GoogleError)>,
     /// Events that a get reports as cancelled while the list still has them.
     cancelled_on_get: BTreeSet<String>,
 }
@@ -143,6 +149,11 @@ impl FakeCalendar {
         self.with(|state| state.fail_list = error);
     }
 
+    /// The next `succeed` list calls succeed; every later list call fails.
+    pub fn fail_lists_after(&self, succeed: usize, error: GoogleError) {
+        self.with(|state| state.fail_lists_later = Some((succeed, error)));
+    }
+
     pub fn fail_calendars(&self, error: Option<GoogleError>) {
         self.with(|state| state.fail_calendars = error);
     }
@@ -167,6 +178,15 @@ impl FakeCalendar {
 
     pub fn fail_get(&self, event: &str, error: GoogleError) {
         self.with(|state| state.fail_get.insert(event.to_owned(), error));
+    }
+
+    /// The next `succeed` gets of this event succeed; every later get fails.
+    pub fn fail_gets_after(&self, event: &str, succeed: usize, error: GoogleError) {
+        self.with(|state| {
+            state
+                .fail_gets_later
+                .insert(event.to_owned(), (succeed, error))
+        });
     }
 
     /// The recorded calls, oldest first.
@@ -204,6 +224,12 @@ impl FakeCalendar {
             if let Some(error) = state.fail_list {
                 return Err(error);
             }
+            if let Some((succeed, error)) = &mut state.fail_lists_later {
+                if *succeed == 0 {
+                    return Err(*error);
+                }
+                *succeed -= 1;
+            }
             let mut events: Vec<CalendarEvent> = state
                 .events
                 .iter()
@@ -235,6 +261,12 @@ impl FakeCalendar {
             });
             if let Some(error) = state.fail_get.get(event.as_str()) {
                 return Err(*error);
+            }
+            if let Some((succeed, error)) = state.fail_gets_later.get_mut(event.as_str()) {
+                if *succeed == 0 {
+                    return Err(*error);
+                }
+                *succeed -= 1;
             }
             let mut found = state
                 .events
