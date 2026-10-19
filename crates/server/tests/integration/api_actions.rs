@@ -397,3 +397,127 @@ async fn an_expired_link_is_invalid(pool: PgPool) {
         .await;
     assert_eq!(post.problem(StatusCode::BAD_REQUEST), "invalid_link");
 }
+
+/// The JSON request and the HTML form request of one action.
+fn action_requests(
+    client: &Client,
+    token: &str,
+    kind: &str,
+) -> [axum::http::Request<axum::body::Body>; 2] {
+    let path = format!("/api/action/{token}");
+    let body = json!({ "action": kind });
+    [
+        client.request(Method::POST, &path).json(&body).build(),
+        client
+            .request(Method::POST, &path)
+            .json(&body)
+            .accept_html()
+            .build(),
+    ]
+}
+
+/// Makes a Google call on the event fail.
+type FailEvent = fn(&TestApp, &str);
+
+/// Issue #29: a Google failure of an action answers the Google problem of
+/// the other routes, not `task_not_found`, and keeps the link. The HTML
+/// form shows the same `detail`.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn an_action_reports_a_google_failure(pool: PgPool) {
+    let app = TestApp::new(pool);
+    let owner = app.sign_in("sub-o", "o@example.com", "Owner").await;
+    let mut links = 0;
+    for kind in ["complete", "reschedule"] {
+        let cases: [(&str, FailEvent, &str, &str); 3] = [
+            (
+                "read",
+                |app, id| app.calendar.fail_get(id, GoogleError::Transport),
+                "google_unavailable",
+                "Google Calendar is unavailable. Try again later.",
+            ),
+            (
+                "refresh",
+                |app, id| app.calendar.fail_get(id, GoogleError::RefreshRejected),
+                "google_reauthorization_required",
+                "Google Calendar access has expired. Sign out and sign in again.",
+            ),
+            (
+                "change",
+                |app, id| app.calendar.fail_patch(id),
+                "google_unavailable",
+                "Google Calendar is unavailable. Try again later.",
+            ),
+        ];
+        for (case, fail, code, detail) in cases {
+            let (id, token) = task_with_link(&app, &owner).await;
+            links += 1;
+            let before = app.calendar.event("primary", &id);
+            fail(&app, &id);
+            let [json_request, html_request] = action_requests(&owner, &token, kind);
+            let reply = app.send(json_request).await;
+            assert_eq!(
+                reply.problem(StatusCode::BAD_GATEWAY),
+                code,
+                "{kind} {case}"
+            );
+            assert_eq!(reply.json()["detail"], detail, "{kind} {case}");
+            let page = app.send(html_request).await;
+            assert_eq!(page.status, StatusCode::BAD_GATEWAY, "{kind} {case}");
+            assert!(
+                page.text().contains(&format!("<p>{detail}</p>")),
+                "{kind} {case}: {}",
+                page.text()
+            );
+            assert_eq!(app.calendar.event("primary", &id), before, "{kind} {case}");
+            // The link is not used, so the user can try again.
+            assert_eq!(unused_tokens(&app).await, links, "{kind} {case}");
+        }
+    }
+}
+
+/// Issue #29: an action on a task that does not exist stays
+/// `task_not_found`.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn an_action_on_a_missing_task_is_task_not_found(pool: PgPool) {
+    let app = TestApp::new(pool);
+    let owner = app.sign_in("sub-o", "o@example.com", "Owner").await;
+    for kind in ["complete", "reschedule"] {
+        let (id, token) = task_with_link(&app, &owner).await;
+        app.calendar.fail_get(&id, GoogleError::NotFound);
+        let [json_request, html_request] = action_requests(&owner, &token, kind);
+        let reply = app.send(json_request).await;
+        assert_eq!(
+            reply.problem(StatusCode::NOT_FOUND),
+            "task_not_found",
+            "{kind}"
+        );
+        assert_eq!(reply.json()["detail"], "Task not found.");
+        let page = app.send(html_request).await;
+        assert_eq!(page.status, StatusCode::NOT_FOUND, "{kind}");
+        assert!(page.text().contains("<p>Task not found.</p>"), "{kind}");
+    }
+}
+
+/// Issue #29, criterion C6: the action page shows a Google failure as a
+/// failure, not as a deleted task. A deleted task still shows "Task not
+/// found".
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_page_reports_a_google_failure(pool: PgPool) {
+    let app = TestApp::new(pool);
+    let owner = app.sign_in("sub-o", "o@example.com", "Owner").await;
+    let (id, token) = task_with_link(&app, &owner).await;
+    let page = || {
+        owner
+            .request(Method::GET, &format!("/action/{token}"))
+            .build()
+    };
+    app.calendar.fail_get(&id, GoogleError::Status(503));
+    let failed = app.send(page()).await;
+    assert_eq!(failed.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(failed.text().contains("<h1>Something went wrong</h1>"));
+    assert!(!failed.text().contains("Task not found"));
+    app.calendar.fail_get(&id, GoogleError::NotFound);
+    let gone = app.send(page()).await;
+    assert_eq!(gone.status, StatusCode::NOT_FOUND);
+    assert!(gone.text().contains("This task may have been deleted."));
+}

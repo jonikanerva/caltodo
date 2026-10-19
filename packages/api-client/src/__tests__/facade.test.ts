@@ -190,6 +190,21 @@ describe("error bodies", () => {
     }
   })
 
+  // Issue #29: the task update tells a missing task from a Google failure.
+  it("rejects a task update with a missing task or a Google failure", async () => {
+    for (const code of [
+      "task_not_found",
+      "google_unavailable",
+      "google_reauthorization_required",
+    ] as const) {
+      const { api } = setup(() => problem(code, `detail of ${code}`))
+      const error = await apiError(api.updateTask("evt-1", true))
+      expect(error.status).toBe(problemStatus(code))
+      expect(error.code).toBe(code)
+      expect(error.detail).toBe(`detail of ${code}`)
+    }
+  })
+
   it("does not trust an invalid or unknown error body", async () => {
     for (const response of [
       json(

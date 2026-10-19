@@ -879,3 +879,193 @@ async fn reschedule_all_without_a_calendar_is_an_empty_summary(pool: PgPool) {
         json!({"success": true, "summary": {"moved": 0, "unchanged": 0, "skippedNoSlot": 0, "skippedInvalid": 0, "failed": 0}})
     );
 }
+
+/// The single-task routes of issue #29: the update, the complete, and the
+/// reschedule of one task.
+const SINGLE_TASK_ROUTES: [&str; 3] = ["update", "complete", "reschedule"];
+
+/// The request of a single-task route for the event `id`.
+fn single_task_request(
+    client: &Client,
+    route: &str,
+    id: &str,
+) -> axum::http::Request<axum::body::Body> {
+    match route {
+        "update" => client
+            .request(Method::PATCH, &format!("/api/tasks/{id}"))
+            .json(&json!({"completed": true}))
+            .build(),
+        other => client
+            .request(Method::POST, &format!("/api/tasks/{id}/{other}"))
+            .build(),
+    }
+}
+
+/// Puts an incomplete task event with the id `id` into the calendar.
+fn put_task(app: &TestApp, id: &str) {
+    app.calendar.put_event(
+        "primary",
+        task_event(
+            id,
+            "Single",
+            "2026-03-04T15:00:00Z",
+            "2026-03-04T15:30:00Z",
+            Some(false),
+        ),
+    );
+}
+
+/// Issue #29: a Google failure on a single-task route answers the Google
+/// problem of the other routes, not `task_not_found`. The task stays as it
+/// was.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn single_task_routes_report_a_google_failure(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    let cases = [
+        ("read503", GoogleError::Status(503), "google_unavailable"),
+        ("transport", GoogleError::Transport, "google_unavailable"),
+        (
+            "refresh",
+            GoogleError::RefreshRejected,
+            "google_reauthorization_required",
+        ),
+    ];
+    for route in SINGLE_TASK_ROUTES {
+        for (case, error, code) in cases {
+            let id = format!("{route}{case}");
+            put_task(&app, &id);
+            let before = app.calendar.event("primary", &id);
+            app.calendar.fail_get(&id, error);
+            let reply = app.send(single_task_request(&client, route, &id)).await;
+            assert_eq!(
+                reply.problem(StatusCode::BAD_GATEWAY),
+                code,
+                "{route} {case}"
+            );
+            assert_eq!(app.calendar.event("primary", &id), before, "{route} {case}");
+        }
+        // The read succeeds, and the change fails.
+        let id = format!("{route}patch");
+        put_task(&app, &id);
+        app.calendar.fail_patch(&id);
+        let reply = app.send(single_task_request(&client, route, &id)).await;
+        assert_eq!(
+            reply.problem(StatusCode::BAD_GATEWAY),
+            "google_unavailable",
+            "{route} patch"
+        );
+        assert_eq!(
+            reply.json()["detail"],
+            "Google Calendar is unavailable. Try again later."
+        );
+    }
+    // The reschedule reads the task again before the move: a failure of
+    // that read is a Google failure too.
+    put_task(&app, "rescheduleagain");
+    app.calendar
+        .fail_gets_after("rescheduleagain", 1, GoogleError::Status(500));
+    let reply = app
+        .send(single_task_request(
+            &client,
+            "reschedule",
+            "rescheduleagain",
+        ))
+        .await;
+    assert_eq!(reply.problem(StatusCode::BAD_GATEWAY), "google_unavailable");
+}
+
+/// Issue #29: `task_not_found` stays for a task that does not exist: a 404
+/// or 410 of Google, a cancelled event, or an event that is no task.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn single_task_routes_report_a_missing_task(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    for route in SINGLE_TASK_ROUTES {
+        let absent = app
+            .send(single_task_request(
+                &client,
+                route,
+                &format!("{route}absent"),
+            ))
+            .await;
+        assert_eq!(
+            absent.problem(StatusCode::NOT_FOUND),
+            "task_not_found",
+            "{route} absent"
+        );
+        assert_eq!(absent.json()["detail"], "Task not found");
+
+        let gone = format!("{route}gone");
+        put_task(&app, &gone);
+        app.calendar.fail_get(&gone, GoogleError::NotFound);
+        let reply = app.send(single_task_request(&client, route, &gone)).await;
+        assert_eq!(
+            reply.problem(StatusCode::NOT_FOUND),
+            "task_not_found",
+            "{route} gone"
+        );
+
+        let cancelled = format!("{route}cancelled");
+        put_task(&app, &cancelled);
+        app.calendar.cancel_on_get(&cancelled);
+        let reply = app
+            .send(single_task_request(&client, route, &cancelled))
+            .await;
+        assert_eq!(
+            reply.problem(StatusCode::NOT_FOUND),
+            "task_not_found",
+            "{route} cancelled"
+        );
+
+        let foreign = format!("{route}foreign");
+        app.calendar.put_event(
+            "primary",
+            busy_event(&foreign, "2026-03-04T10:00:00Z", "2026-03-04T11:00:00Z"),
+        );
+        let before = app.calendar.event("primary", &foreign);
+        let reply = app
+            .send(single_task_request(&client, route, &foreign))
+            .await;
+        assert_eq!(
+            reply.problem(StatusCode::NOT_FOUND),
+            "task_not_found",
+            "{route} foreign"
+        );
+        assert_eq!(
+            app.calendar.event("primary", &foreign),
+            before,
+            "{route} foreign"
+        );
+    }
+    // The task is gone when the reschedule reads it again before the move.
+    put_task(&app, "reschedulelater");
+    app.calendar
+        .fail_gets_after("reschedulelater", 1, GoogleError::NotFound);
+    let reply = app
+        .send(single_task_request(
+            &client,
+            "reschedule",
+            "reschedulelater",
+        ))
+        .await;
+    assert_eq!(reply.problem(StatusCode::NOT_FOUND), "task_not_found");
+}
+
+/// Assumption A1 of issue #29: without stored Google access the
+/// single-task routes keep `task_not_found`, like reorder and bulk complete.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn without_stored_google_access_a_single_task_is_not_found(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_task(&app, "t1");
+    sqlx::query("UPDATE users SET access_token = NULL")
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    for route in SINGLE_TASK_ROUTES {
+        let reply = app.send(single_task_request(&client, route, "t1")).await;
+        assert_eq!(
+            reply.problem(StatusCode::NOT_FOUND),
+            "task_not_found",
+            "{route}"
+        );
+    }
+}

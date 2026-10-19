@@ -1217,6 +1217,16 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1308,6 +1318,16 @@
           },
           "500": {
             "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
             "content": {
               "application/problem+json": {
                 "schema": {

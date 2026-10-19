@@ -5,7 +5,9 @@
 //! keep the behaviour of the Node server (`server/calendar.ts` and
 //! `server/handlers/*.ts`), except for the defects that ADR 0001 lists:
 //! a Google failure in the task list, the calendar list, or a free-slot
-//! search is now an explicit error instead of an empty result.
+//! search is now an explicit error instead of an empty result. A Google
+//! failure of a single-task route is a Google error, not "Task not found"
+//! (issue #29).
 
 pub mod actions;
 pub mod calendar_access;

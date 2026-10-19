@@ -116,7 +116,8 @@ pub(super) async fn create(
         NotFoundProblem,
         PayloadTooLarge,
         RateLimited,
-        InternalError
+        InternalError,
+        GoogleFailure
     )
 )]
 pub(super) async fn update(
@@ -278,7 +279,8 @@ pub(super) async fn reload(State(state): State<AppState>, signed_in: SignedIn) -
         CsrfRejected,
         NotFoundProblem,
         RateLimited,
-        InternalError
+        InternalError,
+        GoogleFailure
     )
 )]
 pub(super) async fn complete(

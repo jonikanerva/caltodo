@@ -40,6 +40,7 @@ import { useToast } from "@/hooks/use-toast"
 import { queryClient } from "@/lib/queryClient"
 import { settingsQuery, tasksQuery } from "@/lib/queries"
 import {
+  ApiError,
   createTask,
   reloadTasks,
   reorderTasks,
@@ -66,6 +67,20 @@ const DURATION_OPTIONS = [
   { value: "180", label: "3 hours" },
   { value: "240", label: "4 hours" },
 ]
+
+// The toast text of a failed completion. A Google failure shows the fixed
+// text of the server, so the user knows to try later or to sign in again.
+function completionErrorMessage(error: unknown): string {
+  if (
+    error instanceof ApiError &&
+    (error.code === "google_unavailable" ||
+      error.code === "google_reauthorization_required") &&
+    error.detail !== undefined
+  ) {
+    return error.detail
+  }
+  return "Failed to update task. Please try again."
+}
 
 function reorderItems<T>(items: readonly T[], fromIndex: number, toIndex: number): T[] {
   const movedItem = items[fromIndex]
@@ -163,9 +178,17 @@ export default function MainPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
     },
-    onError: (_, { id }) => {
+    onError: (error, { id }) => {
       setCompletingTaskIds((prev) => {
         return new Set(Array.from(prev).filter((taskId) => taskId !== id))
+      })
+      // A new list read shows the state of the server: a missing task leaves
+      // the list, and a failed read shows the list error.
+      void queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
+      toast({
+        title: "Error",
+        description: completionErrorMessage(error),
+        variant: "destructive",
       })
     },
   })
