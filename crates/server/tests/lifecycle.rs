@@ -318,7 +318,8 @@ async fn migrated_database() -> Database {
     let database = Database::create().await;
     let mut migrate = Process::start(&["migrate"], &database.url(), free_port());
     let line = migrate.wait_for("migrations are applied");
-    assert_eq!(line["applied"], 2);
+    // 0001 baseline, 0002 app_sessions, 0003 drop of user_sessions.
+    assert_eq!(line["applied"], 3);
     assert!(migrate.wait_exit().success());
     database
 }

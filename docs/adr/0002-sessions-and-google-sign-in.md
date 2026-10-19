@@ -1,6 +1,6 @@
 # ADR 0002: Sessions in a new table, and the Google sign-in
 
-- Status: accepted
+- Status: accepted; `user_sessions` is dropped (update of 2026-10-19)
 - Date: 2026-10-14
 
 ## Context
@@ -43,3 +43,10 @@ The Node server kept sessions with express-session and connect-pg-simple in the 
 ## Cost of reversal
 
 Low. A revert to the Node server uses `user_sessions` again. The users sign in once more.
+
+## Update 2026-10-19: `user_sessions` is dropped
+
+The owner ended the Node rollback path (issue #5, item 17). Migration `0003_drop_user_sessions.sql` drops `user_sessions` and its rows.
+
+- Account deletion deletes the rows of the user in `app_sessions` only (decision 5).
+- A revert to the Node server is no longer possible. The cost of reversal above no longer applies. The restore path for the dropped rows is a Railway PostgreSQL backup.

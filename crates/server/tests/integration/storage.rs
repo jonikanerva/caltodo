@@ -403,17 +403,6 @@ async fn deletes_all_data_of_one_user(pool: PgPool) {
             .unwrap();
     }
     sqlx::query(
-        "INSERT INTO user_sessions (sid, sess, expire) VALUES
-           ('node-gone', json_build_object('passport', json_build_object('user', $1::text)), now()),
-           ('node-kept', json_build_object('passport', json_build_object('user', $2::text)), now()),
-           ('node-anon', '{}'::json, now())",
-    )
-    .bind(gone.as_str())
-    .bind(kept.as_str())
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::query(
         "INSERT INTO app_sessions (id, user_id, data, expiry_date) VALUES
            ('s-gone', $1, '{}', now() + interval '1 day'),
            ('s-kept', $2, '{}', now() + interval '1 day'),
@@ -436,11 +425,6 @@ async fn deletes_all_data_of_one_user(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(tokens, ["h-kept"]);
-    let node: Vec<String> = sqlx::query_scalar("SELECT sid FROM user_sessions ORDER BY sid")
-        .fetch_all(&pool)
-        .await
-        .unwrap();
-    assert_eq!(node, ["node-anon", "node-kept"]);
     let rust: Vec<String> = sqlx::query_scalar("SELECT id FROM app_sessions ORDER BY id")
         .fetch_all(&pool)
         .await

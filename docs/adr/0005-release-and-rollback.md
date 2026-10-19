@@ -1,6 +1,6 @@
 # ADR 0005: Release and rollback of the Rust server
 
-- Status: accepted
+- Status: accepted; the Node rollback path is superseded (update of 2026-10-19)
 - Date: 2026-10-14
 
 ## Context
@@ -36,3 +36,11 @@ The Rust server needs an explicit migration step (`STACK-RUST.md` §5), a new bu
 
 - Each intermediate commit of the change is not a deployable state. Only the merge result is.
 - Railpack gives every service variable to every build command, including the build scripts of dependencies (`STACK.md` §15 lists the compensating controls).
+
+## Update 2026-10-19: the Node rollback path ends
+
+The owner ended the Node rollback path (issue #5, item 17). Migration `0003_drop_user_sessions.sql` drops the Node session table `user_sessions`. The rollback section above no longer applies: the fast path to the Node deployment and the revert to the Node build are not recovery paths, and the limit on a new empty database has no effect.
+
+- Recovery is a Railway rollback to a previous Rust deployment, or a revert on a feature branch, and Railway PostgreSQL backups for data (`STACK.md` §15).
+- A Railway rollback works only to a deployment that knows every applied migration. `caltodo migrate` of an older release stops on a newer migration, and Railway keeps the current deployment live. After migration `0003`, a rollback to a deployment before it does not start.
+- The release check of the production schema against the Drizzle snapshot does not apply after migration `0003`.

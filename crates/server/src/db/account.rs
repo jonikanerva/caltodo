@@ -6,8 +6,7 @@ use super::{Store, StoreError};
 
 impl Store {
     /// Deletes the stored data of a user in one transaction: the action
-    /// tokens, the settings, the user row, the sessions of the Rust server,
-    /// and the Node sessions whose Passport user is this user. The calendar
+    /// tokens, the settings, the user row, and the sessions. The calendar
     /// events stay in Google Calendar.
     ///
     /// # Errors
@@ -30,12 +29,6 @@ impl Store {
         sqlx::query!("DELETE FROM users WHERE id = $1", user.as_str())
             .execute(&mut *transaction)
             .await?;
-        sqlx::query!(
-            "DELETE FROM user_sessions WHERE sess -> 'passport' ->> 'user' = $1",
-            user.as_str()
-        )
-        .execute(&mut *transaction)
-        .await?;
         sqlx::query!("DELETE FROM app_sessions WHERE user_id = $1", user.as_str())
             .execute(&mut *transaction)
             .await?;
