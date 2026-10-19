@@ -96,20 +96,44 @@ export type CreateTaskRequest = {
 };
 
 /**
- * The answer of `POST /api/tasks`.
+ * The answer of `POST /api/tasks`: the fields of [`CalendarTask`] and
+ * `urgentMoveFailed`.
+ *
+ * The object is flat on purpose. A browser tab with the previous bundle
+ * validates this answer as a `CalendarTask` and ignores the extra field,
+ * so it does not report a created task as a failure (a retry would create
+ * the task twice). The `CalendarTask` fields are repeated, because
+ * `#[serde(flatten)]` gives an `allOf` schema.
  */
-export type CreateTaskResult = {
+export type CreatedTask = {
     /**
-     * The created task.
+     * The Google Calendar event id.
      */
-    task: CalendarTask;
+    id: string;
+    title: string;
+    details: string | null;
+    /**
+     * The duration in whole minutes; `null` when the event ends at or before
+     * its start.
+     */
+    duration: number | null;
+    scheduledStart: string;
+    scheduledEnd: string;
+    completed: boolean;
+    completedAt: string | null;
+    /**
+     * The position among the incomplete tasks; 0 for a completed task.
+     */
+    priority: number;
     /**
      * `true` when the task is urgent and the other tasks were not all moved
      * after it. The task exists, but it can be in a later slot than the
-     * other tasks, or two tasks can overlap. Always `false` for a task that
-     * is not urgent.
+     * other tasks, or two tasks can overlap. `false` for a task that is not
+     * urgent. The server always sends it. The schema does not require it,
+     * because the server before this field answered without it: a client
+     * reads a missing value as `false` (`STACK.md` §2.1).
      */
-    urgentMoveFailed: boolean;
+    urgentMoveFailed?: boolean;
 };
 
 /**
@@ -607,7 +631,7 @@ export type CreateTaskResponses = {
     /**
      * The created task. `urgentMoveFailed` reports an urgent task that did not move to the front.
      */
-    200: CreateTaskResult;
+    200: CreatedTask;
 };
 
 export type CreateTaskResponse = CreateTaskResponses[keyof CreateTaskResponses];

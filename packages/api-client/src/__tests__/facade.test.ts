@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import * as z from "zod"
 import { ApiError, createApi, problemStatus, type ProblemCode } from "../index"
 import { zProblemCode } from "../generated/zod.gen"
 
@@ -100,20 +101,51 @@ describe("success bodies", () => {
 
   it("returns the created task with the urgent move result", async () => {
     for (const urgentMoveFailed of [false, true]) {
-      const { api } = setup(() => json({ task, urgentMoveFailed }))
+      const { api } = setup(() => json({ ...task, urgentMoveFailed }))
       await expect(api.createTask({ title: "T", urgent: true })).resolves.toEqual({
-        task,
+        ...task,
         urgentMoveFailed,
       })
     }
   })
 
-  it("rejects a create answer without the urgent move result", async () => {
-    // The answer of the server before issue #5 item 4: the bare task.
-    for (const body of [task, { task }, { task, urgentMoveFailed: "no" }]) {
+  it("reads the plain task of the previous server as no failed move", async () => {
+    // A rollback to the server before `urgentMoveFailed` answers the task only.
+    const { api } = setup(() => json(task))
+    await expect(api.createTask({ title: "T", urgent: true })).resolves.toEqual({
+      ...task,
+      urgentMoveFailed: false,
+    })
+  })
+
+  it("rejects a create answer that breaks the contract", async () => {
+    for (const body of [{ task }, { ...task, urgentMoveFailed: "no" }]) {
       const { api } = setup(() => json(body))
       const error = await apiError(api.createTask({ title: "T" }))
       expect(error.code).toBe("invalid_response")
+    }
+  })
+
+  it("keeps the new create answer valid for the previous bundle", () => {
+    // A frozen copy of `zCreateTaskResponse` (= `zCalendarTask`) of the
+    // bundle before `urgentMoveFailed` (main at 2d8de78). An open tab keeps
+    // that bundle until it reloads; it must not report a created task as a
+    // failure, or the user creates the task again.
+    const int32 = z.int().min(-2147483648).max(2147483647)
+    const previousCreateTaskResponse = z.object({
+      id: z.string(),
+      title: z.string(),
+      details: z.string().nullable(),
+      duration: int32.nullable(),
+      scheduledStart: z.string(),
+      scheduledEnd: z.string(),
+      completed: z.boolean(),
+      completedAt: z.string().nullable(),
+      priority: z.int().gte(0).max(2147483647),
+    })
+    for (const urgentMoveFailed of [false, true]) {
+      const parsed = previousCreateTaskResponse.safeParse({ ...task, urgentMoveFailed })
+      expect(parsed.success).toBe(true)
     }
   })
 
@@ -209,7 +241,7 @@ describe("session and CSRF", () => {
       if (request.url.endsWith("/api/auth/user")) return json(user)
       if (request.url.endsWith("/api/tasks") && request.method === "GET") return json([])
       if (request.url.endsWith("/api/tasks"))
-        return json({ task, urgentMoveFailed: false })
+        return json({ ...task, urgentMoveFailed: false })
       return json(task)
     })
     await expect(api.fetchCurrentUser()).resolves.toEqual(user)

@@ -11,8 +11,8 @@ use caltodo_domain::ids::EventId;
 
 use super::AppState;
 use super::dto::{
-    CalendarListItem, CalendarTask, CreateTaskRequest, CreateTaskResult, RescheduleAllResult,
-    Success, TaskIdsRequest, UpdateSettingsRequest, UpdateTaskRequest, UserSettings,
+    CalendarListItem, CalendarTask, CreateTaskRequest, CreatedTask, RescheduleAllResult, Success,
+    TaskIdsRequest, UpdateSettingsRequest, UpdateTaskRequest, UserSettings,
 };
 use super::errors::{Problem, ProblemCode, app_problem};
 use super::input::{self, Body};
@@ -72,7 +72,7 @@ pub(super) async fn list(State(state): State<AppState>, signed_in: SignedIn) -> 
     security(("csrfToken" = [])),
     request_body = CreateTaskRequest,
     responses(
-        (status = 200, description = "The created task. `urgentMoveFailed` reports an urgent task that did not move to the front.", body = CreateTaskResult),
+        (status = 200, description = "The created task. `urgentMoveFailed` reports an urgent task that did not move to the front.", body = CreatedTask),
         BadRequest,
         Unauthenticated,
         CsrfRejected,
@@ -92,11 +92,9 @@ pub(super) async fn create(
         return Problem::new(ProblemCode::InvalidRequest).into_response();
     };
     match tasks::create_task(&state.services, &signed_in.user.id, &input).await {
-        Ok(created) => Json(CreateTaskResult {
-            task: CalendarTask::from(&created.task),
-            urgent_move_failed: created.urgent_move_failed,
-        })
-        .into_response(),
+        Ok(created) => {
+            Json(CreatedTask::new(&created.task, created.urgent_move_failed)).into_response()
+        }
         Err(error) => failure(&error, "Failed to create task"),
     }
 }

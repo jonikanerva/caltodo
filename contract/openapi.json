@@ -619,7 +619,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateTaskResult"
+                  "$ref": "#/components/schemas/CreatedTask"
                 }
               }
             }
@@ -1609,21 +1609,66 @@
           }
         }
       },
-      "CreateTaskResult": {
+      "CreatedTask": {
         "type": "object",
-        "description": "The answer of `POST /api/tasks`.",
+        "description": "The answer of `POST /api/tasks`: the fields of [`CalendarTask`] and\n`urgentMoveFailed`.\n\nThe object is flat on purpose. A browser tab with the previous bundle\nvalidates this answer as a `CalendarTask` and ignores the extra field,\nso it does not report a created task as a failure (a retry would create\nthe task twice). The `CalendarTask` fields are repeated, because\n`#[serde(flatten)]` gives an `allOf` schema.",
         "required": [
-          "task",
-          "urgentMoveFailed"
+          "id",
+          "title",
+          "details",
+          "duration",
+          "scheduledStart",
+          "scheduledEnd",
+          "completed",
+          "completedAt",
+          "priority"
         ],
         "properties": {
-          "task": {
-            "$ref": "#/components/schemas/CalendarTask",
-            "description": "The created task."
+          "id": {
+            "type": "string",
+            "description": "The Google Calendar event id."
+          },
+          "title": {
+            "type": "string"
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The duration in whole minutes; `null` when the event ends at or before\nits start."
+          },
+          "scheduledStart": {
+            "type": "string"
+          },
+          "scheduledEnd": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The position among the incomplete tasks; 0 for a completed task.",
+            "minimum": 0
           },
           "urgentMoveFailed": {
             "type": "boolean",
-            "description": "`true` when the task is urgent and the other tasks were not all moved\nafter it. The task exists, but it can be in a later slot than the\nother tasks, or two tasks can overlap. Always `false` for a task that\nis not urgent."
+            "description": "`true` when the task is urgent and the other tasks were not all moved\nafter it. The task exists, but it can be in a later slot than the\nother tasks, or two tasks can overlap. `false` for a task that is not\nurgent. The server always sends it. The schema does not require it,\nbecause the server before this field answered without it: a client\nreads a missing value as `false` (`STACK.md` §2.1)."
           }
         }
       },

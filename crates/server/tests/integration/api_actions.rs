@@ -21,7 +21,7 @@ async fn task_with_link(app: &TestApp, client: &Client) -> (String, String) {
         )
         .await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
-    let id = reply.json()["task"]["id"].as_str().unwrap().to_owned();
+    let id = reply.json()["id"].as_str().unwrap().to_owned();
     let description = app
         .calendar
         .event("primary", &id)

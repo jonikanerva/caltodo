@@ -173,7 +173,7 @@ async fn creates_a_task_in_the_first_free_slot_with_an_action_link(pool: PgPool)
     .await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
     assert_eq!(reply.json()["urgentMoveFailed"], false);
-    let task = reply.json()["task"].clone();
+    let task = reply.json();
     assert_eq!(task["title"], "Write tests");
     assert_eq!(task["details"], "Cover it");
     assert_eq!(task["scheduledStart"], "2026-03-02T10:00:00.000Z");
@@ -201,7 +201,7 @@ async fn creates_a_task_in_the_first_free_slot_with_an_action_link(pool: PgPool)
     assert_eq!(tokens, 1);
     // The default duration of the settings applies without a duration.
     let default = post(&app, &client, "/api/tasks", &json!({"title": "Second"})).await;
-    assert_eq!(default.json()["task"]["duration"], 30);
+    assert_eq!(default.json()["duration"], 30);
 }
 
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
@@ -270,10 +270,7 @@ async fn an_urgent_task_moves_to_the_front(pool: PgPool) {
     let reply = post_urgent(&app, &client).await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
     assert_eq!(reply.json()["urgentMoveFailed"], false);
-    assert_eq!(
-        reply.json()["task"]["scheduledStart"],
-        "2026-03-02T09:00:00.000Z"
-    );
+    assert_eq!(reply.json()["scheduledStart"], "2026-03-02T09:00:00.000Z");
     let old = app.calendar.event("primary", "old").unwrap();
     assert_eq!(old.start, Some(ts("2026-03-02T09:30:00Z")));
 }
@@ -312,10 +309,7 @@ async fn a_failed_move_of_another_task_is_reported(pool: PgPool) {
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
     assert_eq!(reply.json()["urgentMoveFailed"], true);
     // The urgent task moved to the front; the old task kept its slot.
-    assert_eq!(
-        reply.json()["task"]["scheduledStart"],
-        "2026-03-02T09:00:00.000Z"
-    );
+    assert_eq!(reply.json()["scheduledStart"], "2026-03-02T09:00:00.000Z");
     let old = app.calendar.event("primary", "old").unwrap();
     assert_eq!(old.start, Some(ts("2026-03-02T09:00:00Z")));
 }
@@ -331,10 +325,7 @@ async fn a_failed_reschedule_after_an_urgent_create_is_reported(pool: PgPool) {
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
     assert_eq!(reply.json()["urgentMoveFailed"], true);
     // The task stays in the first free slot, after the old task.
-    assert_eq!(
-        reply.json()["task"]["scheduledStart"],
-        "2026-03-02T10:00:00.000Z"
-    );
+    assert_eq!(reply.json()["scheduledStart"], "2026-03-02T10:00:00.000Z");
     let old = app.calendar.event("primary", "old").unwrap();
     assert_eq!(old.start, Some(ts("2026-03-02T09:00:00Z")));
 }
@@ -631,6 +622,28 @@ async fn a_reorder_stops_at_a_failed_move(pool: PgPool) {
     // The request stops at the first failure: t3 is not moved.
     assert_eq!(patches(&app), vec!["t1".to_owned()]);
     assert_eq!(start_of(&app, "t3"), ts("2026-03-03T08:00:00Z"));
+}
+
+/// A task that is gone between the first read and its move (deleted in
+/// Google Calendar meanwhile) gives `task_not_found`; the request stops.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_reorder_reports_a_task_that_is_gone_at_the_move(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_two_tasks(&app);
+    // The read before the first change succeeds; the read of the move finds
+    // the event deleted.
+    app.calendar.fail_gets_after("t1", 1, GoogleError::NotFound);
+    let reply = post(
+        &app,
+        &client,
+        "/api/tasks/reorder",
+        &json!({"taskIds": ["t1", "t2"]}),
+    )
+    .await;
+    assert_eq!(reply.problem(StatusCode::NOT_FOUND), "task_not_found");
+    assert_eq!(reply.json()["detail"], "Task not found");
+    assert_eq!(patches(&app), Vec::<String>::new());
+    assert_eq!(start_of(&app, "t2"), ts("2026-03-03T09:00:00Z"));
 }
 
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]

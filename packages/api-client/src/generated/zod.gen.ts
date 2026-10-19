@@ -62,11 +62,26 @@ export const zCreateTaskRequest = z.object({
 });
 
 /**
- * The answer of `POST /api/tasks`.
+ * The answer of `POST /api/tasks`: the fields of [`CalendarTask`] and
+ * `urgentMoveFailed`.
+ *
+ * The object is flat on purpose. A browser tab with the previous bundle
+ * validates this answer as a `CalendarTask` and ignores the extra field,
+ * so it does not report a created task as a failure (a retry would create
+ * the task twice). The `CalendarTask` fields are repeated, because
+ * `#[serde(flatten)]` gives an `allOf` schema.
  */
-export const zCreateTaskResult = z.object({
-    task: zCalendarTask,
-    urgentMoveFailed: z.boolean()
+export const zCreatedTask = z.object({
+    id: z.string(),
+    title: z.string(),
+    details: z.string().nullable(),
+    duration: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).nullable(),
+    scheduledStart: z.string(),
+    scheduledEnd: z.string(),
+    completed: z.boolean(),
+    completedAt: z.string().nullable(),
+    priority: z.int().gte(0).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
+    urgentMoveFailed: z.boolean().optional()
 });
 
 /**
@@ -230,7 +245,7 @@ export const zCreateTaskBody = zCreateTaskRequest;
 /**
  * The created task. `urgentMoveFailed` reports an urgent task that did not move to the front.
  */
-export const zCreateTaskResponse = zCreateTaskResult;
+export const zCreateTaskResponse = zCreatedTask;
 
 export const zBulkCompleteTasksBody = zTaskIdsRequest;
 

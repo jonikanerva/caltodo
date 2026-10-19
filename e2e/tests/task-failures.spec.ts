@@ -114,7 +114,7 @@ test("an urgent task that did not move shows a warning", async ({ page }) => {
       return
     }
     created = true
-    await json(route, { task: second, urgentMoveFailed: true })
+    await json(route, { ...second, urgentMoveFailed: true })
   })
   await page.goto("/")
   await expect(page.getByTestId(`card-task-${first.id}`)).toBeVisible()
