@@ -93,11 +93,12 @@ export const test = base.extend<{ problems: string[] }>({
 // The WCAG 2.2 A and AA rules of axe. `wcag22aa` adds the target size rule.
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
 
-// Accessibility defects of the unchanged UI and of the action pages of the
-// Node server. This change must not alter what the user sees or the action
-// page markup, so these defects are a scoped exception (STACK.md §13) and a
-// follow-up item. Each entry names the rule and the elements it covers; a
-// violation on any other element fails the test.
+// Accessibility defects of the UI and of the action pages that the Node
+// server also had. They are a scoped exception (STACK.md §13) until the
+// owner decides their fix. Each entry names the rule and the elements it
+// covers; a violation on any other element fails the test. The contrast
+// defects and the unnamed header navigation are fixed (issue #5, item 14),
+// so a `color-contrast`, `link-name`, or header `button-name` violation fails.
 const KNOWN_DEFECTS: Record<string, RegExp> = {
   // `index.html` sets `maximum-scale=1`.
   "meta-viewport": /^meta\[name="viewport"\]$/,
@@ -123,27 +124,9 @@ const KNOWN_DEFECT_MARKUP: Record<string, readonly MarkupDefect[]> = {
   // The drag handles of @hello-pangea/dnd have no accessible name.
   "aria-command-name": [{ html: /^<div [^>]*data-rfd-drag-handle-draggable-id="/ }],
   "button-name": [
-    // The header navigation on a narrow screen hides the label text of its
-    // buttons, so the buttons and their links have no accessible name.
-    { html: /^<button[^>]* data-testid="nav-(tasks|settings)"/ },
     // The task checkboxes. Axe names a checkbox by its `data-testid` only
     // when the event id is short.
     { html: /^<button [^>]*role="checkbox"[^>]* data-testid="checkbox-complete-/ },
-  ],
-  "link-name": [{ html: /^<a [^>]*href="\/(settings)?"/ }],
-  // The contrast defects of the unchanged theme, element by element. A
-  // contrast violation of any other element fails the test.
-  "color-contrast": [
-    // White text on the primary blue (3.48:1) and the destructive red
-    // (3.62:1) buttons.
-    {
-      html: /^<button [^>]*data-testid="(button-google-signin|button-save-settings|button-delete-data)"/,
-    },
-    // The footer text and its links (`text-muted-foreground/70`, 2.71:1).
-    {
-      html: /^<p class="text-center text-xs text-muted-foreground\/70">Copyright donut /,
-    },
-    { html: /^<a class="hover:text-muted-foreground( active)?" href="\/(privacy|tos)"/ },
   ],
 }
 

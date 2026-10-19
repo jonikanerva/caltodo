@@ -433,8 +433,8 @@ export default function MainPage() {
             ))}
           </div>
         ) : isError ? (
-          // The default variant keeps the text contrast of the theme. The
-          // destructive variant colours the text red below 4.5:1.
+          // The default variant keeps the text in the foreground colour of
+          // the theme; the red border and icon mark the error.
           <Alert
             className="border-destructive/50 [&>svg]:text-destructive"
             data-testid="alert-tasks-error"
