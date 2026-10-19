@@ -35,8 +35,9 @@ pub enum GoogleError {
     /// A response that does not decode.
     #[error("the Google response is invalid")]
     InvalidResponse,
-    /// The event list has more pages than the page limit.
-    #[error("the Google event list has too many pages")]
+    /// The event list or the calendar list has more pages than the page
+    /// limit.
+    #[error("the Google list has too many pages")]
     TooManyPages,
     /// Google refused the refresh token (`invalid_grant`): the user must
     /// sign in again.

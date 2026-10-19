@@ -118,6 +118,15 @@ pub async fn list_tasks(services: &Services, user: &UserId) -> Result<Vec<Task>,
         Err(AppError::NoCalendar) => return Ok(Vec::new()),
         Err(error) => return Err(error),
     };
+    read_tasks(services, user, &settings).await
+}
+
+/// The task list of the configured calendar, read from Google Calendar.
+async fn read_tasks(
+    services: &Services,
+    user: &UserId,
+    settings: &CalendarSettings,
+) -> Result<Vec<Task>, AppError> {
     let calendar = open_calendar(services, user).await?;
     let now = services.clock.now();
     let events = calendar
@@ -454,14 +463,17 @@ pub async fn bulk_complete(
     Ok(())
 }
 
-/// `POST /api/tasks/reload`: checks the calendar setting only. The Node
-/// server did nothing else either; the client then reloads the task list.
+/// `POST /api/tasks/reload`: reads the task list from Google Calendar, like
+/// `GET /api/tasks`, and reports whether the read succeeded. The Node server
+/// checked the calendar setting only, so a Google failure showed as a
+/// successful sync. The client then reloads the task list.
 ///
 /// # Errors
 ///
-/// No calendar.
+/// No calendar, no calendar access, or Google fails.
 pub async fn reload(services: &Services, user: &UserId) -> Result<(), AppError> {
-    calendar_settings(services, user).await.map(|_| ())
+    let settings = calendar_settings(services, user).await?;
+    read_tasks(services, user, &settings).await.map(|_| ())
 }
 
 /// `POST /api/tasks/reorder`: gives the tasks the slots of the requested
