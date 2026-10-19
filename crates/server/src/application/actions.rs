@@ -5,6 +5,7 @@ use caltodo_domain::ids::UserId;
 use caltodo_domain::task::Task;
 
 use super::calendar_access::UserCalendar;
+use super::ports::GoogleError;
 use super::tasks::{CalendarSettings, action_support};
 use super::{AppError, Services};
 use crate::db::StoreError;
@@ -19,7 +20,7 @@ pub enum ActionPage {
     InvalidLink,
     /// The token belongs to another user.
     NotAuthorized,
-    /// The event is gone or unreadable.
+    /// The event is gone, or the user has no stored Google access.
     TaskDeleted,
     /// The event is no task anymore.
     TaskUnmappable,
@@ -67,6 +68,15 @@ impl From<StoreError> for ActionError {
     }
 }
 
+/// The action failure of a task failure: the link variant of "Task not
+/// found", or the failure itself.
+fn action_failure(error: AppError) -> ActionError {
+    match error {
+        AppError::TaskNotFound => ActionError::TaskNotFound,
+        other => ActionError::App(other),
+    }
+}
+
 /// The valid token of a raw link value (`getActionToken`): known, unused,
 /// and not expired.
 async fn valid_token(
@@ -92,7 +102,9 @@ async fn valid_token(
 ///
 /// # Errors
 ///
-/// A database failure.
+/// A database failure, or a Google failure other than a missing event. The
+/// Node server showed the "Task not found" page for a Google failure too
+/// (issue #29).
 pub async fn action_page(
     services: &Services,
     user: &UserId,
@@ -112,7 +124,8 @@ pub async fn action_page(
         .await
     {
         Ok(event) if !event.is_cancelled() => event,
-        Ok(_) | Err(_) => return Ok(ActionPage::TaskDeleted),
+        Ok(_) | Err(GoogleError::NotFound) => return Ok(ActionPage::TaskDeleted),
+        Err(error) => return Err(AppError::Google(error)),
     };
     Ok(match Task::from_event(&event) {
         Some(task) => ActionPage::Manage {
@@ -156,20 +169,19 @@ pub async fn perform_action(
     let calendar = UserCalendar::open(services, user)
         .await?
         .ok_or(ActionError::TaskNotFound)?;
-    let event = match calendar
-        .get_event(&token.calendar_id, &token.event_id)
+    // A missing task is "Task not found."; a Google failure stays a Google
+    // failure. The Node server answered "Task not found." for both
+    // (issue #29).
+    let event = action_support::read_task(&calendar, &token.calendar_id, &token.event_id)
         .await
-    {
-        Ok(event) if !event.is_cancelled() => event,
-        Ok(_) | Err(_) => return Err(ActionError::TaskNotFound),
-    };
+        .map_err(action_failure)?;
     let task = Task::from_event(&event).ok_or(ActionError::TaskNotFound)?;
 
     match kind {
         ActionKind::Complete => {
             action_support::complete(&calendar, &token.calendar_id, &token.event_id)
                 .await
-                .map_err(|_| ActionError::TaskNotFound)?;
+                .map_err(action_failure)?;
         }
         ActionKind::Reschedule => {
             if event.time_range().is_none() {
@@ -177,10 +189,7 @@ pub async fn perform_action(
             }
             action_support::reschedule(services, user, &settings, &token.event_id)
                 .await
-                .map_err(|error| match error {
-                    AppError::TaskNotFound => ActionError::TaskNotFound,
-                    other => ActionError::App(other),
-                })?;
+                .map_err(action_failure)?;
         }
     }
 

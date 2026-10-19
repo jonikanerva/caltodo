@@ -401,6 +401,36 @@ async fn answers_match_the_document(pool: PgPool) {
         assert_eq!(reply.status, StatusCode::BAD_GATEWAY, "{path}");
         assert_documented(&doc, &Method::POST, path, &reply);
     }
+    // The single-task routes: a failed Google read of the task (issue #29).
+    let single: [(Method, &str, &str, Option<Value>); 3] = [
+        (
+            Method::PATCH,
+            "/api/tasks/{id}",
+            "/api/tasks/t2",
+            Some(json!({"completed": true})),
+        ),
+        (
+            Method::POST,
+            "/api/tasks/{id}/complete",
+            "/api/tasks/t2/complete",
+            None,
+        ),
+        (
+            Method::POST,
+            "/api/tasks/{id}/reschedule",
+            "/api/tasks/t2/reschedule",
+            None,
+        ),
+    ];
+    for (method, template, path, body) in &single {
+        let mut builder = client.request(method.clone(), path);
+        if let Some(body) = body {
+            builder = builder.json(body);
+        }
+        let reply = app.send(builder.build()).await;
+        assert_eq!(reply.status, StatusCode::BAD_GATEWAY, "{method} {path}");
+        assert_documented(&doc, method, template, &reply);
+    }
     let logout = app
         .send(client.request(Method::POST, "/api/auth/logout").build())
         .await;

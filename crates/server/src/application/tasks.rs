@@ -425,21 +425,22 @@ async fn apply_completion(
 }
 
 /// Sets the completion state of a task event (`updateCalendarEventCompletion`).
-/// `None` for a deleted, cancelled, or foreign event, and for any Google
-/// failure, like on the Node server.
+///
+/// # Errors
+///
+/// [`AppError::TaskNotFound`] for a deleted, cancelled, or foreign event,
+/// or a Google failure. The Node server answered "Task not found" for any
+/// failure (issue #29).
 async fn update_event_completion(
     calendar: &UserCalendar<'_>,
     calendar_id: &CalendarId,
     event_id: &EventId,
     completed: bool,
-) -> Option<CalendarEvent> {
+) -> Result<CalendarEvent, AppError> {
     let current = read_task(calendar, calendar_id, event_id)
         .await
-        .inspect_err(|error| log_task_failure(error, "task completion not updated"))
-        .ok()?;
-    apply_completion(calendar, calendar_id, event_id, &current, completed)
-        .await
-        .ok()
+        .inspect_err(|error| log_task_failure(error, "task completion not updated"))?;
+    apply_completion(calendar, calendar_id, event_id, &current, completed).await
 }
 
 /// Moves a task event (`updateCalendarEventTime`).
@@ -475,7 +476,8 @@ async fn update_event_time(
 ///
 /// # Errors
 ///
-/// No calendar, or [`AppError::TaskNotFound`] when the change fails.
+/// No calendar, [`AppError::TaskNotFound`] for a missing task or without
+/// stored Google access, or a Google failure.
 pub async fn set_completion(
     services: &Services,
     user: &UserId,
@@ -486,9 +488,8 @@ pub async fn set_completion(
     let Some(calendar) = UserCalendar::open(services, user).await? else {
         return Err(AppError::TaskNotFound);
     };
-    let updated = update_event_completion(&calendar, &settings.calendar, event_id, completed)
-        .await
-        .ok_or(AppError::TaskNotFound)?;
+    let updated =
+        update_event_completion(&calendar, &settings.calendar, event_id, completed).await?;
     Task::from_event(&updated).ok_or(AppError::UpdatedEventInvalid)
 }
 
@@ -496,7 +497,8 @@ pub async fn set_completion(
 ///
 /// # Errors
 ///
-/// No calendar, or [`AppError::TaskNotFound`].
+/// No calendar, [`AppError::TaskNotFound`] for a missing task or without
+/// stored Google access, or a Google failure.
 pub async fn complete_task(
     services: &Services,
     user: &UserId,
@@ -509,7 +511,6 @@ pub async fn complete_task(
     update_event_completion(&calendar, &settings.calendar, event_id, true)
         .await
         .map(|_| ())
-        .ok_or(AppError::TaskNotFound)
 }
 
 /// `POST /api/tasks/bulk-complete`: completes each task.
@@ -601,8 +602,7 @@ pub async fn reorder(services: &Services, user: &UserId, ids: &[EventId]) -> Res
 ///
 /// # Errors
 ///
-/// No calendar, a missing task, no free slot, or a Google failure in the
-/// slot search.
+/// No calendar, a missing task, no free slot, or a Google failure.
 pub async fn reschedule_task(
     services: &Services,
     user: &UserId,
@@ -613,6 +613,9 @@ pub async fn reschedule_task(
 }
 
 /// Moves one task event of `settings.calendar` to the first free slot.
+///
+/// The Node server answered "Task not found" for any failed read or move.
+/// Here a Google failure stays a Google failure (issue #29).
 pub(super) async fn reschedule_event(
     services: &Services,
     user: &UserId,
@@ -623,14 +626,11 @@ pub(super) async fn reschedule_event(
     let Some(calendar) = UserCalendar::open(services, user).await? else {
         return Err(AppError::TaskNotFound);
     };
-    let event = match calendar.get_event(&settings.calendar, event_id).await {
-        Ok(event) if !event.is_cancelled() => event,
-        Ok(_) => return Err(AppError::TaskNotFound),
-        Err(error) => {
-            log_task_failure(&task_failure(error), "task to reschedule not read");
-            return Err(AppError::TaskNotFound);
-        }
-    };
+    // A foreign event is no task. The move below reads the event again and
+    // rejects it too; this read only stops before the slot search.
+    let event = read_task(&calendar, &settings.calendar, event_id)
+        .await
+        .inspect_err(|error| log_task_failure(error, "task to reschedule not read"))?;
     let (start, end) = event.time_range().ok_or(AppError::TaskNotFound)?;
     let minutes =
         caltodo_domain::instant::round_minutes(end.as_millisecond() - start.as_millisecond())
@@ -638,7 +638,6 @@ pub(super) async fn reschedule_event(
     let slot = find_free_slot(services, &calendar, settings, minutes, None, false, None)
         .await?
         .ok_or(AppError::NoFreeSlot)?;
-    // Any failed move answers "Task not found", like on the Node server.
     update_event_time(
         &calendar,
         &settings.calendar,
@@ -647,7 +646,6 @@ pub(super) async fn reschedule_event(
         slot,
     )
     .await
-    .map_err(|_| AppError::TaskNotFound)
 }
 
 /// "Reschedule all" (`rescheduleAllUserTasks`): moves every incomplete task
@@ -751,11 +749,31 @@ pub async fn list_calendars(
 /// The parts of the action routes that reuse the task rules.
 pub(super) mod action_support {
     use super::{
-        AppError, CalendarId, CalendarSettings, EventId, Services, UserCalendar, UserId,
-        refresh_event_actions, update_event_completion,
+        AppError, CalendarEvent, CalendarId, CalendarSettings, EventId, Services, UserCalendar,
+        UserId, refresh_event_actions, update_event_completion,
     };
 
-    /// Completes the event; [`AppError::TaskNotFound`] when that fails.
+    /// Reads the task event of a link.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::TaskNotFound`] for a deleted, cancelled, or foreign
+    /// event, or a Google failure.
+    pub async fn read_task(
+        calendar: &UserCalendar<'_>,
+        calendar_id: &CalendarId,
+        event: &EventId,
+    ) -> Result<CalendarEvent, AppError> {
+        super::read_task(calendar, calendar_id, event)
+            .await
+            .inspect_err(|error| super::log_task_failure(error, "action task not read"))
+    }
+
+    /// Completes the event.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::TaskNotFound`] for a missing task, or a Google failure.
     pub async fn complete(
         calendar: &UserCalendar<'_>,
         calendar_id: &CalendarId,
@@ -764,7 +782,6 @@ pub(super) mod action_support {
         update_event_completion(calendar, calendar_id, event, true)
             .await
             .map(|_| ())
-            .ok_or(AppError::TaskNotFound)
     }
 
     /// Moves the event to the first free slot.

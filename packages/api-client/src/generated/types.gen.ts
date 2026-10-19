@@ -869,6 +869,10 @@ export type UpdateTaskErrors = {
      * Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.
      */
     500: Problem;
+    /**
+     * Problem `google_unavailable` or `google_reauthorization_required`.
+     */
+    502: Problem;
 };
 
 export type UpdateTaskError = UpdateTaskErrors[keyof UpdateTaskErrors];
@@ -919,6 +923,10 @@ export type CompleteTaskErrors = {
      * Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.
      */
     500: Problem;
+    /**
+     * Problem `google_unavailable` or `google_reauthorization_required`.
+     */
+    502: Problem;
 };
 
 export type CompleteTaskError = CompleteTaskErrors[keyof CompleteTaskErrors];
