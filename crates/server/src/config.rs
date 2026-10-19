@@ -1,8 +1,8 @@
 //! The environment settings, read and validated once at startup.
 //!
-//! The variable names are the names of the Node server, so a revert to the
-//! Node server needs no Railway change. An error names the setting and the
-//! rule. It never contains the value.
+//! The variable names are the names of the Node server, so the change to the
+//! Rust server needed no change of the Railway variables. An error names the
+//! setting and the rule. It never contains the value.
 
 use std::fmt;
 use std::path::PathBuf;

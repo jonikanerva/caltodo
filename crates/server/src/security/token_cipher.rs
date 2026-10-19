@@ -2,7 +2,7 @@
 //! `users.refresh_token`).
 //!
 //! The format is the format of the Node server (`server/crypto.ts`), so the
-//! stored tokens stay readable after the change and after a revert:
+//! tokens that the Node server stored stay readable:
 //!
 //! - key: SHA-256 of `TOKEN_ENCRYPTION_KEY`;
 //! - cipher: AES-256-GCM with a random 12-byte nonce and a 16-byte tag;
