@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
@@ -100,7 +100,10 @@ export default function MainPage() {
     titleInputRef.current?.focus()
   }, [])
 
-  const { data: tasks = [], isLoading } = useQuery(tasksQuery)
+  const { data, isLoading, isError } = useQuery(tasksQuery)
+  // A failed load shows an error. It never shows an empty or an old list as
+  // a success (VISION.md, Success Definition).
+  const tasks = useMemo(() => (isError ? [] : (data ?? [])), [isError, data])
 
   const { data: settings } = useQuery(settingsQuery)
 
@@ -429,6 +432,19 @@ export default function MainPage() {
               </Card>
             ))}
           </div>
+        ) : isError ? (
+          // The default variant keeps the text contrast of the theme. The
+          // destructive variant colours the text red below 4.5:1.
+          <Alert
+            className="border-destructive/50 [&>svg]:text-destructive"
+            data-testid="alert-tasks-error"
+          >
+            <TriangleAlert className="h-4 w-4" />
+            <AlertTitle>Could not load tasks</AlertTitle>
+            <AlertDescription>
+              Failed to load tasks. Reload the page to try again.
+            </AlertDescription>
+          </Alert>
         ) : uncompletedTasks.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
