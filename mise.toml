@@ -154,12 +154,42 @@ description = "Fail when the SQLx query metadata (.sqlx) differs from the querie
 depends = ["db:start"]
 run = '''
 set -eu
-database=caltodo_sqlx_check
-docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE IF EXISTS $database WITH (FORCE)" --command "CREATE DATABASE $database"
+# Keep this script the same as the script of `sqlx:prepare`, except
+# `--check` (STACK.md §3).
+#
+# The database name is a hash of the checkout path. Two checkouts that run
+# the task at the same time use two databases. All runs in one checkout use
+# the same name, so each run drops the database that a killed run left.
+if command -v shasum >/dev/null 2>&1; then
+  hash=$(printf '%s' "$PWD" | shasum -a 256)
+else
+  hash=$(printf '%s' "$PWD" | sha256sum)
+fi
+database="caltodo_sqlx_$(printf '%s' "$hash" | cut -c1-16)"
+drop_database() {
+  docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --set ON_ERROR_STOP=1 \
+    --command "DROP DATABASE IF EXISTS $database WITH (FORCE)"
+}
+# The EXIT trap drops the database also after a failed step. INT and TERM
+# exit through the EXIT trap. A failed drop fails the task.
+cleanup() {
+  status=$?
+  trap - EXIT
+  drop_database || status=1
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+drop_database
+docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --set ON_ERROR_STOP=1 \
+  --command "CREATE DATABASE $database"
 export DATABASE_URL="$CALTODO_PG_URL/$database"
-cargo run --locked --quiet -p caltodo -- migrate
-SQLX_OFFLINE=false cargo sqlx prepare --workspace --check -- --all-targets --locked
-docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE $database WITH (FORCE)"
+# sqlx-cli applies the migrations without a build. A build of the server
+# (`caltodo migrate`) compiles the queries against the committed metadata,
+# so the build fails for a new or changed query.
+sqlx migrate run --no-dotenv --source migrations
+SQLX_OFFLINE=false cargo sqlx prepare --no-dotenv --workspace --check -- --all-targets --locked
 '''
 
 [tasks."sqlx:prepare"]
@@ -167,12 +197,42 @@ description = "Write the SQLx query metadata (.sqlx) from a freshly migrated dat
 depends = ["db:start"]
 run = '''
 set -eu
-database=caltodo_sqlx_check
-docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE IF EXISTS $database WITH (FORCE)" --command "CREATE DATABASE $database"
+# Keep this script the same as the script of `sqlx:check`, except
+# `--check` (STACK.md §3).
+#
+# The database name is a hash of the checkout path. Two checkouts that run
+# the task at the same time use two databases. All runs in one checkout use
+# the same name, so each run drops the database that a killed run left.
+if command -v shasum >/dev/null 2>&1; then
+  hash=$(printf '%s' "$PWD" | shasum -a 256)
+else
+  hash=$(printf '%s' "$PWD" | sha256sum)
+fi
+database="caltodo_sqlx_$(printf '%s' "$hash" | cut -c1-16)"
+drop_database() {
+  docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --set ON_ERROR_STOP=1 \
+    --command "DROP DATABASE IF EXISTS $database WITH (FORCE)"
+}
+# The EXIT trap drops the database also after a failed step. INT and TERM
+# exit through the EXIT trap. A failed drop fails the task.
+cleanup() {
+  status=$?
+  trap - EXIT
+  drop_database || status=1
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+drop_database
+docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --set ON_ERROR_STOP=1 \
+  --command "CREATE DATABASE $database"
 export DATABASE_URL="$CALTODO_PG_URL/$database"
-cargo run --locked --quiet -p caltodo -- migrate
-SQLX_OFFLINE=false cargo sqlx prepare --workspace -- --all-targets --locked
-docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE $database WITH (FORCE)"
+# sqlx-cli applies the migrations without a build. A build of the server
+# (`caltodo migrate`) compiles the queries against the committed metadata,
+# so the build fails for a new or changed query.
+sqlx migrate run --no-dotenv --source migrations
+SQLX_OFFLINE=false cargo sqlx prepare --no-dotenv --workspace -- --all-targets --locked
 '''
 
 [tasks."contract:export"]
