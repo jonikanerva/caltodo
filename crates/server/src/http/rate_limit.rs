@@ -18,8 +18,12 @@
 //! `trust proxy 1`), or else the peer address. An IPv6 address counts by its
 //! /56 prefix, like express-rate-limit 8.
 //!
-//! Each limiter keeps at most [`MAX_CLIENTS`] counters in memory. When it is
-//! full, it removes the expired counters and then the oldest one.
+//! Each limiter keeps at most [`MAX_CLIENTS`] counters in memory. When a new
+//! client arrives and the limiter is full, the limiter removes the expired
+//! counters. It never removes a live counter, because then a client with
+//! many addresses could give a limited address a new window (issue #5 item
+//! 10). If no counter has expired, the new client gets 429 until the oldest
+//! window ends. The tracked clients keep their counters.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -43,7 +47,28 @@ pub const MAX_CLIENTS: usize = 10_000;
 pub struct Limiter {
     limit: u32,
     window: Duration,
-    clients: Mutex<HashMap<IpAddr, (Instant, u32)>>,
+    capacity: usize,
+    clients: Mutex<Clients>,
+}
+
+/// The counters of a limiter.
+#[derive(Debug, Default)]
+struct Clients {
+    /// The window start and the request count of each client.
+    counters: HashMap<IpAddr, (Instant, u32)>,
+    /// No window in `counters` starts before this instant. A full limiter
+    /// uses it to skip the scan for expired counters while none can have
+    /// expired, so a flood of new addresses costs no full scan per request.
+    earliest_start: Option<Instant>,
+}
+
+impl Clients {
+    /// Removes the expired counters and sets the exact earliest start.
+    fn remove_expired(&mut self, now: Instant, window: Duration) {
+        self.counters
+            .retain(|_, (start, _)| now.duration_since(*start) < window);
+        self.earliest_start = self.counters.values().map(|(start, _)| *start).min();
+    }
 }
 
 /// The decision of a limiter for one request.
@@ -58,41 +83,60 @@ pub struct Decision {
 }
 
 impl Limiter {
+    /// A limiter with room for [`MAX_CLIENTS`] counters.
     #[must_use]
     pub fn new(limit: u32, window: Duration) -> Self {
+        Self::with_capacity(limit, window, MAX_CLIENTS)
+    }
+
+    /// A limiter with room for `capacity` counters.
+    #[must_use]
+    pub fn with_capacity(limit: u32, window: Duration, capacity: usize) -> Self {
         Self {
             limit,
             window,
-            clients: Mutex::new(HashMap::new()),
+            capacity,
+            clients: Mutex::new(Clients::default()),
         }
     }
 
     /// Counts one request of `client` at `now`.
     pub fn check(&self, client: IpAddr, now: Instant) -> Decision {
+        let window = self.window;
         let mut clients = self.clients.lock().unwrap_or_else(PoisonError::into_inner);
-        if !clients.contains_key(&client) && clients.len() >= MAX_CLIENTS {
-            let window = self.window;
-            clients.retain(|_, (start, _)| now.duration_since(*start) < window);
-            if clients.len() >= MAX_CLIENTS
-                && let Some(oldest) = clients
-                    .iter()
-                    .min_by_key(|(_, (start, _))| *start)
-                    .map(|(key, _)| *key)
-            {
-                clients.remove(&oldest);
+        if !clients.counters.contains_key(&client) && clients.counters.len() >= self.capacity {
+            let may_have_expired = clients
+                .earliest_start
+                .is_none_or(|start| now.duration_since(start) >= window);
+            if may_have_expired {
+                clients.remove_expired(now, window);
+            }
+            if clients.counters.len() >= self.capacity {
+                // Full of live counters: refuse the new client and keep
+                // every counter. A slot can free when the oldest window
+                // ends.
+                let left = clients.earliest_start.map_or(window, |start| {
+                    window.saturating_sub(now.duration_since(start))
+                });
+                return self.decision(false, 0, left);
             }
         }
-        let entry = clients.entry(client).or_insert((now, 0));
-        if now.duration_since(entry.0) >= self.window {
+        clients.earliest_start = Some(clients.earliest_start.map_or(now, |start| start.min(now)));
+        let entry = clients.counters.entry(client).or_insert((now, 0));
+        if now.duration_since(entry.0) >= window {
             *entry = (now, 0);
         }
         entry.1 = entry.1.saturating_add(1);
         let count = entry.1;
-        let left = self.window.saturating_sub(now.duration_since(entry.0));
+        let left = window.saturating_sub(now.duration_since(entry.0));
+        self.decision(count <= self.limit, self.limit.saturating_sub(count), left)
+    }
+
+    fn decision(&self, allowed: bool, remaining: u32, left: Duration) -> Decision {
         Decision {
-            allowed: count <= self.limit,
+            allowed,
             limit: self.limit,
-            remaining: self.limit.saturating_sub(count),
+            remaining,
             reset_seconds: (left.as_secs() + u64::from(left.subsec_nanos() > 0)).max(1),
             window_seconds: self.window.as_secs(),
         }
@@ -104,6 +148,7 @@ impl Limiter {
         self.clients
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
+            .counters
             .len()
     }
 
@@ -282,17 +327,112 @@ mod tests {
         );
     }
 
+    /// The request count of `client` in its current window.
+    fn count(limiter: &Limiter, client: &str) -> Option<u32> {
+        limiter
+            .clients
+            .lock()
+            .unwrap()
+            .counters
+            .get(&ip(client))
+            .map(|(_, count)| *count)
+    }
+
     #[test]
     fn keeps_a_bounded_number_of_clients() {
         let limiter = Limiter::new(1, Duration::from_secs(60));
         let t0 = Instant::now();
-        for n in 0..u32::try_from(MAX_CLIENTS).unwrap() + 5 {
-            limiter.check(IpAddr::from(n.to_be_bytes()), t0);
+        let full = u32::try_from(MAX_CLIENTS).unwrap();
+        for n in 0..full {
+            assert!(limiter.check(IpAddr::from(n.to_be_bytes()), t0).allowed);
+        }
+        for n in full..full + 5 {
+            assert!(!limiter.check(IpAddr::from(n.to_be_bytes()), t0).allowed);
         }
         assert_eq!(limiter.len(), MAX_CLIENTS);
-        // After the window, the expired counters go first.
-        limiter.check(ip("192.168.1.1"), t0 + Duration::from_secs(61));
+        assert_eq!(
+            count(&limiter, "0.0.0.0"),
+            Some(1),
+            "the first counter stays"
+        );
+        // After the window, the expired counters make room.
+        assert!(
+            limiter
+                .check(ip("192.168.1.1"), t0 + Duration::from_secs(61))
+                .allowed
+        );
         assert_eq!(limiter.len(), 1);
+    }
+
+    /// Issue #5 item 10: new addresses cannot push a live counter out.
+    #[test]
+    fn a_full_limiter_refuses_a_new_client_and_keeps_every_counter() {
+        let limiter = Limiter::with_capacity(2, Duration::from_secs(60), 3);
+        let t0 = Instant::now();
+        let at = |seconds: u64| t0 + Duration::from_secs(seconds);
+        assert!(limiter.check(ip("10.0.0.1"), at(0)).allowed);
+        assert!(limiter.check(ip("10.0.0.2"), at(10)).allowed);
+        assert!(limiter.check(ip("10.0.0.3"), at(20)).allowed);
+        assert!(limiter.check(ip("10.0.0.1"), at(30)).allowed);
+        assert!(!limiter.check(ip("10.0.0.1"), at(31)).allowed);
+
+        let refused = limiter.check(ip("10.0.0.4"), at(40));
+        assert_eq!(
+            refused,
+            Decision {
+                allowed: false,
+                limit: 2,
+                remaining: 0,
+                reset_seconds: 20,
+                window_seconds: 60,
+            },
+            "the oldest window (10.0.0.1) ends in 20 seconds"
+        );
+        // A flood of new addresses changes no counter.
+        for n in 0..100_u8 {
+            assert!(!limiter.check(IpAddr::from([172, 16, 0, n]), at(45)).allowed);
+        }
+        assert_eq!(limiter.len(), 3);
+        assert_eq!(count(&limiter, "10.0.0.1"), Some(3));
+        assert_eq!(count(&limiter, "10.0.0.2"), Some(1));
+        assert_eq!(count(&limiter, "10.0.0.3"), Some(1));
+        assert_eq!(count(&limiter, "10.0.0.4"), None);
+        assert!(
+            !limiter.check(ip("10.0.0.1"), at(50)).allowed,
+            "the limited client stays limited"
+        );
+        assert!(limiter.check(ip("10.0.0.2"), at(50)).allowed);
+
+        // The window of 10.0.0.1 ends at 60 s: its counter goes, and the new
+        // client gets its place. The live counters stay.
+        assert!(limiter.check(ip("10.0.0.4"), at(60)).allowed);
+        assert_eq!(count(&limiter, "10.0.0.1"), None);
+        assert_eq!(count(&limiter, "10.0.0.2"), Some(2));
+        assert_eq!(count(&limiter, "10.0.0.3"), Some(1));
+        assert_eq!(count(&limiter, "10.0.0.4"), Some(1));
+    }
+
+    /// A counter whose window started again is live, although the limiter
+    /// first saw the client earlier.
+    #[test]
+    fn a_restarted_window_is_not_expired() {
+        let limiter = Limiter::with_capacity(5, Duration::from_secs(60), 3);
+        let t0 = Instant::now();
+        let at = |seconds: u64| t0 + Duration::from_secs(seconds);
+        assert!(limiter.check(ip("10.0.0.1"), at(0)).allowed);
+        assert!(limiter.check(ip("10.0.0.1"), at(61)).allowed);
+        assert!(limiter.check(ip("10.0.0.2"), at(62)).allowed);
+        assert!(limiter.check(ip("10.0.0.3"), at(63)).allowed);
+        let refused = limiter.check(ip("10.0.0.4"), at(64));
+        assert!(!refused.allowed);
+        assert_eq!(
+            refused.reset_seconds, 57,
+            "the oldest window started at 61 s"
+        );
+        assert_eq!(count(&limiter, "10.0.0.1"), Some(1));
+        assert!(limiter.check(ip("10.0.0.4"), at(121)).allowed);
+        assert_eq!(count(&limiter, "10.0.0.1"), None);
+        assert_eq!(limiter.len(), 3);
     }
 
     #[test]
