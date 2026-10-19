@@ -30,8 +30,8 @@ const LIST_DAYS_BEFORE: i64 = 14;
 const DAYS_AHEAD: i64 = 90;
 /// The days before now that "Reschedule all" reads.
 const RESCHEDULE_DAYS_BEFORE: i64 = 7;
-/// The most parallel event reads of one reorder (the Node server read all
-/// of them at once).
+/// The most parallel event reads of one reorder or bulk complete (the Node
+/// server read all reorder events at once).
 const PARALLEL_EVENT_READS: usize = 8;
 
 /// The settings of a user with a configured calendar.
@@ -185,6 +185,15 @@ pub struct NewTask {
     pub duration_minutes: Option<u32>,
 }
 
+/// The answer of a task creation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreatedTask {
+    pub task: Task,
+    /// The task is urgent, and "reschedule all" failed or did not move every
+    /// task that it had to move. The task exists in either case.
+    pub urgent_move_failed: bool,
+}
+
 /// `POST /api/tasks`: schedules a new task in the first free slot. An
 /// urgent task then moves to the front of the schedule.
 ///
@@ -195,7 +204,7 @@ pub async fn create_task(
     services: &Services,
     user: &UserId,
     input: &NewTask,
-) -> Result<Task, AppError> {
+) -> Result<CreatedTask, AppError> {
     let settings = calendar_settings(services, user).await?;
     let calendar = open_calendar(services, user).await?;
     let duration = input
@@ -234,24 +243,39 @@ pub async fn create_task(
     )
     .await;
 
-    if input.urgent {
-        // The task exists now. A failed reprioritization must not report a
-        // failed creation, or the user would create the task twice; the
-        // Node server also kept the created task.
-        if let Err(error) = reschedule_all(services, user, &[event_id.clone().into_string()]).await
-        {
-            tracing::warn!(
-                reason = error.tag(),
-                "urgent task was not moved to the front"
-            );
-        }
-    }
+    // The task exists now. A failed reprioritization must not report a
+    // failed creation, or the user would create the task twice; the Node
+    // server also kept the created task. The answer reports it instead.
+    // A task without a free slot (`skipped_no_slot`) stays where it is, as
+    // in "Reschedule all"; that is no failure.
+    let urgent_move_failed = input.urgent
+        && match reschedule_all(services, user, &[event_id.clone().into_string()]).await {
+            Ok(summary) if summary.failed == 0 => false,
+            Ok(_) => {
+                tracing::warn!(
+                    reason = "task_move_failed",
+                    "urgent task was not moved to the front"
+                );
+                true
+            }
+            Err(error) => {
+                tracing::warn!(
+                    reason = error.tag(),
+                    "urgent task was not moved to the front"
+                );
+                true
+            }
+        };
 
     let loaded = match calendar.get_event(&settings.calendar, &event_id).await {
         Ok(event) if !event.is_cancelled() => event,
         Ok(_) | Err(_) => return Err(AppError::CreatedEventMissing),
     };
-    Task::from_event(&loaded).ok_or(AppError::CreatedEventInvalid)
+    let task = Task::from_event(&loaded).ok_or(AppError::CreatedEventInvalid)?;
+    Ok(CreatedTask {
+        task,
+        urgent_move_failed,
+    })
 }
 
 /// Creates a new action token, writes its link into the event description,
@@ -314,25 +338,66 @@ async fn refresh_event_actions(
     }
 }
 
-/// Sets the completion state of a task event (`updateCalendarEventCompletion`).
-/// `None` for a deleted, cancelled, or foreign event, and for any Google
-/// failure, like on the Node server.
-async fn update_event_completion(
+/// The failure of a read or a change of one task event: a deleted event
+/// (404 or 410) is [`AppError::TaskNotFound`]; another Google failure stays
+/// a Google failure.
+fn task_failure(error: GoogleError) -> AppError {
+    match error {
+        GoogleError::NotFound => AppError::TaskNotFound,
+        other => AppError::Google(other),
+    }
+}
+
+/// Reads a task event. A deleted, cancelled, or foreign event is
+/// [`AppError::TaskNotFound`].
+async fn read_task(
     calendar: &UserCalendar<'_>,
     calendar_id: &CalendarId,
     event_id: &EventId,
-    completed: bool,
-) -> Option<CalendarEvent> {
-    let current = match calendar.get_event(calendar_id, event_id).await {
-        Ok(event) => event,
-        Err(error) => {
-            log_lookup_failure(error, "task completion not updated");
-            return None;
-        }
-    };
-    if current.is_cancelled() || !current.is_task() {
-        return None;
+) -> Result<CalendarEvent, AppError> {
+    match calendar.get_event(calendar_id, event_id).await {
+        Ok(event) if event.is_cancelled() || !event.is_task() => Err(AppError::TaskNotFound),
+        Ok(event) => Ok(event),
+        Err(error) => Err(task_failure(error)),
     }
+}
+
+/// Reads every requested task event, at most [`PARALLEL_EVENT_READS`] at a
+/// time.
+///
+/// # Errors
+///
+/// The first failure in the requested order: [`AppError::TaskNotFound`] for
+/// a deleted, cancelled, or foreign event, or a Google failure.
+async fn read_tasks(
+    calendar: &UserCalendar<'_>,
+    calendar_id: &CalendarId,
+    ids: &[EventId],
+) -> Result<Vec<CalendarEvent>, AppError> {
+    // Owned ids: a future that borrows the closure argument is not `Send`
+    // for every lifetime, which the Axum handler needs.
+    let results: Vec<Result<CalendarEvent, AppError>> = stream::iter(ids.iter().cloned())
+        .map(|id| async move { read_task(calendar, calendar_id, &id).await })
+        .buffered(PARALLEL_EVENT_READS)
+        .collect()
+        .await;
+    results.into_iter().collect()
+}
+
+fn log_task_failure(error: &AppError, message: &'static str) {
+    if let AppError::Google(error) = error {
+        tracing::warn!(reason = google_tag(*error), "{message}");
+    }
+}
+
+/// Writes the completion state into a task event that [`read_task`] read.
+async fn apply_completion(
+    calendar: &UserCalendar<'_>,
+    calendar_id: &CalendarId,
+    event_id: &EventId,
+    current: &CalendarEvent,
+    completed: bool,
+) -> Result<CalendarEvent, AppError> {
     let title = strip_title_prefix(current.summary.as_deref().unwrap_or_default());
     let patch = EventPatch {
         summary: Some(format_title(title, completed)),
@@ -343,52 +408,58 @@ async fn update_event_completion(
         )),
         ..EventPatch::default()
     };
-    match calendar.patch_event(calendar_id, event_id, &patch).await {
-        Ok(updated) => Some(updated),
-        Err(error) => {
-            log_lookup_failure(error, "task completion not updated");
-            None
-        }
-    }
+    calendar
+        .patch_event(calendar_id, event_id, &patch)
+        .await
+        .map_err(task_failure)
+        .inspect_err(|error| log_task_failure(error, "task completion not updated"))
 }
 
-fn log_lookup_failure(error: GoogleError, message: &'static str) {
-    if error != GoogleError::NotFound {
-        tracing::warn!(reason = google_tag(error), "{message}");
-    }
+/// Sets the completion state of a task event (`updateCalendarEventCompletion`).
+/// `None` for a deleted, cancelled, or foreign event, and for any Google
+/// failure, like on the Node server.
+async fn update_event_completion(
+    calendar: &UserCalendar<'_>,
+    calendar_id: &CalendarId,
+    event_id: &EventId,
+    completed: bool,
+) -> Option<CalendarEvent> {
+    let current = read_task(calendar, calendar_id, event_id)
+        .await
+        .inspect_err(|error| log_task_failure(error, "task completion not updated"))
+        .ok()?;
+    apply_completion(calendar, calendar_id, event_id, &current, completed)
+        .await
+        .ok()
 }
 
-/// Moves a task event (`updateCalendarEventTime`). `false` for a cancelled
-/// or foreign event and for any Google failure.
+/// Moves a task event (`updateCalendarEventTime`).
+///
+/// # Errors
+///
+/// [`AppError::TaskNotFound`] for a deleted, cancelled, or foreign event,
+/// or a Google failure.
 async fn update_event_time(
     calendar: &UserCalendar<'_>,
     calendar_id: &CalendarId,
     time_zone: &str,
     event_id: &EventId,
     slot: Slot,
-) -> bool {
-    let current = match calendar.get_event(calendar_id, event_id).await {
-        Ok(event) => event,
-        Err(error) => {
-            log_lookup_failure(error, "task time not updated");
-            return false;
-        }
-    };
-    if current.is_cancelled() || !current.is_task() {
-        return false;
-    }
+) -> Result<(), AppError> {
     let patch = EventPatch {
         start: Some(event_time(slot.start, time_zone)),
         end: Some(event_time(slot.end, time_zone)),
         ..EventPatch::default()
     };
-    match calendar.patch_event(calendar_id, event_id, &patch).await {
-        Ok(_) => true,
-        Err(error) => {
-            log_lookup_failure(error, "task time not updated");
-            false
-        }
-    }
+    let moved = match read_task(calendar, calendar_id, event_id).await {
+        Ok(_) => calendar
+            .patch_event(calendar_id, event_id, &patch)
+            .await
+            .map(|_| ())
+            .map_err(task_failure),
+        Err(error) => Err(error),
+    };
+    moved.inspect_err(|error| log_task_failure(error, "task time not updated"))
 }
 
 /// `PATCH /api/tasks/{id}`: completes or reopens a task.
@@ -432,13 +503,16 @@ pub async fn complete_task(
         .ok_or(AppError::TaskNotFound)
 }
 
-/// `POST /api/tasks/bulk-complete`: completes each task. A task that fails
-/// does not stop the others, and the answer is a success, like on the Node
-/// server.
+/// `POST /api/tasks/bulk-complete`: completes each task.
+///
+/// The request is one unit. Every task is read before the first change, so
+/// a missing task changes nothing. A failed change stops the request; the
+/// changes before it stay, because Google Calendar has no transaction.
 ///
 /// # Errors
 ///
-/// No calendar.
+/// No calendar, [`AppError::TaskNotFound`] for a missing task or without
+/// stored Google access, or a Google failure.
 pub async fn bulk_complete(
     services: &Services,
     user: &UserId,
@@ -446,10 +520,11 @@ pub async fn bulk_complete(
 ) -> Result<(), AppError> {
     let settings = calendar_settings(services, user).await?;
     let Some(calendar) = UserCalendar::open(services, user).await? else {
-        return Ok(());
+        return Err(AppError::TaskNotFound);
     };
-    for id in ids {
-        update_event_completion(&calendar, &settings.calendar, id, true).await;
+    let events = read_tasks(&calendar, &settings.calendar, ids).await?;
+    for (id, event) in ids.iter().zip(&events) {
+        apply_completion(&calendar, &settings.calendar, id, event, true).await?;
     }
     Ok(())
 }
@@ -465,63 +540,47 @@ pub async fn reload(services: &Services, user: &UserId) -> Result<(), AppError> 
 }
 
 /// `POST /api/tasks/reorder`: gives the tasks the slots of the requested
-/// order (`domain::reorder`). A failed move is ignored, like on the Node
-/// server.
+/// order (`domain::reorder`).
+///
+/// The request is one unit. Every task is read before the first move, so a
+/// missing task changes nothing. A failed move stops the request; the moves
+/// before it stay, because Google Calendar has no transaction.
 ///
 /// # Errors
 ///
-/// No calendar, or no requested task was found.
+/// No calendar, [`AppError::TaskNotFound`] for a missing task or without
+/// stored Google access, [`AppError::InvalidEventTime`] for a task without
+/// a time range, or a Google failure.
 pub async fn reorder(services: &Services, user: &UserId, ids: &[EventId]) -> Result<(), AppError> {
     let settings = calendar_settings(services, user).await?;
-    let calendar = UserCalendar::open(services, user).await?;
-    let lookups: Vec<(EventId, TaskLookup)> = match &calendar {
-        None => ids
-            .iter()
-            .map(|id| (id.clone(), TaskLookup::Unavailable))
-            .collect(),
-        Some(calendar) => {
-            stream::iter(ids.iter().cloned())
-                .map(|id| {
-                    let calendar_id = &settings.calendar;
-                    async move {
-                        let lookup = match calendar.get_event(calendar_id, &id).await {
-                            Ok(event) if event.is_cancelled() => TaskLookup::Deleted,
-                            Ok(event) => event
-                                .time_range()
-                                .map_or(TaskLookup::Unavailable, |(start, end)| {
-                                    TaskLookup::Found { start, end }
-                                }),
-                            Err(GoogleError::NotFound) => TaskLookup::Deleted,
-                            Err(error) => {
-                                tracing::warn!(reason = google_tag(error), "task event not read");
-                                TaskLookup::Unavailable
-                            }
-                        };
-                        (id, lookup)
-                    }
-                })
-                .buffered(PARALLEL_EVENT_READS)
-                .collect()
-                .await
-        }
+    let Some(calendar) = UserCalendar::open(services, user).await? else {
+        return Err(AppError::TaskNotFound);
     };
+    let events = read_tasks(&calendar, &settings.calendar, ids).await?;
+    let lookups = ids
+        .iter()
+        .zip(&events)
+        .map(|(id, event)| {
+            let (start, end) = event.time_range().ok_or(AppError::InvalidEventTime)?;
+            Ok((id.clone(), TaskLookup::Found { start, end }))
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
     let default_duration = u32::try_from(settings.row.default_duration).unwrap_or(0);
-    let changes =
-        plan_reorder(&lookups, default_duration).map_err(|_| AppError::NoTasksToReorder)?;
-    if let Some(calendar) = &calendar {
-        for change in changes {
-            update_event_time(
-                calendar,
-                &settings.calendar,
-                settings.time_zone(),
-                &change.id,
-                Slot {
-                    start: change.start,
-                    end: change.end,
-                },
-            )
-            .await;
-        }
+    // Every requested task was found, and a request has at least one id, so
+    // the plan cannot fail; the mapping only keeps the match total.
+    let changes = plan_reorder(&lookups, default_duration).map_err(|_| AppError::TaskNotFound)?;
+    for change in changes {
+        update_event_time(
+            &calendar,
+            &settings.calendar,
+            settings.time_zone(),
+            &change.id,
+            Slot {
+                start: change.start,
+                end: change.end,
+            },
+        )
+        .await?;
     }
     Ok(())
 }
@@ -556,7 +615,7 @@ pub(super) async fn reschedule_event(
         Ok(event) if !event.is_cancelled() => event,
         Ok(_) => return Err(AppError::TaskNotFound),
         Err(error) => {
-            log_lookup_failure(error, "task to reschedule not read");
+            log_task_failure(&task_failure(error), "task to reschedule not read");
             return Err(AppError::TaskNotFound);
         }
     };
@@ -567,7 +626,8 @@ pub(super) async fn reschedule_event(
     let slot = find_free_slot(services, &calendar, settings, minutes, None, false, None)
         .await?
         .ok_or(AppError::NoFreeSlot)?;
-    if update_event_time(
+    // Any failed move answers "Task not found", like on the Node server.
+    update_event_time(
         &calendar,
         &settings.calendar,
         settings.time_zone(),
@@ -575,11 +635,7 @@ pub(super) async fn reschedule_event(
         slot,
     )
     .await
-    {
-        Ok(())
-    } else {
-        Err(AppError::TaskNotFound)
-    }
+    .map_err(|_| AppError::TaskNotFound)
 }
 
 /// "Reschedule all" (`rescheduleAllUserTasks`): moves every incomplete task
@@ -647,7 +703,7 @@ pub async fn reschedule_all(
             summary.unchanged += 1;
             continue;
         }
-        if !update_event_time(
+        if update_event_time(
             &calendar,
             &settings.calendar,
             settings.time_zone(),
@@ -655,6 +711,7 @@ pub async fn reschedule_all(
             slot,
         )
         .await
+        .is_err()
         {
             summary.failed += 1;
             continue;

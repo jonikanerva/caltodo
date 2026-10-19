@@ -98,6 +98,25 @@ describe("success bodies", () => {
     }
   })
 
+  it("returns the created task with the urgent move result", async () => {
+    for (const urgentMoveFailed of [false, true]) {
+      const { api } = setup(() => json({ task, urgentMoveFailed }))
+      await expect(api.createTask({ title: "T", urgent: true })).resolves.toEqual({
+        task,
+        urgentMoveFailed,
+      })
+    }
+  })
+
+  it("rejects a create answer without the urgent move result", async () => {
+    // The answer of the server before issue #5 item 4: the bare task.
+    for (const body of [task, { task }, { task, urgentMoveFailed: "no" }]) {
+      const { api } = setup(() => json(body))
+      const error = await apiError(api.createTask({ title: "T" }))
+      expect(error.code).toBe("invalid_response")
+    }
+  })
+
   it("rejects a success answer that is not JSON", async () => {
     const { api } = setup(() => new Response("<html></html>", { status: 200 }))
     const error = await apiError(api.fetchCalendars())
@@ -128,6 +147,15 @@ describe("error bodies", () => {
     const { api } = setup(() => problem("no_free_slot", text))
     const error = await failure(api.createTask({ title: "T" }))
     expect(error instanceof Error && error.message.includes(text)).toBe(true)
+  })
+
+  it("rejects a reorder with a missing task or a Google failure", async () => {
+    for (const code of ["task_not_found", "google_unavailable"] as const) {
+      const { api } = setup(() => problem(code))
+      const error = await apiError(api.reorderTasks(["a", "b"]))
+      expect(error.status).toBe(problemStatus(code))
+      expect(error.code).toBe(code)
+    }
   })
 
   it("does not trust an invalid or unknown error body", async () => {
@@ -180,6 +208,8 @@ describe("session and CSRF", () => {
     const { api, requests } = setup((request) => {
       if (request.url.endsWith("/api/auth/user")) return json(user)
       if (request.url.endsWith("/api/tasks") && request.method === "GET") return json([])
+      if (request.url.endsWith("/api/tasks"))
+        return json({ task, urgentMoveFailed: false })
       return json(task)
     })
     await expect(api.fetchCurrentUser()).resolves.toEqual(user)

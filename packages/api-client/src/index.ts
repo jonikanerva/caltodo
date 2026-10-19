@@ -27,6 +27,7 @@ import type {
   CalendarListItem,
   CalendarTask,
   CreateTaskRequest,
+  CreateTaskResult,
   ProblemCode,
   RescheduleAllResult,
   UpdateSettingsRequest,
@@ -39,6 +40,7 @@ export type {
   CalendarListItem,
   CalendarTask,
   CreateTaskRequest,
+  CreateTaskResult,
   Problem,
   ProblemCode,
   RescheduleAllResult,
@@ -67,7 +69,6 @@ const PROBLEM_STATUS = {
   forbidden: 403,
   not_found: 404,
   task_not_found: 404,
-  no_tasks_to_reorder: 404,
   no_free_slot: 409,
   payload_too_large: 413,
   rate_limited: 429,
@@ -221,7 +222,7 @@ export const createApi = (config: ApiConfig) => {
     fetchTasks: (signal?: AbortSignal) =>
       unwrap<CalendarTask[]>(sdk.listTasks(options(signal))),
     createTask: (body: CreateTaskRequest) =>
-      unwrap<CalendarTask>(sdk.createTask({ ...options(), body })),
+      unwrap<CreateTaskResult>(sdk.createTask({ ...options(), body })),
     updateTask: (id: string, completed: boolean) =>
       unwrap<CalendarTask>(
         sdk.updateTask({ ...options(), path: { id }, body: { completed } }),

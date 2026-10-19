@@ -144,7 +144,7 @@
             }
           },
           "404": {
-            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "description": "Problem `task_not_found`: a requested task does not exist or is no task.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -601,7 +601,7 @@
         "tags": [
           "tasks"
         ],
-        "summary": "Creates a task in the first free slot. An urgent task then moves to the\nfront of the schedule.",
+        "summary": "Creates a task in the first free slot. An urgent task then moves to the\nfront of the schedule; the answer reports a failed move.",
         "operationId": "createTask",
         "requestBody": {
           "content": {
@@ -615,11 +615,11 @@
         },
         "responses": {
           "200": {
-            "description": "The created task.",
+            "description": "The created task. `urgentMoveFailed` reports an urgent task that did not move to the front.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CalendarTask"
+                  "$ref": "#/components/schemas/CreateTaskResult"
                 }
               }
             }
@@ -717,7 +717,8 @@
         "tags": [
           "tasks"
         ],
-        "summary": "Completes each task. A task that fails does not stop the others.",
+        "summary": "Completes each task.",
+        "description": "Every task is read before the first change: a missing task changes\nnothing. A failed change stops the request; the changes before it stay.",
         "operationId": "bulkCompleteTasks",
         "requestBody": {
           "content": {
@@ -731,7 +732,7 @@
         },
         "responses": {
           "200": {
-            "description": "Done. The answer does not say which tasks failed.",
+            "description": "Every task is complete.",
             "content": {
               "application/json": {
                 "schema": {
@@ -770,6 +771,16 @@
               }
             }
           },
+          "404": {
+            "description": "Problem `task_not_found`: a requested task does not exist or is no task.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "413": {
             "description": "Problem `payload_too_large`: more than 100 KiB of JSON or 50 KiB of form data.",
             "content": {
@@ -792,6 +803,16 @@
           },
           "500": {
             "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -890,6 +911,7 @@
           "tasks"
         ],
         "summary": "Gives the tasks the order of `taskIds` by swapping their time slots.",
+        "description": "Every task is read before the first move: a missing task changes\nnothing. A failed move stops the request; the moves before it stay.",
         "operationId": "reorderTasks",
         "requestBody": {
           "content": {
@@ -903,7 +925,7 @@
         },
         "responses": {
           "200": {
-            "description": "The tasks have the requested order. A task that could not move is skipped.",
+            "description": "Every task moved to its slot of the requested order.",
             "content": {
               "application/json": {
                 "schema": {
@@ -943,7 +965,7 @@
             }
           },
           "404": {
-            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "description": "Problem `task_not_found`: a requested task does not exist or is no task.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -974,6 +996,16 @@
           },
           "500": {
             "description": "Problem `internal_error`, `calendar_unavailable`, or `event_not_created`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Problem `google_unavailable` or `google_reauthorization_required`.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1137,7 +1169,7 @@
             }
           },
           "404": {
-            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "description": "Problem `task_not_found`: a requested task does not exist or is no task.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1245,7 +1277,7 @@
             }
           },
           "404": {
-            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "description": "Problem `task_not_found`: a requested task does not exist or is no task.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1343,7 +1375,7 @@
             }
           },
           "404": {
-            "description": "Problem `task_not_found` or `no_tasks_to_reorder`.",
+            "description": "Problem `task_not_found`: a requested task does not exist or is no task.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1567,6 +1599,24 @@
           }
         }
       },
+      "CreateTaskResult": {
+        "type": "object",
+        "description": "The answer of `POST /api/tasks`.",
+        "required": [
+          "task",
+          "urgentMoveFailed"
+        ],
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/CalendarTask",
+            "description": "The created task."
+          },
+          "urgentMoveFailed": {
+            "type": "boolean",
+            "description": "`true` when the task is urgent and the other tasks were not all moved\nafter it. The task exists, but it can be in a later slot than the\nother tasks, or two tasks can overlap. Always `false` for a task that\nis not urgent."
+          }
+        }
+      },
       "Problem": {
         "type": "object",
         "description": "An RFC 9457 Problem Details body with the application `code` extension.",
@@ -1618,7 +1668,6 @@
           "forbidden",
           "not_found",
           "task_not_found",
-          "no_tasks_to_reorder",
           "no_free_slot",
           "payload_too_large",
           "rate_limited",

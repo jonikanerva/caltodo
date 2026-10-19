@@ -62,6 +62,14 @@ export const zCreateTaskRequest = z.object({
 });
 
 /**
+ * The answer of `POST /api/tasks`.
+ */
+export const zCreateTaskResult = z.object({
+    task: zCalendarTask,
+    urgentMoveFailed: z.boolean()
+});
+
+/**
  * The stable application code of a public failure.
  */
 export const zProblemCode = z.enum([
@@ -78,7 +86,6 @@ export const zProblemCode = z.enum([
     'forbidden',
     'not_found',
     'task_not_found',
-    'no_tasks_to_reorder',
     'no_free_slot',
     'payload_too_large',
     'rate_limited',
@@ -221,14 +228,14 @@ export const zListTasksResponse = z.array(zCalendarTask);
 export const zCreateTaskBody = zCreateTaskRequest;
 
 /**
- * The created task.
+ * The created task. `urgentMoveFailed` reports an urgent task that did not move to the front.
  */
-export const zCreateTaskResponse = zCalendarTask;
+export const zCreateTaskResponse = zCreateTaskResult;
 
 export const zBulkCompleteTasksBody = zTaskIdsRequest;
 
 /**
- * Done. The answer does not say which tasks failed.
+ * Every task is complete.
  */
 export const zBulkCompleteTasksResponse = zSuccess;
 
@@ -240,7 +247,7 @@ export const zReloadTasksResponse = zSuccess;
 export const zReorderTasksBody = zTaskIdsRequest;
 
 /**
- * The tasks have the requested order. A task that could not move is skipped.
+ * Every task moved to its slot of the requested order.
  */
 export const zReorderTasksResponse = zSuccess;
 

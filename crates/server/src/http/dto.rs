@@ -147,6 +147,19 @@ impl From<&Task> for CalendarTask {
     }
 }
 
+/// The answer of `POST /api/tasks`.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTaskResult {
+    /// The created task.
+    pub task: CalendarTask,
+    /// `true` when the task is urgent and the other tasks were not all moved
+    /// after it. The task exists, but it can be in a later slot than the
+    /// other tasks, or two tasks can overlap. Always `false` for a task that
+    /// is not urgent.
+    pub urgent_move_failed: bool,
+}
+
 /// The counters of "Reschedule all".
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

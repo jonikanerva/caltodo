@@ -295,7 +295,7 @@ Default answer to "should we add a library?" is **no**. Pin exact resolved versi
 
 - **Jobs** (`crates/server/src/application/jobs.rs`): one runner task inside `caltodo serve`. 00:00 in the `TZ` zone: "reschedule all" for each user with a calendar, one user at a time, at most 120 seconds per user. 01:15: delete expired action tokens, used tokens older than 30 days, and expired sessions. The runner sleeps at most 15 minutes at a time and recomputes the next run, so a daylight-saving change or a clock jump does not skip a run. A missed run (the process was down) does not run later, like node-cron.
 - **Shutdown** (`crates/server/src/lifecycle.rs`): on SIGTERM or SIGINT the server stops accepting connections, stops the job runner, and gives active requests 25 seconds. After the deadline the process ends the runtime with `shutdown_background` and exits. `crates/server/tests/lifecycle.rs` tests the idle stop, a request within the deadline, a request past the deadline, and the binary on SIGTERM and SIGINT.
-- **Bounded work:** the reorder updates at most 8 events at a time. Every Google call has a deadline (§2.3).
+- **Bounded work:** reorder and bulk complete read at most 8 events at a time and change one event at a time. Every Google call has a deadline (§2.3).
 
 ---
 

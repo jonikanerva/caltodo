@@ -274,6 +274,18 @@ async fn answers_match_the_document(pool: PgPool) {
         ),
         (
             Method::POST,
+            "/api/tasks/bulk-complete",
+            "/api/tasks/bulk-complete".into(),
+            Some(json!({"taskIds": ["t1", "none"]})),
+        ),
+        (
+            Method::POST,
+            "/api/tasks",
+            "/api/tasks".into(),
+            Some(json!({"title": "Urgent", "urgent": true})),
+        ),
+        (
+            Method::POST,
             "/api/tasks/reschedule-all",
             "/api/tasks/reschedule-all".into(),
             None,
@@ -370,6 +382,20 @@ async fn answers_match_the_document(pool: PgPool) {
         )
         .await;
     assert_documented(&doc, &Method::POST, "/api/tasks", &big);
+    // Reorder and bulk complete: a failed Google read of a task.
+    app.calendar.fail_get("t2", GoogleError::Status(503));
+    for path in ["/api/tasks/reorder", "/api/tasks/bulk-complete"] {
+        let reply = app
+            .send(
+                client
+                    .request(Method::POST, path)
+                    .json(&json!({"taskIds": ["t1", "t2"]}))
+                    .build(),
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::BAD_GATEWAY, "{path}");
+        assert_documented(&doc, &Method::POST, path, &reply);
+    }
     let logout = app
         .send(client.request(Method::POST, "/api/auth/logout").build())
         .await;

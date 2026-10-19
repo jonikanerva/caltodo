@@ -361,7 +361,7 @@ async fn the_task_requests_have_the_node_bodies(pool: PgPool) {
     let (base, seen) = stateful_google().await;
     let (services, user) = services_with(pool, &base, "Europe/Helsinki").await;
 
-    let task = tasks::create_task(
+    let created = tasks::create_task(
         &services,
         &user,
         &tasks::NewTask {
@@ -373,7 +373,8 @@ async fn the_task_requests_have_the_node_bodies(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert_eq!(task.id.as_str(), "evt-1");
+    assert_eq!(created.task.id.as_str(), "evt-1");
+    assert!(!created.urgent_move_failed);
     let log = seen.lock().unwrap().clone();
     let insert = log.iter().find(|r| r.method == Method::POST).unwrap();
     let mut expected_insert = requests["createWithDetails"]["insert"]["requestBody"].clone();

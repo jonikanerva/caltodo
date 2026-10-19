@@ -172,7 +172,8 @@ async fn creates_a_task_in_the_first_free_slot_with_an_action_link(pool: PgPool)
     )
     .await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
-    let task = reply.json();
+    assert_eq!(reply.json()["urgentMoveFailed"], false);
+    let task = reply.json()["task"].clone();
     assert_eq!(task["title"], "Write tests");
     assert_eq!(task["details"], "Cover it");
     assert_eq!(task["scheduledStart"], "2026-03-02T10:00:00.000Z");
@@ -200,7 +201,7 @@ async fn creates_a_task_in_the_first_free_slot_with_an_action_link(pool: PgPool)
     assert_eq!(tokens, 1);
     // The default duration of the settings applies without a duration.
     let default = post(&app, &client, "/api/tasks", &json!({"title": "Second"})).await;
-    assert_eq!(default.json()["duration"], 30);
+    assert_eq!(default.json()["task"]["duration"], 30);
 }
 
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
@@ -265,6 +266,19 @@ async fn a_failed_slot_search_is_a_google_error(pool: PgPool) {
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
 async fn an_urgent_task_moves_to_the_front(pool: PgPool) {
     let (app, client) = ready(pool).await;
+    put_old_task(&app);
+    let reply = post_urgent(&app, &client).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
+    assert_eq!(reply.json()["urgentMoveFailed"], false);
+    assert_eq!(
+        reply.json()["task"]["scheduledStart"],
+        "2026-03-02T09:00:00.000Z"
+    );
+    let old = app.calendar.event("primary", "old").unwrap();
+    assert_eq!(old.start, Some(ts("2026-03-02T09:30:00Z")));
+}
+
+fn put_old_task(app: &TestApp) {
     app.calendar.put_event(
         "primary",
         task_event(
@@ -275,18 +289,54 @@ async fn an_urgent_task_moves_to_the_front(pool: PgPool) {
             Some(false),
         ),
     );
-    let reply = post(
-        &app,
-        &client,
+}
+
+async fn post_urgent(app: &TestApp, client: &Client) -> crate::support::Reply {
+    post(
+        app,
+        client,
         "/api/tasks",
         &json!({"title": "Urgent", "urgent": true, "duration": 30}),
     )
-    .await;
+    .await
+}
+
+/// Issue #5 item 4: the task exists, so the answer stays 200, but it
+/// reports that the other tasks did not move after the urgent task.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_failed_move_of_another_task_is_reported(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_old_task(&app);
+    app.calendar.fail_patch("old");
+    let reply = post_urgent(&app, &client).await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
-    let urgent = reply.json();
-    assert_eq!(urgent["scheduledStart"], "2026-03-02T09:00:00.000Z");
+    assert_eq!(reply.json()["urgentMoveFailed"], true);
+    // The urgent task moved to the front; the old task kept its slot.
+    assert_eq!(
+        reply.json()["task"]["scheduledStart"],
+        "2026-03-02T09:00:00.000Z"
+    );
     let old = app.calendar.event("primary", "old").unwrap();
-    assert_eq!(old.start, Some(ts("2026-03-02T09:30:00Z")));
+    assert_eq!(old.start, Some(ts("2026-03-02T09:00:00Z")));
+}
+
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_failed_reschedule_after_an_urgent_create_is_reported(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_old_task(&app);
+    // The slot search of the create reads the calendar; the read of
+    // "reschedule all" fails.
+    app.calendar.fail_lists_after(1, GoogleError::Status(503));
+    let reply = post_urgent(&app, &client).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
+    assert_eq!(reply.json()["urgentMoveFailed"], true);
+    // The task stays in the first free slot, after the old task.
+    assert_eq!(
+        reply.json()["task"]["scheduledStart"],
+        "2026-03-02T10:00:00.000Z"
+    );
+    let old = app.calendar.event("primary", "old").unwrap();
+    assert_eq!(old.start, Some(ts("2026-03-02T09:00:00Z")));
 }
 
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
@@ -382,6 +432,29 @@ async fn completes_and_reopens_a_task(pool: PgPool) {
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
 async fn reorders_by_swapping_slots(pool: PgPool) {
     let (app, client) = ready(pool).await;
+    put_two_tasks(&app);
+    let reply = post(
+        &app,
+        &client,
+        "/api/tasks/reorder",
+        &json!({"taskIds": ["t1", "t2"]}),
+    )
+    .await;
+    assert_eq!(reply.json(), json!({"success": true}));
+    assert_eq!(start_of(&app, "t1"), ts("2026-03-03T09:00:00Z"));
+    assert_eq!(start_of(&app, "t2"), ts("2026-03-03T10:00:00Z"));
+    let invalid = post(
+        &app,
+        &client,
+        "/api/tasks/reorder",
+        &json!({"taskIds": "bad"}),
+    )
+    .await;
+    assert_eq!(invalid.problem(StatusCode::BAD_REQUEST), "invalid_task_ids");
+    assert_eq!(invalid.json()["detail"], "Invalid taskIds payload");
+}
+
+fn put_two_tasks(app: &TestApp) {
     app.calendar.put_event(
         "primary",
         task_event(
@@ -402,31 +475,90 @@ async fn reorders_by_swapping_slots(pool: PgPool) {
             Some(false),
         ),
     );
-    let reply = post(
-        &app,
-        &client,
-        "/api/tasks/reorder",
-        &json!({"taskIds": ["t1", "t2", "gone"]}),
-    )
-    .await;
-    assert_eq!(reply.json(), json!({"success": true}));
-    assert_eq!(
-        app.calendar.event("primary", "t1").unwrap().start,
-        Some(ts("2026-03-03T09:00:00Z"))
+}
+
+fn start_of(app: &TestApp, id: &str) -> jiff::Timestamp {
+    app.calendar.event("primary", id).unwrap().start.unwrap()
+}
+
+fn patches(app: &TestApp) -> Vec<String> {
+    app.calendar
+        .calls()
+        .into_iter()
+        .filter_map(|call| match call {
+            CalendarCall::Patch { event, .. } => Some(event),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Issue #5 item 5: one invalid task among valid tasks stops the whole
+/// request before the first change (DOCTRINE P5).
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_reorder_with_one_invalid_task_changes_nothing(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_two_tasks(&app);
+    app.calendar.put_event(
+        "primary",
+        task_event(
+            "cancelled",
+            "Gone",
+            "2026-03-03T11:00:00Z",
+            "2026-03-03T11:30:00Z",
+            Some(false),
+        ),
     );
-    assert_eq!(
-        app.calendar.event("primary", "t2").unwrap().start,
-        Some(ts("2026-03-03T10:00:00Z"))
+    app.calendar.cancel_on_get("cancelled");
+    app.calendar.put_event(
+        "primary",
+        busy_event("meeting", "2026-03-03T12:00:00Z", "2026-03-03T13:00:00Z"),
     );
-    let invalid = post(
-        &app,
-        &client,
-        "/api/tasks/reorder",
-        &json!({"taskIds": "bad"}),
-    )
-    .await;
-    assert_eq!(invalid.problem(StatusCode::BAD_REQUEST), "invalid_task_ids");
-    assert_eq!(invalid.json()["detail"], "Invalid taskIds payload");
+    let mut timeless = task_event(
+        "timeless",
+        "No time",
+        "2026-03-03T14:00:00Z",
+        "2026-03-03T14:30:00Z",
+        Some(false),
+    );
+    timeless.end = None;
+    app.calendar.put_event("primary", timeless);
+    for (invalid, status, code, detail) in [
+        (
+            "gone",
+            StatusCode::NOT_FOUND,
+            "task_not_found",
+            "Task not found",
+        ),
+        (
+            "cancelled",
+            StatusCode::NOT_FOUND,
+            "task_not_found",
+            "Task not found",
+        ),
+        (
+            "meeting",
+            StatusCode::NOT_FOUND,
+            "task_not_found",
+            "Task not found",
+        ),
+        (
+            "timeless",
+            StatusCode::BAD_REQUEST,
+            "invalid_event_time",
+            "Invalid event time range.",
+        ),
+    ] {
+        let reply = post(
+            &app,
+            &client,
+            "/api/tasks/reorder",
+            &json!({"taskIds": ["t1", invalid, "t2"]}),
+        )
+        .await;
+        assert_eq!(reply.problem(status), code, "{invalid}");
+        assert_eq!(reply.json()["detail"], detail, "{invalid}");
+    }
+    // Only missing tasks: the same answer (`no_tasks_to_reorder` is gone).
     let none = post(
         &app,
         &client,
@@ -434,34 +566,160 @@ async fn reorders_by_swapping_slots(pool: PgPool) {
         &json!({"taskIds": ["gone"]}),
     )
     .await;
-    assert_eq!(none.problem(StatusCode::NOT_FOUND), "no_tasks_to_reorder");
+    assert_eq!(none.problem(StatusCode::NOT_FOUND), "task_not_found");
+    assert_eq!(patches(&app), Vec::<String>::new());
+    assert_eq!(start_of(&app, "t1"), ts("2026-03-03T10:00:00Z"));
+    assert_eq!(start_of(&app, "t2"), ts("2026-03-03T09:00:00Z"));
 }
 
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
-async fn bulk_complete_reports_success_even_for_missing_tasks(pool: PgPool) {
+async fn a_reorder_with_a_failed_read_changes_nothing(pool: PgPool) {
     let (app, client) = ready(pool).await;
+    put_two_tasks(&app);
+    app.calendar.fail_get("t2", GoogleError::Status(500));
+    let reply = post(
+        &app,
+        &client,
+        "/api/tasks/reorder",
+        &json!({"taskIds": ["t1", "t2"]}),
+    )
+    .await;
+    assert_eq!(reply.problem(StatusCode::BAD_GATEWAY), "google_unavailable");
+    assert_eq!(patches(&app), Vec::<String>::new());
+    assert_eq!(start_of(&app, "t1"), ts("2026-03-03T10:00:00Z"));
+}
+
+/// A failed move stops the request with an error; Google Calendar has no
+/// transaction, so a move before it stays.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_reorder_stops_at_a_failed_move(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_two_tasks(&app);
+    app.calendar.fail_patch("t2");
+    let reply = post(
+        &app,
+        &client,
+        "/api/tasks/reorder",
+        &json!({"taskIds": ["t1", "t2"]}),
+    )
+    .await;
+    assert_eq!(reply.problem(StatusCode::BAD_GATEWAY), "google_unavailable");
+    assert_eq!(patches(&app), vec!["t1".to_owned(), "t2".to_owned()]);
+    assert_eq!(start_of(&app, "t1"), ts("2026-03-03T09:00:00Z"));
+    assert_eq!(start_of(&app, "t2"), ts("2026-03-03T09:00:00Z"));
+
     app.calendar.put_event(
         "primary",
         task_event(
-            "t1",
-            "One",
-            "2026-03-03T10:00:00Z",
-            "2026-03-03T10:30:00Z",
+            "t3",
+            "Three",
+            "2026-03-03T08:00:00Z",
+            "2026-03-03T08:30:00Z",
             Some(false),
         ),
     );
+    app.calendar.fail_patch("t1");
+    app.calendar.clear_calls();
+    let first = post(
+        &app,
+        &client,
+        "/api/tasks/reorder",
+        &json!({"taskIds": ["t1", "t3"]}),
+    )
+    .await;
+    assert_eq!(first.problem(StatusCode::BAD_GATEWAY), "google_unavailable");
+    // The request stops at the first failure: t3 is not moved.
+    assert_eq!(patches(&app), vec!["t1".to_owned()]);
+    assert_eq!(start_of(&app, "t3"), ts("2026-03-03T08:00:00Z"));
+}
+
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn bulk_complete_completes_every_task(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_two_tasks(&app);
     let reply = post(
         &app,
         &client,
         "/api/tasks/bulk-complete",
-        &json!({"taskIds": ["t1", "missing"]}),
+        &json!({"taskIds": ["t1", "t2"]}),
     )
     .await;
     assert_eq!(reply.json(), json!({"success": true}));
+    for id in ["t1", "t2"] {
+        let event = app.calendar.event("primary", id).unwrap();
+        assert_eq!(event.completion(), Some(true), "{id}");
+    }
+}
+
+/// Issue #5 item 5: the Node server answered a success for missing tasks.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn bulk_complete_with_one_missing_task_changes_nothing(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_two_tasks(&app);
+    let reply = post(
+        &app,
+        &client,
+        "/api/tasks/bulk-complete",
+        &json!({"taskIds": ["t1", "missing", "t2"]}),
+    )
+    .await;
+    assert_eq!(reply.problem(StatusCode::NOT_FOUND), "task_not_found");
+    assert_eq!(reply.json()["detail"], "Task not found");
+    app.calendar.fail_get("t2", GoogleError::Transport);
+    let unreadable = post(
+        &app,
+        &client,
+        "/api/tasks/bulk-complete",
+        &json!({"taskIds": ["t1", "t2"]}),
+    )
+    .await;
     assert_eq!(
-        app.calendar.event("primary", "t1").unwrap().completion(),
-        Some(true)
+        unreadable.problem(StatusCode::BAD_GATEWAY),
+        "google_unavailable"
     );
+    assert_eq!(patches(&app), Vec::<String>::new());
+    for id in ["t1", "t2"] {
+        let event = app.calendar.event("primary", id).unwrap();
+        assert_eq!(event.completion(), Some(false), "{id}");
+    }
+}
+
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn bulk_complete_stops_at_a_failed_change(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_two_tasks(&app);
+    app.calendar.fail_patch("t1");
+    let reply = post(
+        &app,
+        &client,
+        "/api/tasks/bulk-complete",
+        &json!({"taskIds": ["t2", "t1"]}),
+    )
+    .await;
+    assert_eq!(reply.problem(StatusCode::BAD_GATEWAY), "google_unavailable");
+    // The change before the failure stays.
+    let done = app.calendar.event("primary", "t2").unwrap();
+    assert_eq!(done.completion(), Some(true));
+    let failed = app.calendar.event("primary", "t1").unwrap();
+    assert_eq!(failed.completion(), Some(false));
+}
+
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn without_stored_google_access_no_task_is_found(pool: PgPool) {
+    let (app, client) = ready(pool).await;
+    put_two_tasks(&app);
+    sqlx::query("UPDATE users SET access_token = NULL")
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    for path in ["/api/tasks/reorder", "/api/tasks/bulk-complete"] {
+        let reply = post(&app, &client, path, &json!({"taskIds": ["t1", "t2"]})).await;
+        assert_eq!(
+            reply.problem(StatusCode::NOT_FOUND),
+            "task_not_found",
+            "{path}"
+        );
+    }
 }
 
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]

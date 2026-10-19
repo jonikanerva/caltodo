@@ -69,6 +69,9 @@ struct CalendarState {
     /// The access tokens that the fake accepts; empty accepts every token.
     valid_tokens: BTreeSet<String>,
     fail_list: Option<GoogleError>,
+    /// The number of list calls that still succeed before `fail_lists_later`
+    /// applies, and its error.
+    fail_lists_later: Option<(usize, GoogleError)>,
     fail_calendars: Option<GoogleError>,
     fail_insert: Option<GoogleError>,
     fail_patch: BTreeSet<String>,
@@ -143,6 +146,11 @@ impl FakeCalendar {
         self.with(|state| state.fail_list = error);
     }
 
+    /// The next `succeed` list calls succeed; every later list call fails.
+    pub fn fail_lists_after(&self, succeed: usize, error: GoogleError) {
+        self.with(|state| state.fail_lists_later = Some((succeed, error)));
+    }
+
     pub fn fail_calendars(&self, error: Option<GoogleError>) {
         self.with(|state| state.fail_calendars = error);
     }
@@ -203,6 +211,12 @@ impl FakeCalendar {
             });
             if let Some(error) = state.fail_list {
                 return Err(error);
+            }
+            if let Some((succeed, error)) = &mut state.fail_lists_later {
+                if *succeed == 0 {
+                    return Err(*error);
+                }
+                *succeed -= 1;
             }
             let mut events: Vec<CalendarEvent> = state
                 .events
