@@ -18,24 +18,30 @@ const openInTheme = async (page: Page, path: string, theme: Theme): Promise<void
     .toBe(theme === "dark")
 }
 
+// The pages without the signed-in layout have no theme toggle and do not
+// apply the stored theme, so they show the light theme only. If they get the
+// dark theme, check them in both themes here.
+test.describe("signed out", () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  for (const path of ["/", "/privacy"]) {
+    test(`the page ${path} shows the light theme and passes axe`, async ({ page }) => {
+      await page.addInitScript(() => {
+        localStorage.setItem("theme", "dark")
+      })
+      await page.goto(path)
+      if (path === "/") {
+        await expect(page.getByTestId("button-google-signin")).toBeVisible()
+      } else {
+        await expect(page.getByRole("heading", { name: "Privacy Policy" })).toBeVisible()
+      }
+      await expect(page.locator("html")).not.toHaveClass(/\bdark\b/)
+      await expectNoAxeViolations(page)
+    })
+  }
+})
+
 for (const theme of THEMES) {
-  test.describe(`signed out, ${theme} theme`, () => {
-    test.use({ storageState: { cookies: [], origins: [] } })
-
-    test("the sign-in page passes axe", async ({ page }) => {
-      await openInTheme(page, "/", theme)
-      await expect(page.getByText("Welcome to Todo", { exact: true })).toBeVisible()
-      await expect(page.getByTestId("button-google-signin")).toBeVisible()
-      await expectNoAxeViolations(page)
-    })
-
-    test("the privacy page passes axe", async ({ page }) => {
-      await openInTheme(page, "/privacy", theme)
-      await expect(page.getByRole("heading", { name: "Privacy Policy" })).toBeVisible()
-      await expectNoAxeViolations(page)
-    })
-  })
-
   test(`the settings page passes axe in the ${theme} theme`, async ({ page }) => {
     await openInTheme(page, "/settings", theme)
     await expect(page.getByTestId("button-save-settings")).toBeVisible()
