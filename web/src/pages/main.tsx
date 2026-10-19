@@ -194,6 +194,9 @@ export default function MainPage() {
       })
     },
     onError: () => {
+      // The server could not read Google Calendar, so the shown list can be
+      // out of date. A new list read shows the error instead of the old list.
+      void queryClient.invalidateQueries({ queryKey: ["/api/tasks"] })
       toast({
         title: "Error",
         description: "Failed to sync calendar. Please try again.",

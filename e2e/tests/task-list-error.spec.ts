@@ -1,5 +1,5 @@
 // The task list when the server cannot read the tasks: the page shows an
-// error, never an empty or an old list (issue #5, item 7). The browser gets
+// error, never an empty or an old list (issue #5, items 6 and 7). The browser gets
 // the answer of the server when Google Calendar fails. A real Google failure
 // in the e2e server would affect the other journeys of the shared account.
 import type { Page, Route } from "@playwright/test"
@@ -62,26 +62,32 @@ test("a failed task load shows an error instead of an empty list", async ({ page
   await expectNoAxeViolations(page)
 })
 
-test("a failed reload hides the old list", async ({ page }) => {
-  const open = {
-    id: "e2eerroropen",
-    title: "Open task before the failure",
-    details: null,
-    duration: 60,
-    scheduledStart: "2030-03-04T10:00:00.000Z",
-    scheduledEnd: "2030-03-04T11:00:00.000Z",
-    completed: false,
-    completedAt: null,
-    priority: 1,
-  }
-  const done = {
-    ...open,
-    id: "e2eerrordone",
-    title: "Completed task before the failure",
-    completed: true,
-    completedAt: "2030-03-01T10:00:00.000Z",
-    priority: 0,
-  }
+const openTask = {
+  id: "e2eerroropen",
+  title: "Open task before the failure",
+  details: null,
+  duration: 60,
+  scheduledStart: "2030-03-04T10:00:00.000Z",
+  scheduledEnd: "2030-03-04T11:00:00.000Z",
+  completed: false,
+  completedAt: null,
+  priority: 1,
+}
+const doneTask = {
+  ...openTask,
+  id: "e2eerrordone",
+  title: "Completed task before the failure",
+  completed: true,
+  completedAt: "2030-03-01T10:00:00.000Z",
+  priority: 0,
+}
+
+// Shows a list with one open and one completed task, then answers the reload
+// with `reload` and every later list read with a Google failure.
+const showListThenReload = async (
+  page: Page,
+  reload: (route: Route) => Promise<void>,
+): Promise<void> => {
   // The Reload button needs a selected calendar. The other journeys share the
   // account, so the test answers the settings itself.
   await page.route("**/api/settings", async (route) => {
@@ -104,27 +110,38 @@ test("a failed reload hides the old list", async ({ page }) => {
       }),
     })
   })
-  await page.route("**/api/tasks/reload", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ success: true }),
-    }),
-  )
+  await page.route("**/api/tasks/reload", reload)
   await answerTaskList(
     page,
     (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify([open, done]),
+        body: JSON.stringify([openTask, doneTask]),
       }),
     googleUnavailable,
   )
   await page.goto("/")
-  await expect(page.getByTestId(`card-task-${open.id}`)).toBeVisible()
+  await expect(page.getByTestId(`card-task-${openTask.id}`)).toBeVisible()
   await expect(page.getByTestId("button-toggle-completed")).toBeVisible()
   await page.getByTestId("button-reload-calendar").click()
+}
+
+test("a failed reload hides the old list", async ({ page }) => {
+  await showListThenReload(page, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true }),
+    }),
+  )
+  await expectErrorInsteadOfList(page)
+})
+
+test("a reload that Google fails shows an error, not a sync", async ({ page }) => {
+  await showListThenReload(page, googleUnavailable)
+  await expect(page.getByText("Failed to sync calendar. Please try again.")).toBeVisible()
+  await expect(page.getByText("Calendar synced", { exact: true })).toHaveCount(0)
   await expectErrorInsteadOfList(page)
 })
 
