@@ -71,14 +71,14 @@ depends = ["db:start"]
 run = "scripts/caltodo-pg dump"
 
 [tasks."db:restore"]
-description = "Restore a db:dump file into an empty development database: mise run db:restore -- FILE"
+description = "Replace the development database with a db:dump file, then migrate: mise run db:restore -- FILE"
 depends = ["db:start"]
-run = "scripts/caltodo-pg restore"
+run = ["scripts/caltodo-pg restore", { task = "db:migrate" }]
 
 [tasks."db:clone"]
-description = "Replace the development database with the one of another checkout: mise run db:clone -- DIR"
+description = "Replace the development database with the one of another checkout, then migrate: mise run db:clone -- DIR"
 depends = ["db:start"]
-run = "scripts/caltodo-pg clone"
+run = ["scripts/caltodo-pg clone", { task = "db:migrate" }]
 
 [tasks."db:reap"]
 description = "Delete the test containers of ended runs of this checkout (--all: every checkout; --kept: kept ones)"
@@ -168,7 +168,16 @@ run = "scripts/caltodo-pg with-test-db -- scripts/sqlx-metadata prepare"
 
 [tasks."contract:export"]
 description = "Write contract/openapi.json from the Rust HTTP types"
-run = "cargo run --locked --quiet -p caltodo --bin openapi -- contract/openapi.json"
+# Another task can read the document at the same time, so the export goes to
+# a temporary file and replaces the document only when it changed.
+run = '''
+set -eu
+temporary="contract/openapi.json.$$.tmp"
+trap 'rm -f "$temporary"' EXIT
+cargo run --locked --quiet -p caltodo --bin openapi -- "$temporary"
+if cmp -s "$temporary" contract/openapi.json; then exit 0; fi
+mv "$temporary" contract/openapi.json
+'''
 
 [tasks."contract:generate"]
 description = "Generate the TypeScript API client from contract/openapi.json"

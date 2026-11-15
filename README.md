@@ -115,8 +115,10 @@ The app will be available at `http://localhost:5000`. Vite sends `/api` and `/ac
 - `mise run test` - Rust tests, Vitest, and the Playwright journeys
 - `mise run verify` - The full quality gate; run it before each commit
 - `mise run db:start`, `db:stop`, `db:migrate`, `db:reset`, `db:info`, `db:psql` - The development database of this checkout
-- `mise run db:dump -- FILE`, `db:restore -- FILE`, `db:clone -- DIR` - Copy development data
+- `mise run db:dump -- FILE`, `db:restore -- FILE`, `db:clone -- DIR` - Copy development data (restore and clone replace the development database and keep a backup in `target/caltodo-pg/`)
 - `mise run db:reap` - Delete the test containers of ended runs
+- `mise run contract:export`, `contract:generate`, `contract:check` - The API contract and the generated client
+- `mise run start` - Run the release server from `mise run build`
 
 ### Local databases
 
@@ -125,8 +127,6 @@ Each checkout (worktree) has its own development PostgreSQL container and volume
 - `mise run db:stop` keeps the data. The volume stays until you delete it.
 - `CALTODO_PG_KEEP=failure mise run test` keeps the test container of a failed run for debugging and prints its URL.
 - Google sign-in in development needs ports 5000 and 5001, so one checkout at a time runs `mise run dev`.
-- `mise run contract:export`, `contract:generate`, `contract:check` - The API contract and the generated client
-- `mise run start` - Run the release server from `mise run build`
 
 ## Production Deployment
 

@@ -20,7 +20,7 @@
 #   info                 Show the containers and the volume of this checkout
 #   psql [ARGS]          Run psql in the development container
 #   dump FILE            Write the development database to FILE (pg_dump custom format)
-#   restore FILE         Restore FILE into an empty development database
+#   restore FILE         Replace the development database with FILE (a backup of the old one stays)
 #   reset                Drop and create the development database (empty)
 #   clone SOURCE_DIR     Replace the development database with the one of another checkout
 #   with-test-db -- CMD  Run CMD with a temporary test server (DATABASE_URL)
@@ -142,6 +142,10 @@ pid_alive() {
 }
 
 random_port() {
+  if [ "${1:-}" = dev ]; then
+    echo $((40000 + $(od -An -N2 -tu2 /dev/urandom | tr -d ' ') % 8000))
+    return
+  fi
   # Test containers use 20000-39999 and development containers 40000-47999.
   # Both ranges are below the macOS ephemeral range (49152-65535) and outside
   # 48000-53999, which the spot-price project uses on the same Mac.
@@ -206,11 +210,12 @@ wait_ready() {
 # takes between the check and the start fails the start; then try another.
 #   run_with_port NAME PREFERRED_PORT ARGUMENTS...
 run_with_port() {
-  local name=$1 port=$2 attempt output
+  local name=$1 port=$2 attempt output kind=test
   shift 2
+  case $name in caltodo-dev-*) kind=dev ;; esac
   for attempt in 1 2 3 4 5 6 7 8 9 10; do
     if [ -z "$port" ] || port_busy "$port"; then
-      port=$(random_port)
+      port=$(random_port "$kind")
       continue
     fi
     if output=$(container run --detach --name "$name" --progress none --platform linux/arm64 \
@@ -220,7 +225,7 @@ run_with_port() {
     fi
     container delete --force "$name" >/dev/null 2>&1 || true
     case $output in
-      *"Address already in use"*) port=$(random_port) ;;
+      *"Address already in use"*) port=$(random_port "$kind") ;;
       *) die "container run failed: $output" ;;
     esac
   done
@@ -302,7 +307,9 @@ dev_stop() {
 
 dev_psql() {
   dev_running
-  container exec --interactive "$DEV_CONTAINER" psql --host 127.0.0.1 \
+  local tty=""
+  if [ -t 0 ] && [ -t 1 ]; then tty=--tty; fi
+  container exec --interactive $tty "$DEV_CONTAINER" psql --host 127.0.0.1 \
     --username "$PG_USER" --dbname "$DEV_DATABASE" "$@"
 }
 
@@ -328,13 +335,18 @@ dev_dump() {
   note "wrote $file"
 }
 
+# Replace the development database with FILE. A database that has tables is
+# first written to target/caltodo-pg/before-restore-TIME.dump, so a wrong
+# restore can be undone with a second restore.
 dev_restore() {
   local file=$1
   [ -s "$file" ] || die "no dump at $file"
   dev_running
   if [ "$(dev_table_count)" != "0" ]; then
-    die "the development database is not empty; run 'mise run db:reset' first"
+    mkdir -p "$STATE"
+    dev_dump "$STATE/before-restore-$(date +%Y%m%dT%H%M%S).dump"
   fi
+  dev_reset
   # Ownership and privileges come from the target server: every object
   # belongs to the local superuser.
   container exec --interactive "$DEV_CONTAINER" pg_restore --host 127.0.0.1 \
@@ -363,7 +375,6 @@ dev_clone() {
   local file="$STATE/clone-$(date +%Y%m%dT%H%M%S).dump"
   container exec "$source_container" pg_dump --host 127.0.0.1 --username "$PG_USER" \
     --format custom --dbname "$DEV_DATABASE" >"$file"
-  dev_reset
   dev_restore "$file"
   rm -f "$file"
 }
@@ -408,6 +419,21 @@ reap() {
   done < <(list_test_containers)
 }
 
+# Report the development containers of checkouts that no longer exist. They
+# hold data, so the script never deletes them: delete one with
+# `container delete NAME` and its volume with `container volume delete NAME`.
+report_orphan_dev() {
+  container list --all --format json 2>/dev/null | "$PYTHON" -I -c '
+import json, os, sys
+for item in json.load(sys.stdin):
+    config = item.get("configuration", {})
+    labels = config.get("labels", {})
+    path = labels.get("caltodo.path", "")
+    if labels.get("caltodo.role") == "dev" and path and not os.path.isdir(path):
+        print("caltodo-pg: %s belongs to a removed checkout (%s); it keeps its volume" % (config.get("id"), path))
+' >&2
+}
+
 live_test_runs() {
   local count=0 name state run pid checkout
   while read -r name state run pid checkout; do
@@ -442,15 +468,17 @@ with_test_db() {
   name="caltodo-test-$WT-$run"
 
   # The limit and the creation are one step under a lock for this Mac.
-  local global_lock="$GLOBAL_STATE/test-start.lock"
+  local global_lock="$GLOBAL_STATE/test-start.lock" holding=1
   acquire_lock "$global_lock" $$
   while [ "$(live_test_runs)" -ge "$max" ]; do
     rm -f "$global_lock"
+    holding=0
     if [ "$waited" -eq 0 ]; then note "waiting: $max test containers run (CALTODO_PG_MAX_TEST_RUNS)"; fi
     waited=$((waited + 1))
     [ "$waited" -lt 1200 ] || die "timed out waiting for a free test container slot"
     sleep 1
     acquire_lock "$global_lock" $$
+    holding=1
   done
 
   # `status` stays empty until the command ends; an earlier exit keeps its code.
@@ -459,7 +487,7 @@ with_test_db() {
     local code=$?
     status=${status:-$code}
     trap - EXIT INT TERM HUP
-    rm -f "$global_lock"
+    if [ "$holding" = 1 ]; then rm -f "$global_lock"; fi
     local keep=${CALTODO_PG_KEEP:-}
     if [ -n "$(inspect "$name")" ]; then
       if [ "$keep" = "always" ] || { [ "$keep" = "failure" ] && [ "$status" -ne 0 ]; }; then
@@ -496,6 +524,7 @@ with_test_db() {
     -c fsync=off -c synchronous_commit=off -c full_page_writes=off \
     -c max_connections=200)
   rm -f "$global_lock"
+  holding=0
   wait_ready "$name" "$port"
 
   export CALTODO_PG_RUN_ID=$run CALTODO_PG_RUN_CONTAINER=$name CALTODO_PG_RUN_CHECKOUT=$WT
@@ -525,7 +554,7 @@ case $command in
   with-test-db) with_test_db "$@" ;;
   reap)
     case ${1:-} in
-      --all) reap all ;;
+      --all) reap all; report_orphan_dev ;;
       --kept) reap kept ;;
       '') reap checkout ;;
       *) die "reap [--all|--kept]" ;;
