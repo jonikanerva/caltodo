@@ -68,7 +68,7 @@ A web-based todo application that uses Google Calendar as its backend storage. T
 
 1. **mise**: `brew install mise`, then activate it in your shell (see the mise documentation).
 2. **rustup**: `brew install rustup`, then `rustup-init`. `rust-toolchain.toml` selects the Rust version.
-3. **Docker** (for example OrbStack or Docker Desktop) for the local PostgreSQL container.
+3. **Apple container** 1.0 or later (Apple silicon) for the local PostgreSQL containers: install the package from [github.com/apple/container](https://github.com/apple/container/releases), then run `container system start` once. The Mac needs no PostgreSQL installation.
 4. **Google Cloud Project**
    - Go to [Google Cloud Console](https://console.cloud.google.com/)
    - Create a new project
@@ -93,7 +93,7 @@ TOKEN_ENCRYPTION_KEY=32+_char_random_key_for_token_encryption
 Notes:
 
 - `SESSION_SECRET` and `ACTION_TOKEN_SECRET` must be different values and at least 32 characters long.
-- `mise run dev` uses the local container database (`postgres://postgres:postgres@127.0.0.1:55473/caltodo`) when `.env` has no `DATABASE_URL`.
+- `mise run dev` uses the development database of the checkout (`mise run db:info` shows its URL). It ignores `DATABASE_URL`; set `CALTODO_DEV_DATABASE_URL` to use another database.
 - `TZ` sets the time zone of the jobs (00:00 and 01:15). The default is UTC. Stored timestamps are always UTC.
 
 ### Installation
@@ -101,7 +101,7 @@ Notes:
 ```bash
 mise trust
 mise run setup     # tools, dependencies, and the Playwright browser
-mise run dev       # PostgreSQL container, migrations, the server on 5001, and Vite on 5000
+mise run dev       # the PostgreSQL container of this checkout, migrations, the server on 5001, and Vite on 5000
 ```
 
 The app will be available at `http://localhost:5000`. Vite sends `/api` and `/action` to the server.
@@ -114,9 +114,19 @@ The app will be available at `http://localhost:5000`. Vite sends `/api` and `/ac
 - `mise run build` - Export the API contract, generate the client, build the web app and the release server
 - `mise run test` - Rust tests, Vitest, and the Playwright journeys
 - `mise run verify` - The full quality gate; run it before each commit
-- `mise run db:start`, `db:stop`, `db:migrate`, `db:reset` - The local PostgreSQL container
+- `mise run db:start`, `db:stop`, `db:migrate`, `db:reset`, `db:info`, `db:psql` - The development database of this checkout
+- `mise run db:dump -- FILE`, `db:restore -- FILE`, `db:clone -- DIR` - Copy development data (restore and clone replace the development database and keep a backup in `target/caltodo-pg/`)
+- `mise run db:reap` - Delete the test containers of ended runs
 - `mise run contract:export`, `contract:generate`, `contract:check` - The API contract and the generated client
 - `mise run start` - Run the release server from `mise run build`
+
+### Local databases
+
+Each checkout (worktree) has its own development PostgreSQL container and volume. Each test run (`mise run test`, `test:e2e`, `sqlx:check`, `verify`) starts its own temporary PostgreSQL container and deletes it at the end. So two checkouts, or two test runs in one checkout, do not share a database. `scripts/caltodo-pg` manages the containers; use the mise tasks, not your own `container` commands. `STACK.md` §1 has the details.
+
+- `mise run db:stop` keeps the data. The volume stays until you delete it.
+- `CALTODO_PG_KEEP=failure mise run test` keeps the test container of a failed run for debugging and prints its URL.
+- Google sign-in in development needs ports 5000 and 5001, so one checkout at a time runs `mise run dev`.
 
 ## Production Deployment
 

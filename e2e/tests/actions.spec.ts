@@ -1,7 +1,7 @@
 // The action link of a task event: the page that a user opens from Google
 // Calendar, signed in and signed out.
 import type { Page } from "@playwright/test"
-import { BASE_URL } from "./servers.js"
+import { BASE_URL, STORAGE_STATE } from "./servers.js"
 import { expect, expectNoAxeViolations, test } from "./support.js"
 
 const createTaskWithLink = async (
@@ -46,7 +46,7 @@ test.describe("signed out", () => {
     page,
   }) => {
     const owner = await browser.newContext({
-      storageState: "test-results/.auth/state.json",
+      storageState: STORAGE_STATE,
     })
     const ownerPage = await owner.newPage()
     const { title, link } = await createTaskWithLink(ownerPage)

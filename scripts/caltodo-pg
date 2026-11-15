@@ -1,0 +1,564 @@
+#!/usr/bin/env bash
+# caltodo-pg: the local PostgreSQL containers of development and of the tests
+# (STACK.md §1 and §3, ADR 0006). The mise tasks call this script. Do not
+# start, stop, or delete the containers of this project in another way.
+#
+# Apple `container` runs each container in its own light virtual machine.
+#
+# - Each checkout (worktree) has one development container and one named
+#   volume. The checkout path identifies the checkout: the first 12
+#   hexadecimal digits of the SHA-256 of the physical path.
+# - Each independent test run has its own temporary container. A nested task
+#   reuses the container of its run only through the CALTODO_PG_RUN_* variables
+#   that `with-test-db` exports.
+#
+# Usage: scripts/caltodo-pg [--root DIR] COMMAND [ARGUMENTS]
+#
+#   dev-start            Create or start the development container; wait until ready
+#   dev-stop             Stop the development container; the volume keeps the data
+#   dev-url              Print the URL of the development database
+#   info                 Show the containers and the volume of this checkout
+#   psql [ARGS]          Run psql in the development container
+#   dump FILE            Write the development database to FILE (pg_dump custom format)
+#   restore FILE         Replace the development database with FILE (a backup of the old one stays)
+#   reset                Drop and create the development database (empty)
+#   clone SOURCE_DIR     Replace the development database with the one of another checkout
+#   with-test-db -- CMD  Run CMD with a temporary test server (DATABASE_URL)
+#   reap [--all]         Delete the test containers of dead runs (this checkout, or all)
+#
+# Environment:
+#   CALTODO_PG_IMAGE         The PostgreSQL image (mise.toml). The major version names the volume.
+#   CALTODO_PG_KEEP          `failure` keeps the test container of a failed run; `always` keeps every one.
+#   CALTODO_PG_MAX_TEST_RUNS The maximum number of live test containers on this Mac (default 4).
+set -euo pipefail
+
+die() {
+  printf 'caltodo-pg: %s\n' "$*" >&2
+  exit 1
+}
+note() { printf 'caltodo-pg: %s\n' "$*" >&2; }
+
+ROOT=""
+if [ "${1:-}" = "--root" ]; then
+  [ $# -ge 2 ] || die "--root needs a directory"
+  ROOT=$2
+  shift 2
+fi
+if [ -z "$ROOT" ]; then
+  ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die "run inside a checkout or give --root"
+fi
+ROOT=$(cd "$ROOT" && pwd -P)
+[ -f "$ROOT/mise.toml" ] || die "$ROOT is not a caltodo checkout"
+
+: "${CALTODO_PG_IMAGE:?CALTODO_PG_IMAGE is not set; run this script through mise}"
+command -v container >/dev/null 2>&1 || die "the Apple container tool is missing (README.md)"
+
+PYTHON=/usr/bin/python3
+[ -x "$PYTHON" ] || PYTHON=$(command -v python3) || die "python3 is missing (Xcode Command Line Tools)"
+
+# The major version from the image tag: postgres:18 -> 18, postgres:18.7 -> 18.
+tag=${CALTODO_PG_IMAGE##*:}
+MAJOR=${tag%%[.-]*}
+case $MAJOR in '' | *[!0-9]*) die "CALTODO_PG_IMAGE needs a numeric major version tag" ;; esac
+
+checkout_id() {
+  printf '%s' "$1" | shasum -a 256 | cut -c1-12
+}
+WT=$(checkout_id "$ROOT")
+DEV_CONTAINER="caltodo-dev-$WT"
+DEV_VOLUME="caltodo-dev-$WT-pg$MAJOR"
+DEV_DATABASE=caltodo
+STATE="$ROOT/target/caltodo-pg"
+GLOBAL_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/caltodo-pg"
+# Synthetic local credentials. The ports listen on 127.0.0.1 only.
+PG_USER=postgres
+PG_PASSWORD=postgres
+
+# --- Small helpers ----------------------------------------------------------
+
+# A lock file with the owner process id. shlock(1) is atomic and replaces the
+# lock of a dead process. The lock is released at exit.
+acquire_lock() {
+  local file=$1 owner=$2 waited=0
+  mkdir -p "$(dirname "$file")"
+  until shlock -f "$file" -p "$owner"; do
+    if [ "$waited" -ge 600 ]; then
+      die "timed out waiting for the lock $file"
+    fi
+    if [ "$waited" -eq 0 ]; then note "waiting for the lock $file"; fi
+    sleep 0.5
+    waited=$((waited + 1))
+  done
+}
+
+# The JSON of `container inspect`, or nothing when the container is missing.
+inspect() {
+  container inspect "$1" 2>/dev/null || true
+}
+
+# Read one field from the JSON on standard input.
+#   state | port | label:KEY
+json_field() {
+  "$PYTHON" -I -c '
+import json, sys
+field = sys.argv[1]
+text = sys.stdin.read().strip()
+if not text:
+    sys.exit(0)
+data = json.loads(text)
+if not data:
+    sys.exit(0)
+item = data[0]
+config = item.get("configuration", {})
+if field == "state":
+    print(item.get("status", {}).get("state", ""))
+elif field == "port":
+    ports = [p for p in config.get("publishedPorts", []) if p.get("containerPort") == 5432]
+    print(ports[0]["hostPort"] if ports else "")
+elif field == "image":
+    print(config.get("image", {}).get("reference", ""))
+elif field.startswith("label:"):
+    print(config.get("labels", {}).get(field[6:], ""))
+' "$1"
+}
+
+# The test containers as lines: name, state, run id, owner pid, checkout id.
+list_test_containers() {
+  container list --all --format json 2>/dev/null | "$PYTHON" -I -c '
+import json, sys
+for item in json.load(sys.stdin):
+    config = item.get("configuration", {})
+    labels = config.get("labels", {})
+    if labels.get("caltodo.role") != "test":
+        continue
+    print(config.get("id", ""), item.get("status", {}).get("state", ""),
+          labels.get("caltodo.run", "-"), labels.get("caltodo.pid", "0"),
+          labels.get("caltodo.checkout", "-"))
+'
+}
+
+pid_alive() {
+  [ "$1" -gt 0 ] 2>/dev/null && kill -0 "$1" 2>/dev/null
+}
+
+random_port() {
+  if [ "${1:-}" = dev ]; then
+    echo $((40000 + $(od -An -N2 -tu2 /dev/urandom | tr -d ' ') % 8000))
+    return
+  fi
+  # Test containers use 20000-39999 and development containers 40000-47999.
+  # Both ranges are below the macOS ephemeral range (49152-65535) and outside
+  # 48000-53999, which the spot-price project uses on the same Mac.
+  echo $((20000 + $(od -An -N2 -tu2 /dev/urandom | tr -d ' ') % 20000))
+}
+
+port_busy() {
+  nc -z -G 1 127.0.0.1 "$1" >/dev/null 2>&1
+}
+
+# A PostgreSQL answer through the published port. The port forwarder of
+# `container` accepts a TCP connection before it reaches the server, so a
+# plain TCP check is not enough: send an SSLRequest and expect "S" or "N".
+server_answers() {
+  "$PYTHON" -I -c '
+import socket, struct, sys
+try:
+    with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=2) as conn:
+        conn.sendall(struct.pack("!ii", 8, 80877103))
+        sys.exit(0 if conn.recv(1) in (b"S", b"N") else 1)
+except OSError:
+    sys.exit(1)
+' "$1"
+}
+
+# `container image inspect` takes about 2 seconds; the list takes less.
+ensure_image() {
+  local reference=$CALTODO_PG_IMAGE
+  case $reference in */*) ;; *) reference="docker.io/library/$reference" ;; esac
+  if ! container image list --format json | "$PYTHON" -I -c '
+import json, sys
+names = {item.get("configuration", {}).get("name") for item in json.load(sys.stdin)}
+sys.exit(0 if sys.argv[1] in names else 1)
+' "$reference"; then
+    note "pulling $CALTODO_PG_IMAGE (linux/arm64 only)"
+    container image pull --progress none --platform linux/arm64 "$CALTODO_PG_IMAGE" >&2
+  fi
+}
+
+# Wait until the server accepts TCP connections inside the container and
+# answers through the published port. The image entrypoint first runs a
+# temporary server on the Unix socket only, so the check uses TCP.
+wait_ready() {
+  local name=$1 port=$2 tries=0
+  until container exec "$name" psql --host 127.0.0.1 --username "$PG_USER" --dbname postgres \
+    --no-psqlrc --quiet --tuples-only --command 'select 1' >/dev/null 2>&1 &&
+    server_answers "$port"; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 600 ]; then
+      container logs "$name" 2>&1 | tail -20 >&2 || true
+      die "PostgreSQL in $name did not become ready in 60 seconds"
+    fi
+    if [ "$(inspect "$name" | json_field state)" != "running" ]; then
+      container logs "$name" 2>&1 | tail -20 >&2 || true
+      die "the container $name stopped during the start"
+    fi
+    sleep 0.1
+  done
+}
+
+# Run `container run -d` with a published port. A port that another process
+# takes between the check and the start fails the start; then try another.
+#   run_with_port NAME PREFERRED_PORT ARGUMENTS...
+run_with_port() {
+  local name=$1 port=$2 attempt output kind=test
+  shift 2
+  case $name in caltodo-dev-*) kind=dev ;; esac
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -z "$port" ] || port_busy "$port"; then
+      port=$(random_port "$kind")
+      continue
+    fi
+    if output=$(container run --detach --name "$name" --progress none --platform linux/arm64 \
+      --publish "127.0.0.1:$port:5432" "$@" 2>&1); then
+      echo "$port"
+      return 0
+    fi
+    container delete --force "$name" >/dev/null 2>&1 || true
+    case $output in
+      *"Address already in use"*) port=$(random_port "$kind") ;;
+      *) die "container run failed: $output" ;;
+    esac
+  done
+  die "no free local port after 10 attempts"
+}
+
+# --- Development container --------------------------------------------------
+
+dev_port() {
+  inspect "$DEV_CONTAINER" | json_field port
+}
+
+dev_url() {
+  local port
+  port=$(dev_port)
+  [ -n "$port" ] || die "no development container; run 'mise run db:start'"
+  echo "postgres://$PG_USER:$PG_PASSWORD@127.0.0.1:$port/$DEV_DATABASE"
+}
+
+dev_start() {
+  # One process creates the container; a second waits for the lock.
+  acquire_lock "$STATE/dev.lock" $$
+  trap 'rm -f "$STATE/dev.lock"' EXIT
+
+  local json state image port
+  json=$(inspect "$DEV_CONTAINER")
+  state=$(json_field state <<<"$json")
+  image=$(json_field image <<<"$json")
+  # A container of another major version is replaced. Its volume stays, and
+  # the new major version uses a new volume (the data directory of one major
+  # version does not start on another).
+  if [ -n "$state" ] && [ "$(json_field label:caltodo.major <<<"$json")" != "$MAJOR" ]; then
+    note "replacing $DEV_CONTAINER ($image); its volume stays"
+    container delete --force "$DEV_CONTAINER" >/dev/null
+    state=""
+  fi
+  if [ -z "$state" ]; then
+    ensure_image
+    if ! container volume inspect "$DEV_VOLUME" >/dev/null 2>&1; then
+      container volume create -s 16G --label caltodo.role=dev \
+        --label "caltodo.checkout=$WT" "$DEV_VOLUME" >/dev/null
+    fi
+    # The development data stays across restarts, so fsync stays on.
+    port=$(run_with_port "$DEV_CONTAINER" "$((40000 + 0x${WT:0:4} % 8000))" \
+      --cpus 2 --memory 1G \
+      --label caltodo.role=dev --label "caltodo.checkout=$WT" \
+      --label "caltodo.major=$MAJOR" --label "caltodo.path=$ROOT" \
+      --env "POSTGRES_DB=$DEV_DATABASE" \
+      --env "POSTGRES_USER=$PG_USER" --env "POSTGRES_PASSWORD=$PG_PASSWORD" \
+      --volume "$DEV_VOLUME:/var/lib/postgresql" \
+      "$CALTODO_PG_IMAGE")
+  elif [ "$state" != "running" ]; then
+    port=$(json_field port <<<"$json")
+    # A stopped container keeps its port. If another process took the port,
+    # the start fails; `mise run db:recreate` keeps the volume and takes a
+    # new port.
+    container start "$DEV_CONTAINER" >/dev/null ||
+      die "the start of $DEV_CONTAINER failed (port $port in use?); run 'mise run db:recreate'"
+  else
+    # A running container passed the readiness check when it started.
+    port=$(json_field port <<<"$json")
+    if server_answers "$port"; then return 0; fi
+  fi
+  wait_ready "$DEV_CONTAINER" "$port"
+}
+
+dev_recreate() {
+  acquire_lock "$STATE/dev.lock" $$
+  container delete --force "$DEV_CONTAINER" >/dev/null 2>&1 || true
+  rm -f "$STATE/dev.lock"
+  dev_start
+}
+
+dev_stop() {
+  if [ -n "$(inspect "$DEV_CONTAINER")" ]; then
+    container stop "$DEV_CONTAINER" >/dev/null
+  fi
+}
+
+dev_psql() {
+  dev_running
+  local tty=""
+  if [ -t 0 ] && [ -t 1 ]; then tty=--tty; fi
+  container exec --interactive $tty "$DEV_CONTAINER" psql --host 127.0.0.1 \
+    --username "$PG_USER" --dbname "$DEV_DATABASE" "$@"
+}
+
+dev_running() {
+  [ "$(inspect "$DEV_CONTAINER" | json_field state)" = "running" ] ||
+    die "the development container is not running; run 'mise run db:start'"
+}
+
+# The number of tables outside the system schemas.
+dev_table_count() {
+  container exec "$DEV_CONTAINER" psql --host 127.0.0.1 --username "$PG_USER" \
+    --dbname "$DEV_DATABASE" --no-psqlrc --tuples-only --no-align --command \
+    "select count(*) from pg_tables where schemaname not in ('pg_catalog', 'information_schema')"
+}
+
+dev_dump() {
+  local file=$1
+  dev_running
+  # pg_dump runs in the container, so the Mac needs no PostgreSQL tools.
+  container exec "$DEV_CONTAINER" pg_dump --host 127.0.0.1 --username "$PG_USER" \
+    --format custom --dbname "$DEV_DATABASE" >"$file.partial"
+  mv "$file.partial" "$file"
+  note "wrote $file"
+}
+
+# Replace the development database with FILE. A database that has tables is
+# first written to target/caltodo-pg/before-restore-TIME.dump, so a wrong
+# restore can be undone with a second restore.
+dev_restore() {
+  local file=$1
+  [ -s "$file" ] || die "no dump at $file"
+  dev_running
+  if [ "$(dev_table_count)" != "0" ]; then
+    mkdir -p "$STATE"
+    dev_dump "$STATE/before-restore-$(date +%Y%m%dT%H%M%S).dump"
+  fi
+  dev_reset
+  # Ownership and privileges come from the target server: every object
+  # belongs to the local superuser.
+  container exec --interactive "$DEV_CONTAINER" pg_restore --host 127.0.0.1 \
+    --username "$PG_USER" --dbname "$DEV_DATABASE" --no-owner --no-privileges \
+    --exit-on-error <"$file"
+  note "restored $file"
+}
+
+dev_reset() {
+  dev_running
+  container exec "$DEV_CONTAINER" psql --host 127.0.0.1 --username "$PG_USER" \
+    --dbname postgres --quiet --set ON_ERROR_STOP=1 \
+    --command "DROP DATABASE IF EXISTS $DEV_DATABASE WITH (FORCE)" \
+    --command "CREATE DATABASE $DEV_DATABASE"
+}
+
+dev_clone() {
+  local source
+  source=$(cd "$1" && pwd -P) || die "no directory $1"
+  [ "$source" != "$ROOT" ] || die "the source is this checkout"
+  local source_container="caltodo-dev-$(checkout_id "$source")"
+  [ "$(inspect "$source_container" | json_field state)" = "running" ] ||
+    die "the development container of $source is not running; run 'mise run db:start' there"
+  dev_running
+  mkdir -p "$STATE"
+  local file="$STATE/clone-$(date +%Y%m%dT%H%M%S).dump"
+  container exec "$source_container" pg_dump --host 127.0.0.1 --username "$PG_USER" \
+    --format custom --dbname "$DEV_DATABASE" >"$file"
+  dev_restore "$file"
+  rm -f "$file"
+}
+
+info() {
+  local json state
+  json=$(inspect "$DEV_CONTAINER")
+  state=$(json_field state <<<"$json")
+  echo "checkout:   $ROOT ($WT)"
+  echo "image:      $CALTODO_PG_IMAGE"
+  echo "container:  $DEV_CONTAINER (${state:-missing})"
+  echo "volume:     $DEV_VOLUME"
+  if [ -n "$state" ]; then
+    echo "url:        postgres://$PG_USER:$PG_PASSWORD@127.0.0.1:$(json_field port <<<"$json")/$DEV_DATABASE"
+  fi
+  echo "test containers (name state run pid checkout):"
+  list_test_containers | sed 's/^/  /'
+}
+
+# --- Test containers --------------------------------------------------------
+
+kept_marker() {
+  echo "$GLOBAL_STATE/kept/$1"
+}
+
+# Delete the test containers whose run process ended (SIGKILL, a crash, a
+# closed terminal). A kept container (CALTODO_PG_KEEP) stays until
+# `reap --all` or `reap --kept`.
+reap() {
+  local scope=${1:-checkout} name state run pid checkout
+  while read -r name state run pid checkout; do
+    [ -n "$name" ] || continue
+    if [ "$scope" != "all" ] && [ "$checkout" != "$WT" ]; then continue; fi
+    if [ -e "$(kept_marker "$name")" ]; then
+      [ "$scope" = "kept" ] || [ "$scope" = "all" ] || continue
+    elif pid_alive "$pid"; then
+      continue
+    fi
+    note "deleting $name (run $run, process $pid ended)"
+    container delete --force "$name" >/dev/null 2>&1 || true
+    rm -f "$(kept_marker "$name")"
+  done < <(list_test_containers)
+}
+
+# Report the development containers of checkouts that no longer exist. They
+# hold data, so the script never deletes them: delete one with
+# `container delete NAME` and its volume with `container volume delete NAME`.
+report_orphan_dev() {
+  container list --all --format json 2>/dev/null | "$PYTHON" -I -c '
+import json, os, sys
+for item in json.load(sys.stdin):
+    config = item.get("configuration", {})
+    labels = config.get("labels", {})
+    path = labels.get("caltodo.path", "")
+    if labels.get("caltodo.role") == "dev" and path and not os.path.isdir(path):
+        print("caltodo-pg: %s belongs to a removed checkout (%s); it keeps its volume" % (config.get("id"), path))
+' >&2
+}
+
+live_test_runs() {
+  local count=0 name state run pid checkout
+  while read -r name state run pid checkout; do
+    [ -n "$name" ] || continue
+    if pid_alive "$pid" && [ ! -e "$(kept_marker "$name")" ]; then count=$((count + 1)); fi
+  done < <(list_test_containers)
+  echo "$count"
+}
+
+with_test_db() {
+  [ "${1:-}" = "--" ] && shift
+  [ $# -gt 0 ] || die "with-test-db needs a command"
+
+  # A nested task of a run reuses the container of the run. Only this script
+  # exports these variables, so a separate command never reuses a container.
+  if [ -n "${CALTODO_PG_RUN_CONTAINER:-}" ] && [ -n "${CALTODO_PG_RUN_URL:-}" ] &&
+    [ "${CALTODO_PG_RUN_CHECKOUT:-}" = "$WT" ] &&
+    [ "$(inspect "$CALTODO_PG_RUN_CONTAINER" | json_field state)" = "running" ]; then
+    export DATABASE_URL="$CALTODO_PG_RUN_URL/postgres"
+    unset E2E_DATABASE_URL
+    exec "$@"
+  fi
+  # A test never uses a development or remote database from the environment.
+  unset DATABASE_URL E2E_DATABASE_URL CALTODO_PG_RUN_CONTAINER CALTODO_PG_RUN_URL \
+    CALTODO_PG_RUN_ID CALTODO_PG_RUN_CHECKOUT
+
+  reap checkout
+  ensure_image
+
+  local run name port max=${CALTODO_PG_MAX_TEST_RUNS:-4} waited=0
+  run=$(od -An -N4 -tx4 /dev/urandom | tr -d ' ')
+  name="caltodo-test-$WT-$run"
+
+  # The limit and the creation are one step under a lock for this Mac.
+  local global_lock="$GLOBAL_STATE/test-start.lock" holding=1
+  acquire_lock "$global_lock" $$
+  while [ "$(live_test_runs)" -ge "$max" ]; do
+    rm -f "$global_lock"
+    holding=0
+    if [ "$waited" -eq 0 ]; then note "waiting: $max test containers run (CALTODO_PG_MAX_TEST_RUNS)"; fi
+    waited=$((waited + 1))
+    [ "$waited" -lt 1200 ] || die "timed out waiting for a free test container slot"
+    sleep 1
+    acquire_lock "$global_lock" $$
+    holding=1
+  done
+
+  # `status` stays empty until the command ends; an earlier exit keeps its code.
+  local status=""
+  cleanup() {
+    local code=$?
+    status=${status:-$code}
+    trap - EXIT INT TERM HUP
+    if [ "$holding" = 1 ]; then rm -f "$global_lock"; fi
+    local keep=${CALTODO_PG_KEEP:-}
+    if [ -n "$(inspect "$name")" ]; then
+      if [ "$keep" = "always" ] || { [ "$keep" = "failure" ] && [ "$status" -ne 0 ]; }; then
+        mkdir -p "$GLOBAL_STATE/kept" "$STATE/runs/$run"
+        : >"$(kept_marker "$name")"
+        container logs "$name" >"$STATE/runs/$run/postgres.log" 2>&1 || true
+        note "kept $name: postgres://$PG_USER:$PG_PASSWORD@127.0.0.1:$port/postgres"
+        note "log: $STATE/runs/$run/postgres.log; delete it with 'mise run db:reap -- --kept'"
+      else
+        if [ "$status" -ne 0 ]; then
+          mkdir -p "$STATE/runs/$run"
+          container logs "$name" >"$STATE/runs/$run/postgres.log" 2>&1 || true
+          note "test run $run failed; PostgreSQL log: $STATE/runs/$run/postgres.log"
+        fi
+        container delete --force "$name" >/dev/null 2>&1 || true
+      fi
+    fi
+    exit "$status"
+  }
+  trap 'cleanup' EXIT
+  trap 'status=130; exit 130' INT
+  trap 'status=143; exit 143' TERM
+  trap 'status=129; exit 129' HUP
+
+  # The test data is temporary: the cluster lives in the memory of the
+  # container (tmpfs), and fsync is off.
+  port=$(run_with_port "$name" "" \
+    --cpus "${CALTODO_PG_TEST_CPUS:-4}" --memory "${CALTODO_PG_TEST_MEMORY:-2G}" \
+    --label caltodo.role=test --label "caltodo.checkout=$WT" \
+    --label "caltodo.run=$run" --label "caltodo.pid=$$" \
+    --env "POSTGRES_USER=$PG_USER" --env "POSTGRES_PASSWORD=$PG_PASSWORD" \
+    --tmpfs /var/lib/postgresql \
+    "$CALTODO_PG_IMAGE" \
+    -c fsync=off -c synchronous_commit=off -c full_page_writes=off \
+    -c max_connections=200)
+  rm -f "$global_lock"
+  holding=0
+  wait_ready "$name" "$port"
+
+  export CALTODO_PG_RUN_ID=$run CALTODO_PG_RUN_CONTAINER=$name CALTODO_PG_RUN_CHECKOUT=$WT
+  export CALTODO_PG_RUN_URL="postgres://$PG_USER:$PG_PASSWORD@127.0.0.1:$port"
+  export DATABASE_URL="$CALTODO_PG_RUN_URL/postgres"
+  set +e
+  "$@"
+  status=$?
+  set -e
+  exit "$status"
+}
+
+command=${1:-}
+[ -n "$command" ] || die "no command; see the header of $0"
+shift
+case $command in
+  dev-start) dev_start ;;
+  dev-recreate) dev_recreate ;;
+  dev-stop) dev_stop ;;
+  dev-url) dev_url ;;
+  info) info ;;
+  psql) dev_psql "$@" ;;
+  dump) [ $# -eq 1 ] || die "dump FILE"; dev_dump "$1" ;;
+  restore) [ $# -eq 1 ] || die "restore FILE"; dev_restore "$1" ;;
+  reset) dev_reset ;;
+  clone) [ $# -eq 1 ] || die "clone SOURCE_DIR"; dev_clone "$1" ;;
+  with-test-db) with_test_db "$@" ;;
+  reap)
+    case ${1:-} in
+      --all) reap all; report_orphan_dev ;;
+      --kept) reap kept ;;
+      '') reap checkout ;;
+      *) die "reap [--all|--kept]" ;;
+    esac
+    ;;
+  *) die "unknown command $command" ;;
+esac
