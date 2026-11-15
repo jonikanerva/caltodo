@@ -11,7 +11,7 @@ ADR 0006 moved the local PostgreSQL servers into Apple `container` with `scripts
 ## Decision
 
 1. `scripts/db.sh` is byte-identical in caltodo, mastofeed, and spot-price. It replaces `scripts/caltodo-pg` and `scripts/sqlx-metadata`. `scripts/db-project.sh` holds the differences of each project: names, database names, the port range, TLS, and the project commands.
-2. The commands that need the development container start it; the last one stops it at exit. `db:start` keeps it running until `db:stop`.
+2. The commands that need the development container start it; the last one stops it at exit. `db:start` keeps it running until `db:stop`. A stop removes the container and keeps the volume: a stopped container keeps a copy of the image (about 750 MB). Added on 2026-11-15 after the owner saw the disk use of stopped containers.
 3. Every command that starts a container first removes the test containers of ended runs, and the development container and volume of removed checkouts. A checkout counts as removed only when git no longer lists it, its directory is gone, and its parent directory exists.
 4. `CALTODO_PG_IMAGE` pins the tag and the digest (`postgres:18.7@sha256:…`), like the other two projects. The volume name keeps the major version.
 5. Every container has a random password. The test containers get 2 CPUs and 1 GiB, like the other two projects.
