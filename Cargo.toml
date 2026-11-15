@@ -61,7 +61,7 @@ thiserror = "=2.0.21"
 time = { version = "=0.3.55", default-features = false, features = ["std"] }
 tokio = { version = "=1.54.1", features = ["macros", "net", "rt", "signal", "sync", "time"] }
 tower = { version = "=0.5.3", default-features = false, features = ["util"] }
-tower-http = { version = "=0.6.11", default-features = false, features = ["fs"] }
+tower-http = { version = "=0.7.1", default-features = false, features = ["fs"] }
 # Server-side sessions with a first-party SQLx store (ADR 0003).
 tower-sessions = { version = "=0.15.0", default-features = false, features = ["axum-core", "signed"] }
 tracing = { version = "=0.1.44", default-features = false, features = ["std"] }

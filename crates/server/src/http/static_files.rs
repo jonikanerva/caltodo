@@ -15,8 +15,10 @@
 //!   matches answers a Problem Details 404, whatever the `Accept` header.
 //!   (The Node server answered `index.html` for every unknown path.)
 //!
-//! `ServeDir` rejects path traversal. It sends `Last-Modified` and answers
-//! `If-Modified-Since` and range requests; it sends no `ETag`.
+//! `ServeDir` (tower-http 0.7) rejects path traversal and a file path with a
+//! trailing slash. It sends a strong `ETag` and `Last-Modified`, answers
+//! `If-None-Match`, `If-Match`, and `If-Modified-Since`, serves one byte
+//! range, and refuses a multipart range request with 416.
 
 use std::path::{Path, PathBuf};
 

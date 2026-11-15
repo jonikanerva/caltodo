@@ -544,3 +544,250 @@ async fn the_client_build_serves_deep_links_but_not_api_paths(pool: PgPool) {
     assert_eq!(api.problem(StatusCode::NOT_FOUND), "not_found");
     std::fs::remove_dir_all(dir).ok();
 }
+
+/// A temporary client build with one bundle, `index.html`, and a favicon.
+fn client_build() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("caltodo-web-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    std::fs::write(dir.join("index.html"), "<!doctype html><title>Todo</title>").unwrap();
+    std::fs::write(dir.join("assets/index-abc.js"), "console.log(1)").unwrap();
+    std::fs::write(dir.join("favicon.png"), [0_u8, 1, 2]).unwrap();
+    dir
+}
+
+/// tower-http 0.7 (`ServeDir`, `ServeFile`) sends a strong `ETag` and answers
+/// `If-None-Match`. tower-http 0.6 sent no `ETag`.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_sends_a_strong_etag(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+    let get = |path: &str| request(Method::GET, path);
+
+    // A matching If-None-Match is 304 with the same validator.
+    let asset = app.send(get("/assets/index-abc.js").build()).await;
+    assert_eq!(asset.status, StatusCode::OK);
+    let etag = asset.header("etag").expect("an ETag").to_owned();
+    assert!(etag.starts_with('"'), "a strong ETag: {etag}");
+    assert!(asset.header("last-modified").is_some());
+    let revalidated = app
+        .send(
+            get("/assets/index-abc.js")
+                .header("if-none-match", &etag)
+                .build(),
+        )
+        .await;
+    assert_eq!(revalidated.status, StatusCode::NOT_MODIFIED);
+    assert_eq!(revalidated.header("etag"), Some(etag.as_str()));
+
+    // index.html keeps `no-cache`, so a browser revalidates it with the ETag.
+    let index = app
+        .send(get("/").header("accept", "text/html").build())
+        .await;
+    let index_etag = index.header("etag").expect("an ETag").to_owned();
+    let index_again = app
+        .send(
+            get("/")
+                .header("accept", "text/html")
+                .header("if-none-match", &index_etag)
+                .build(),
+        )
+        .await;
+    assert_eq!(index_again.status, StatusCode::NOT_MODIFIED);
+    assert_eq!(index_again.header("cache-control"), Some("no-cache"));
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// tower-http 0.7 answers a stale `If-Match` with 412 and sends no file, on a
+/// bundle and on `index.html`. tower-http 0.6 ignored `If-Match` and sent 200.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_refuses_a_stale_if_match(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+    let stale = |path: &str| {
+        request(Method::GET, path)
+            .header("accept", "text/html")
+            .header("if-match", "\"stale\"")
+            .build()
+    };
+
+    let asset = app.send(stale("/assets/index-abc.js")).await;
+    assert_eq!(asset.status, StatusCode::PRECONDITION_FAILED);
+    assert_eq!(asset.text(), "");
+    let index = app.send(stale("/")).await;
+    assert_eq!(index.status, StatusCode::PRECONDITION_FAILED);
+    assert_eq!(index.text(), "");
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// tower-http 0.7 does not serve a file for a path with a trailing slash.
+/// tower-http 0.6 served the file.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_has_no_file_for_a_path_with_a_trailing_slash(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+
+    let asset = app
+        .send(request(Method::GET, "/assets/index-abc.js/").build())
+        .await;
+    assert_eq!(asset.status, StatusCode::NOT_FOUND);
+    let file = app
+        .send(request(Method::GET, "/favicon.png/").build())
+        .await;
+    assert_eq!(file.status, StatusCode::NOT_FOUND);
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// One byte range is served; a multipart range request is 416.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_serves_one_byte_range(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+    let ranged = |range: &str| {
+        request(Method::GET, "/assets/index-abc.js")
+            .header("range", range)
+            .build()
+    };
+
+    let one_range = app.send(ranged("bytes=0-6")).await;
+    assert_eq!(one_range.status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(one_range.text(), "console");
+    let two_ranges = app.send(ranged("bytes=0-1,4-5")).await;
+    assert_eq!(two_ranges.status, StatusCode::RANGE_NOT_SATISFIABLE);
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// tower-http 0.7 evaluates `If-None-Match` before `If-Modified-Since` (RFC
+/// 9110, section 13.2.2): a wrong `If-None-Match` sends the file even when
+/// `If-Modified-Since` is current. tower-http 0.6 answered 304.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_prefers_if_none_match_to_if_modified_since(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+
+    let asset = app
+        .send(request(Method::GET, "/assets/index-abc.js").build())
+        .await;
+    let last_modified = asset
+        .header("last-modified")
+        .expect("Last-Modified")
+        .to_owned();
+    let answer = app
+        .send(
+            request(Method::GET, "/assets/index-abc.js")
+                .header("if-none-match", "\"wrong\"")
+                .header("if-modified-since", &last_modified)
+                .build(),
+        )
+        .await;
+    assert_eq!(answer.status, StatusCode::OK);
+    assert_eq!(answer.text(), "console.log(1)");
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// tower-http 0.7 sends `Last-Modified` on a 304 answer to
+/// `If-Modified-Since`. tower-http 0.6 sent no validator on the 304.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_sends_last_modified_on_a_304(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+
+    let asset = app
+        .send(request(Method::GET, "/assets/index-abc.js").build())
+        .await;
+    let last_modified = asset
+        .header("last-modified")
+        .expect("Last-Modified")
+        .to_owned();
+    let answer = app
+        .send(
+            request(Method::GET, "/assets/index-abc.js")
+                .header("if-modified-since", &last_modified)
+                .build(),
+        )
+        .await;
+    assert_eq!(answer.status, StatusCode::NOT_MODIFIED);
+    assert_eq!(answer.header("last-modified"), Some(last_modified.as_str()));
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// tower-http 0.7 sends no `Content-Type` on a 416 answer. tower-http 0.6
+/// sent the content type of the file.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_sends_no_content_type_on_a_416(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+
+    let answer = app
+        .send(
+            request(Method::GET, "/assets/index-abc.js")
+                .header("range", "bytes=100-200")
+                .build(),
+        )
+        .await;
+    assert_eq!(answer.status, StatusCode::RANGE_NOT_SATISFIABLE);
+    assert_eq!(answer.header("content-type"), None);
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// tower-http 0.7 keeps the whole file name with `Accept-Encoding: identity`.
+/// tower-http 0.6 stripped the last extension, so `index-abc.js.map` served
+/// `index-abc.js` and `index.html.bak` served `index.html`.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_keeps_the_extension_with_identity_encoding(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+    let identity = |path: &str| {
+        request(Method::GET, path)
+            .header("accept-encoding", "identity")
+            .build()
+    };
+
+    let map = app.send(identity("/assets/index-abc.js.map")).await;
+    assert_eq!(map.status, StatusCode::NOT_FOUND);
+    let backup = app.send(identity("/index.html.bak")).await;
+    assert_eq!(backup.status, StatusCode::NOT_FOUND);
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// A file path with a trailing slash is a deep link for an HTML request: it
+/// gets `index.html`. tower-http 0.6 served the file. Under `/assets` the
+/// answer stays 404.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_file_path_with_a_trailing_slash_is_a_deep_link(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+    let html = |path: &str| {
+        request(Method::GET, path)
+            .header("accept", "text/html")
+            .build()
+    };
+
+    let file = app.send(html("/favicon.png/")).await;
+    assert_eq!(file.status, StatusCode::OK);
+    assert!(file.text().contains("<title>Todo</title>"));
+    assert_eq!(file.header("cache-control"), Some("no-cache"));
+    let asset = app.send(html("/assets/index-abc.js/")).await;
+    assert_eq!(asset.status, StatusCode::NOT_FOUND);
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// The deep-link fallback copies the request headers to the `index.html`
+/// lookup, so a stale `If-Match` on a deep link is 412 with no body.
+/// tower-http 0.6 ignored `If-Match` and sent `index.html`.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn a_deep_link_refuses_a_stale_if_match(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+
+    let answer = app
+        .send(
+            request(Method::GET, "/settings")
+                .header("accept", "text/html")
+                .header("if-match", "\"stale\"")
+                .build(),
+        )
+        .await;
+    assert_eq!(answer.status, StatusCode::PRECONDITION_FAILED);
+    assert_eq!(answer.text(), "");
+    std::fs::remove_dir_all(dir).ok();
+}
