@@ -14,7 +14,7 @@ Each task is an event in the user's Google Calendar, in the first free slot with
 
 ## Audience and environment
 
-- **(owner to confirm)** People with a Google account who plan their work day in Google Calendar. The service runs at one public address on Railway.
+- **(owner to confirm)** People with a Google account who plan their work day in Google Calendar. The service runs at one public address on Railway. Its PostgreSQL database runs on Neon (owner decision 2026-11-15, `docs/adr/0006-database-on-neon.md`).
 - The user works in a desktop or a mobile browser. The calendar app (Google Calendar) is the second place where the user sees and acts on tasks, through the action links in the event description.
 - Constraints: Google OAuth with calendar scopes; Google's API limits; the user's time zone and work hours.
 
@@ -65,7 +65,8 @@ Each task is an event in the user's Google Calendar, in the first free slot with
 | Session (user id, CSRF token, sign-in state)                   | Signed-in browser                     | PostgreSQL `app_sessions`; cookie `caltodo.sid` | 7 days after the last change; deleted at sign-out |
 | Tasks (title, details, time, completion)                       | The product                           | Google Calendar only                            | Under the user's control in Google Calendar       |
 
-- Forbidden data flows: task text, tokens, or personal data in logs; any third party other than Google.
+- PostgreSQL in this table is the Neon project `caltodo` (region `aws-eu-central-1`). Until the owner removes it, the Railway service `Postgres caltodo` keeps a copy of the PostgreSQL rows as of the switch on 2026-11-15.
+- Forbidden data flows: task text, tokens, or personal data in logs; any third party other than Google and the database host Neon (the PostgreSQL rows of this table).
 - Telemetry and diagnostics: none in the browser. The server writes structured logs with allowlisted fields (route, status, timing, counts) to Railway.
 - Approved deletion policies: account deletion removes the user, the settings, the action tokens, and the sessions of the user. The events in Google Calendar stay, because they belong to the user's calendar.
 
