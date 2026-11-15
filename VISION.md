@@ -65,7 +65,7 @@ Each task is an event in the user's Google Calendar, in the first free slot with
 | Session (user id, CSRF token, sign-in state)                   | Signed-in browser                     | PostgreSQL `app_sessions`; cookie `caltodo.sid` | 7 days after the last change; deleted at sign-out |
 | Tasks (title, details, time, completion)                       | The product                           | Google Calendar only                            | Under the user's control in Google Calendar       |
 
-- PostgreSQL in this table is the Neon project `caltodo` (region `aws-eu-central-1`). Until the owner removes it, the Railway service `Postgres caltodo` keeps a copy of the PostgreSQL rows as of the switch on 2026-11-15.
+- PostgreSQL in this table is the Neon project `caltodo` (region `aws-eu-central-1`).
 - Forbidden data flows: task text, tokens, or personal data in logs; any third party other than Google and the database host Neon (the PostgreSQL rows of this table).
 - Telemetry and diagnostics: none in the browser. The server writes structured logs with allowlisted fields (route, status, timing, counts) to Railway.
 - Approved deletion policies: account deletion removes the user, the settings, the action tokens, and the sessions of the user. The events in Google Calendar stay, because they belong to the user's calendar.
