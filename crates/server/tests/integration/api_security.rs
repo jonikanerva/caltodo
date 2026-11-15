@@ -556,15 +556,14 @@ fn client_build() -> std::path::PathBuf {
 }
 
 /// tower-http 0.7 (`ServeDir`, `ServeFile`) sends a strong `ETag` and answers
-/// `If-None-Match` and `If-Match`. tower-http 0.6 sent no `ETag`.
+/// `If-None-Match`. tower-http 0.6 sent no `ETag`.
 #[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
 async fn the_client_build_sends_a_strong_etag(pool: PgPool) {
     let dir = client_build();
     let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
     let get = |path: &str| request(Method::GET, path);
 
-    // A matching If-None-Match is 304 with the same validator; a failed
-    // If-Match is 412.
+    // A matching If-None-Match is 304 with the same validator.
     let asset = app.send(get("/assets/index-abc.js").build()).await;
     assert_eq!(asset.status, StatusCode::OK);
     let etag = asset.header("etag").expect("an ETag").to_owned();
@@ -579,14 +578,6 @@ async fn the_client_build_sends_a_strong_etag(pool: PgPool) {
         .await;
     assert_eq!(revalidated.status, StatusCode::NOT_MODIFIED);
     assert_eq!(revalidated.header("etag"), Some(etag.as_str()));
-    let changed = app
-        .send(
-            get("/assets/index-abc.js")
-                .header("if-match", "\"other\"")
-                .build(),
-        )
-        .await;
-    assert_eq!(changed.status, StatusCode::PRECONDITION_FAILED);
 
     // index.html keeps `no-cache`, so a browser revalidates it with the ETag.
     let index = app
@@ -603,6 +594,28 @@ async fn the_client_build_sends_a_strong_etag(pool: PgPool) {
         .await;
     assert_eq!(index_again.status, StatusCode::NOT_MODIFIED);
     assert_eq!(index_again.header("cache-control"), Some("no-cache"));
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// tower-http 0.7 answers a stale `If-Match` with 412 and sends no file, on a
+/// bundle and on `index.html`. tower-http 0.6 ignored `If-Match` and sent 200.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_refuses_a_stale_if_match(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+    let stale = |path: &str| {
+        request(Method::GET, path)
+            .header("accept", "text/html")
+            .header("if-match", "\"stale\"")
+            .build()
+    };
+
+    let asset = app.send(stale("/assets/index-abc.js")).await;
+    assert_eq!(asset.status, StatusCode::PRECONDITION_FAILED);
+    assert_eq!(asset.text(), "");
+    let index = app.send(stale("/")).await;
+    assert_eq!(index.status, StatusCode::PRECONDITION_FAILED);
+    assert_eq!(index.text(), "");
     std::fs::remove_dir_all(dir).ok();
 }
 
