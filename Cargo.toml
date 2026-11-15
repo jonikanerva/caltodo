@@ -39,7 +39,7 @@ getrandom = { version = "=0.4.3", default-features = false, features = ["std"] }
 hmac = { version = "=0.13.0", default-features = false }
 # Time. The bundled time zone database makes the zone rules independent of
 # the host files (STACK.md §10).
-jiff = { version = "=0.2.43", default-features = false, features = ["std", "tzdb-bundle-always"] }
+jiff = { version = "=0.2.44", default-features = false, features = ["std", "tzdb-bundle-always"] }
 # The Jiff wrapper types for SQLx: the civil `timestamp` columns and
 # `timestamptz`.
 jiff-sqlx = { version = "=0.2.2", default-features = false, features = ["postgres"] }
