@@ -12,7 +12,7 @@ Quick start:
 - Install tools and dependencies: `mise trust`, then `mise run setup`
 - Create `.env` with the Google OAuth secrets (see `README.md`)
 - Develop: `mise run dev`
-- Local databases: use only the `mise run db:*` tasks and the test tasks. They give each checkout its own development database and each test run its own temporary PostgreSQL container. Do not start, stop, prune, or delete database containers or volumes with your own `container` or `docker` commands. The `container` CLI fails inside a command sandbox; run the database and test tasks outside it.
+- Local databases: use only the `mise run` tasks. `dev`, `db:migrate`, and the test tasks start and stop their own PostgreSQL containers: each checkout has its own development database, each test run its own temporary container, and the tasks clean up after ended runs and removed checkouts. Do not start, stop, prune, or delete database containers or volumes with your own `container` or `docker` commands. The `container` CLI fails inside a command sandbox; `.claude/settings.json` runs the database tasks outside it for a plain call such as `mise run verify` (no `cd`, pipe, redirect, or `&&` chain).
 - Run complete local validation: `mise run verify`
 - Runtime model: a single web process (`caltodo serve`) handles the API, the action pages, the web app, and the scheduled jobs in-process (no separate worker process)
 - Migrations are an explicit start step: `caltodo migrate` runs before `caltodo serve`

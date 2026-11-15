@@ -23,13 +23,14 @@ cargo-deny = "0.20.2"
 "cargo:sqlx-cli" = { version = "0.9.0", default-features = false, features = "postgres,rustls", locked = true }
 
 # The local PostgreSQL servers run in Apple `container` (STACK.md §1, ADR
-# 0006). scripts/caltodo-pg owns their lifecycle: one development container
-# and volume per checkout, and one temporary container per test run. The
-# image has the same PostgreSQL major version as production (STACK.md §15);
-# the major version also names the development volume. Change the version
-# only here.
+# 0006 and 0008). scripts/db.sh owns their lifecycle: one development
+# container and volume per checkout, and one temporary container per test
+# run. The image has the same PostgreSQL major version as production
+# (STACK.md §15); the major version also names the development volume. The
+# digest pins the multi-platform image index; the tag is for people. Change
+# the version only here.
 [env]
-CALTODO_PG_IMAGE = "postgres:18"
+CALTODO_PG_IMAGE = "docker.io/library/postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc"
 
 [tasks.setup]
 description = "Install the pinned tools, the locked dependencies, and the Playwright browser"
@@ -37,92 +38,59 @@ run = [
   "mise install",
   "pnpm install --frozen-lockfile",
   "cargo fetch --locked",
-  # Only the image of this Mac: a pull of every platform takes minutes.
-  'container image pull --progress none --platform linux/arm64 "$CALTODO_PG_IMAGE"',
+  # The container tool and the linux/arm64 PostgreSQL image.
+  "scripts/db.sh setup",
   # The browser build matches the locked Playwright version of e2e/.
   "pnpm --filter @caltodo/e2e exec playwright install chromium",
 ]
 
+# `dev`, `db:migrate`, `test`, `test:e2e`, `sqlx:*`, and `verify` start and
+# stop their servers themselves. The other db: tasks are optional tools.
 [tasks."db:start"]
-description = "Start the development PostgreSQL container of this checkout and wait until it is ready"
-run = "scripts/caltodo-pg dev-start"
+description = "Keep the development PostgreSQL of this checkout running until db:stop"
+run = "scripts/db.sh start"
 
 [tasks."db:stop"]
-description = "Stop the development PostgreSQL container of this checkout; the data stays"
-run = "scripts/caltodo-pg dev-stop"
-
-[tasks."db:recreate"]
-description = "Create the development container again with a new port; the volume and the data stay"
-run = "scripts/caltodo-pg dev-recreate"
+description = "Stop the development PostgreSQL of this checkout; the data stays in its volume"
+run = "scripts/db.sh stop"
 
 [tasks."db:info"]
-description = "Show the database containers, the volume, and the URL of this checkout"
-run = "scripts/caltodo-pg info"
+description = "Show the PostgreSQL servers of this checkout"
+run = "scripts/db.sh info"
 
 [tasks."db:psql"]
 description = "psql on the development database (arguments go to psql)"
-depends = ["db:start"]
 raw = true
-run = "scripts/caltodo-pg psql"
+run = "scripts/db.sh psql"
 
 [tasks."db:dump"]
-description = "Write the development database to a file: mise run db:dump -- FILE"
-depends = ["db:start"]
-run = "scripts/caltodo-pg dump"
+description = "Write the development database to a pg_dump archive: mise run db:dump -- FILE"
+run = "scripts/db.sh dump"
 
 [tasks."db:restore"]
-description = "Replace the development database with a db:dump file, then migrate: mise run db:restore -- FILE"
-depends = ["db:start"]
-run = ["scripts/caltodo-pg restore", { task = "db:migrate" }]
+description = "Replace the development database with a pg_dump archive; the old one goes to .tmp/db/backups: mise run db:restore -- FILE"
+run = "scripts/db.sh restore"
 
 [tasks."db:clone"]
-description = "Replace the development database with the one of another checkout, then migrate: mise run db:clone -- DIR"
-depends = ["db:start"]
-run = ["scripts/caltodo-pg clone", { task = "db:migrate" }]
+description = "Replace the development database with the one of another checkout; the old one goes to .tmp/db/backups: mise run db:clone -- DIR"
+run = "scripts/db.sh clone"
 
-[tasks."db:reap"]
-description = "Delete the test containers of ended runs of this checkout (--all: every checkout; --kept: kept ones)"
-run = "scripts/caltodo-pg reap"
+[tasks."db:reset"]
+description = "Replace the development database with an empty one; the old one goes to .tmp/db/backups"
+run = "scripts/db.sh reset"
+
+[tasks."db:gc"]
+description = "Run the database clean-up now, and remove the kept test containers of this checkout"
+run = "scripts/db.sh gc"
 
 [tasks."db:migrate"]
 description = "Apply the migrations to the development database"
-depends = ["db:start"]
-run = 'DATABASE_URL="$(scripts/caltodo-pg dev-url)" cargo run --locked -p caltodo -- migrate'
-
-[tasks."db:reset"]
-description = "Drop and recreate the development database, then apply the migrations"
-depends = ["db:start"]
-run = [
-  "scripts/caltodo-pg reset",
-  { task = "db:migrate" },
-]
+run = "scripts/db.sh with-dev-db -- cargo run --locked -p caltodo -- migrate"
 
 [tasks.dev]
 description = "The server on port 5001 and the Vite dev server on port 5000; reads .env"
-depends = ["db:start"]
 raw = true
-run = '''
-set -eu
-# `.env` holds the local secrets (README.md). The dev server always uses port
-# 5001 behind the Vite proxy and writes a readable log.
-set -a
-if [ -f .env ]; then . ./.env; fi
-set +a
-export PORT=5001 CALTODO_LOG_FORMAT=text
-# The development database of this checkout. Another database needs an
-# explicit CALTODO_DEV_DATABASE_URL; a DATABASE_URL in `.env` or in the shell
-# does not change it.
-if [ -n "${DATABASE_URL:-}" ] && [ -z "${CALTODO_DEV_DATABASE_URL:-}" ]; then
-  echo "dev: ignoring DATABASE_URL; set CALTODO_DEV_DATABASE_URL to use another database" >&2
-fi
-DATABASE_URL="${CALTODO_DEV_DATABASE_URL:-$(scripts/caltodo-pg dev-url)}"
-export DATABASE_URL
-cargo run --locked -p caltodo -- migrate
-cargo run --locked -p caltodo -- serve &
-server=$!
-trap 'kill "$server" 2>/dev/null || true' EXIT INT TERM
-pnpm --filter @caltodo/web run dev
-'''
+run = "scripts/db.sh with-dev-db -- scripts/dev-run"
 
 [tasks.format]
 description = "Format the Rust and the TypeScript sources"
@@ -160,11 +128,11 @@ fi
 
 [tasks."sqlx:check"]
 description = "Fail when the SQLx query metadata (.sqlx) differs from the queries and the migrations"
-run = "scripts/caltodo-pg with-test-db -- scripts/sqlx-metadata check"
+run = "scripts/db.sh with-test-db -- scripts/db.sh sqlx check"
 
 [tasks."sqlx:prepare"]
 description = "Write the SQLx query metadata (.sqlx) from a freshly migrated database"
-run = "scripts/caltodo-pg with-test-db -- scripts/sqlx-metadata prepare"
+run = "scripts/db.sh with-test-db -- scripts/db.sh sqlx prepare"
 
 [tasks."contract:export"]
 description = "Write contract/openapi.json from the Rust HTTP types"
@@ -217,8 +185,9 @@ run = [
 
 [tasks.test]
 description = "Nextest, the doc tests, Vitest in every TypeScript package, and the browser journeys"
-# One temporary test server for all steps (scripts/caltodo-pg).
-run = "scripts/caltodo-pg with-test-db -- mise run test:steps"
+# One temporary test server for all steps: --share lets the nested test:e2e
+# use it. A separate run gets its own server.
+run = "scripts/db.sh with-test-db --share -- mise run test:steps"
 
 [tasks."test:steps"]
 hide = true
@@ -234,12 +203,12 @@ run = [
 
 [tasks."test:e2e"]
 description = "Playwright and axe journeys against the deterministic test server (STACK.md §11)"
-run = "scripts/caltodo-pg with-test-db -- scripts/e2e-run"
+run = "scripts/db.sh with-test-db -- scripts/e2e-run"
 
 [tasks.verify]
 description = "The full verification (VERIFY_CMD); stops at the first failed step"
 # One temporary test server for all steps; a separate run gets its own.
-run = "scripts/caltodo-pg with-test-db -- mise run verify:steps"
+run = "scripts/db.sh with-test-db --share -- mise run verify:steps"
 
 [tasks."verify:steps"]
 hide = true
