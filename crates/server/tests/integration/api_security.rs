@@ -544,3 +544,101 @@ async fn the_client_build_serves_deep_links_but_not_api_paths(pool: PgPool) {
     assert_eq!(api.problem(StatusCode::NOT_FOUND), "not_found");
     std::fs::remove_dir_all(dir).ok();
 }
+
+/// A temporary client build with one bundle, `index.html`, and a favicon.
+fn client_build() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("caltodo-web-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    std::fs::write(dir.join("index.html"), "<!doctype html><title>Todo</title>").unwrap();
+    std::fs::write(dir.join("assets/index-abc.js"), "console.log(1)").unwrap();
+    std::fs::write(dir.join("favicon.png"), [0_u8, 1, 2]).unwrap();
+    dir
+}
+
+/// tower-http 0.7 (`ServeDir`, `ServeFile`) sends a strong `ETag` and answers
+/// `If-None-Match` and `If-Match`. tower-http 0.6 sent no `ETag`.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_sends_a_strong_etag(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+    let get = |path: &str| request(Method::GET, path);
+
+    // A matching If-None-Match is 304 with the same validator; a failed
+    // If-Match is 412.
+    let asset = app.send(get("/assets/index-abc.js").build()).await;
+    assert_eq!(asset.status, StatusCode::OK);
+    let etag = asset.header("etag").expect("an ETag").to_owned();
+    assert!(etag.starts_with('"'), "a strong ETag: {etag}");
+    assert!(asset.header("last-modified").is_some());
+    let revalidated = app
+        .send(
+            get("/assets/index-abc.js")
+                .header("if-none-match", &etag)
+                .build(),
+        )
+        .await;
+    assert_eq!(revalidated.status, StatusCode::NOT_MODIFIED);
+    assert_eq!(revalidated.header("etag"), Some(etag.as_str()));
+    let changed = app
+        .send(
+            get("/assets/index-abc.js")
+                .header("if-match", "\"other\"")
+                .build(),
+        )
+        .await;
+    assert_eq!(changed.status, StatusCode::PRECONDITION_FAILED);
+
+    // index.html keeps `no-cache`, so a browser revalidates it with the ETag.
+    let index = app
+        .send(get("/").header("accept", "text/html").build())
+        .await;
+    let index_etag = index.header("etag").expect("an ETag").to_owned();
+    let index_again = app
+        .send(
+            get("/")
+                .header("accept", "text/html")
+                .header("if-none-match", &index_etag)
+                .build(),
+        )
+        .await;
+    assert_eq!(index_again.status, StatusCode::NOT_MODIFIED);
+    assert_eq!(index_again.header("cache-control"), Some("no-cache"));
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// tower-http 0.7 does not serve a file for a path with a trailing slash.
+/// tower-http 0.6 served the file.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_has_no_file_for_a_path_with_a_trailing_slash(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+
+    let asset = app
+        .send(request(Method::GET, "/assets/index-abc.js/").build())
+        .await;
+    assert_eq!(asset.status, StatusCode::NOT_FOUND);
+    let file = app
+        .send(request(Method::GET, "/favicon.png/").build())
+        .await;
+    assert_eq!(file.status, StatusCode::NOT_FOUND);
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// One byte range is served; a multipart range request is 416.
+#[sqlx::test(migrator = "caltodo::db::MIGRATOR")]
+async fn the_client_build_serves_one_byte_range(pool: PgPool) {
+    let dir = client_build();
+    let app = TestApp::with(pool, &settings("UTC"), Some(&dir));
+    let ranged = |range: &str| {
+        request(Method::GET, "/assets/index-abc.js")
+            .header("range", range)
+            .build()
+    };
+
+    let one_range = app.send(ranged("bytes=0-6")).await;
+    assert_eq!(one_range.status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(one_range.text(), "console");
+    let two_ranges = app.send(ranged("bytes=0-1,4-5")).await;
+    assert_eq!(two_ranges.status, StatusCode::RANGE_NOT_SATISFIABLE);
+    std::fs::remove_dir_all(dir).ok();
+}
