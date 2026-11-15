@@ -2,7 +2,7 @@
 //! `support.rs` compiles once.
 //!
 //! The tests that need PostgreSQL use `#[sqlx::test]`: each test gets its own
-//! database on the server of `DATABASE_URL` (`mise run db:start`).
+//! database on the server of `DATABASE_URL` (the test container of `mise run test`).
 
 #![expect(
     clippy::unwrap_used,

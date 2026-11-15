@@ -20,9 +20,12 @@ import { fileURLToPath } from "node:url"
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const PORT = process.env["PORT"] ?? "47431"
 const BUILD = process.env["BUILD"] ?? path.join(ROOT, "web/build")
-const DB =
-  process.env["E2E_DATABASE_URL"] ??
-  "postgres://postgres:postgres@127.0.0.1:55473/caltodo_visual"
+// The database of the comparison: for example a database in the test
+// container of `scripts/caltodo-pg with-test-db` (README.md).
+const DB = process.env["E2E_DATABASE_URL"]
+if (DB === undefined || DB === "") {
+  throw new Error("E2E_DATABASE_URL is not set")
+}
 
 export default defineConfig({
   testDir: ".",

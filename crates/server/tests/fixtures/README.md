@@ -24,15 +24,17 @@ The generators need the Node server code, which a later commit of the same chang
 ```bash
 git checkout "$(git log --diff-filter=A --format=%H -1 -- crates/server/tests/fixtures/README.md)"
 pnpm install --frozen-lockfile
-# A PostgreSQL database for the Drizzle snapshot (any empty database).
-TZ=UTC FIXTURE_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55473/caltodo_fixtures \
+# A PostgreSQL database for the Drizzle snapshot (any empty database). For a
+# temporary server, run the commands in `scripts/caltodo-pg with-test-db -- bash`
+# and create the database there first.
+TZ=UTC FIXTURE_DATABASE_URL=$CALTODO_PG_RUN_URL/caltodo_fixtures \
   ./node_modules/.bin/vitest run --config script/node-fixtures/vitest.config.ts
 ```
 
 `TZ=UTC` is required: the free-slot and the reschedule cases depend on the process time zone of the Node code. This run skips `naive-time.fixtures.ts`, which needs a zone with a UTC offset. Run it alone on an empty database:
 
 ```bash
-TZ=Europe/Helsinki FIXTURE_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55473/caltodo_fixtures_tz \
+TZ=Europe/Helsinki FIXTURE_DATABASE_URL=$CALTODO_PG_RUN_URL/caltodo_fixtures_tz \
   ./node_modules/.bin/vitest run --config script/node-fixtures/vitest.config.ts naive-time
 ```
 

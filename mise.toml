@@ -3,8 +3,8 @@
 # mirrors in the same commit: `.nvmrc`, `engines` and `packageManager` in the
 # root package.json, and `packages` in railpack.json.
 #
-# A fresh machine: install mise, rustup, and Docker, then run `mise trust`
-# and `mise run setup` in the repository root.
+# A fresh machine: install mise, rustup, and the Apple container tool, then
+# run `mise trust` and `mise run setup` in the repository root.
 [settings]
 idiomatic_version_file_enable_tools = ["rust"]
 
@@ -22,17 +22,14 @@ cargo-deny = "0.20.2"
 # Built from crates.io with the locked dependency versions of the release.
 "cargo:sqlx-cli" = { version = "0.9.0", default-features = false, features = "postgres,rustls", locked = true }
 
-# The local PostgreSQL server of development and of the tests: a Docker
-# container on 127.0.0.1:55473 (STACK.md §11). The tests create and drop
-# their own databases on this server; `caltodo` is the development database.
-# The image has the same PostgreSQL major version as production (STACK.md §15).
-# Each major version keeps its data in its own volume, because a data
-# directory of one major does not start on another.
+# The local PostgreSQL servers run in Apple `container` (STACK.md §1, ADR
+# 0006). scripts/caltodo-pg owns their lifecycle: one development container
+# and volume per checkout, and one temporary container per test run. The
+# image has the same PostgreSQL major version as production (STACK.md §15);
+# the major version also names the development volume. Change the version
+# only here.
 [env]
-CALTODO_PG_CONTAINER = "caltodo-pg"
 CALTODO_PG_IMAGE = "postgres:18"
-CALTODO_PG_VOLUME = "caltodo-pg-18"
-CALTODO_PG_URL = "postgres://postgres:postgres@127.0.0.1:55473"
 
 [tasks.setup]
 description = "Install the pinned tools, the locked dependencies, and the Playwright browser"
@@ -40,58 +37,63 @@ run = [
   "mise install",
   "pnpm install --frozen-lockfile",
   "cargo fetch --locked",
+  # Only the image of this Mac: a pull of every platform takes minutes.
+  'container image pull --progress none --platform linux/arm64 "$CALTODO_PG_IMAGE"',
   # The browser build matches the locked Playwright version of e2e/.
   "pnpm --filter @caltodo/e2e exec playwright install chromium",
 ]
 
 [tasks."db:start"]
-description = "Start the local PostgreSQL container and wait until it accepts connections"
-run = '''
-set -eu
-# A container of another image (an older major version) is replaced. Its
-# volume stays, so its data is not deleted.
-if [ -n "$(docker ps --all --quiet --filter "name=^${CALTODO_PG_CONTAINER}$")" ] &&
-  [ -z "$(docker ps --all --quiet --filter "name=^${CALTODO_PG_CONTAINER}$" --filter "ancestor=${CALTODO_PG_IMAGE}")" ]; then
-  docker rm --force "$CALTODO_PG_CONTAINER" >/dev/null
-fi
-if [ -z "$(docker ps --quiet --filter "name=^${CALTODO_PG_CONTAINER}$")" ]; then
-  if [ -n "$(docker ps --all --quiet --filter "name=^${CALTODO_PG_CONTAINER}$")" ]; then
-    docker start "$CALTODO_PG_CONTAINER" >/dev/null
-  else
-    # Synthetic local credentials. The data stays in the named volume. From
-    # PostgreSQL 18 the image keeps its data under /var/lib/postgresql.
-    docker run --detach --name "$CALTODO_PG_CONTAINER" \
-      --publish 127.0.0.1:55473:5432 \
-      --env POSTGRES_PASSWORD=postgres --env POSTGRES_DB=caltodo \
-      --volume "$CALTODO_PG_VOLUME":/var/lib/postgresql \
-      "$CALTODO_PG_IMAGE" -c fsync=off >/dev/null
-  fi
-fi
-for _ in $(seq 1 60); do
-  if docker exec "$CALTODO_PG_CONTAINER" pg_isready --username postgres --dbname caltodo >/dev/null 2>&1; then
-    exit 0
-  fi
-  sleep 0.5
-done
-echo "db:start: PostgreSQL did not become ready" >&2
-exit 1
-'''
+description = "Start the development PostgreSQL container of this checkout and wait until it is ready"
+run = "scripts/caltodo-pg dev-start"
 
 [tasks."db:stop"]
-description = "Stop the local PostgreSQL container; the data stays"
-run = 'docker stop "$CALTODO_PG_CONTAINER" >/dev/null'
+description = "Stop the development PostgreSQL container of this checkout; the data stays"
+run = "scripts/caltodo-pg dev-stop"
+
+[tasks."db:recreate"]
+description = "Create the development container again with a new port; the volume and the data stay"
+run = "scripts/caltodo-pg dev-recreate"
+
+[tasks."db:info"]
+description = "Show the database containers, the volume, and the URL of this checkout"
+run = "scripts/caltodo-pg info"
+
+[tasks."db:psql"]
+description = "psql on the development database (arguments go to psql)"
+depends = ["db:start"]
+raw = true
+run = "scripts/caltodo-pg psql"
+
+[tasks."db:dump"]
+description = "Write the development database to a file: mise run db:dump -- FILE"
+depends = ["db:start"]
+run = "scripts/caltodo-pg dump"
+
+[tasks."db:restore"]
+description = "Restore a db:dump file into an empty development database: mise run db:restore -- FILE"
+depends = ["db:start"]
+run = "scripts/caltodo-pg restore"
+
+[tasks."db:clone"]
+description = "Replace the development database with the one of another checkout: mise run db:clone -- DIR"
+depends = ["db:start"]
+run = "scripts/caltodo-pg clone"
+
+[tasks."db:reap"]
+description = "Delete the test containers of ended runs of this checkout (--all: every checkout; --kept: kept ones)"
+run = "scripts/caltodo-pg reap"
 
 [tasks."db:migrate"]
 description = "Apply the migrations to the development database"
 depends = ["db:start"]
-env = { DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:55473/caltodo" }
-run = "cargo run --locked -p caltodo -- migrate"
+run = 'DATABASE_URL="$(scripts/caltodo-pg dev-url)" cargo run --locked -p caltodo -- migrate'
 
 [tasks."db:reset"]
 description = "Drop and recreate the development database, then apply the migrations"
 depends = ["db:start"]
 run = [
-  'docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE IF EXISTS caltodo WITH (FORCE)" --command "CREATE DATABASE caltodo"',
+  "scripts/caltodo-pg reset",
   { task = "db:migrate" },
 ]
 
@@ -107,7 +109,14 @@ set -a
 if [ -f .env ]; then . ./.env; fi
 set +a
 export PORT=5001 CALTODO_LOG_FORMAT=text
-export DATABASE_URL="${DATABASE_URL:-$CALTODO_PG_URL/caltodo}"
+# The development database of this checkout. Another database needs an
+# explicit CALTODO_DEV_DATABASE_URL; a DATABASE_URL in `.env` or in the shell
+# does not change it.
+if [ -n "${DATABASE_URL:-}" ] && [ -z "${CALTODO_DEV_DATABASE_URL:-}" ]; then
+  echo "dev: ignoring DATABASE_URL; set CALTODO_DEV_DATABASE_URL to use another database" >&2
+fi
+DATABASE_URL="${CALTODO_DEV_DATABASE_URL:-$(scripts/caltodo-pg dev-url)}"
+export DATABASE_URL
 cargo run --locked -p caltodo -- migrate
 cargo run --locked -p caltodo -- serve &
 server=$!
@@ -151,89 +160,11 @@ fi
 
 [tasks."sqlx:check"]
 description = "Fail when the SQLx query metadata (.sqlx) differs from the queries and the migrations"
-depends = ["db:start"]
-run = '''
-set -eu
-# Keep this script the same as the script of `sqlx:prepare`, except
-# `--check` (STACK.md §3).
-#
-# The database name is a hash of the checkout path. Two checkouts that run
-# the task at the same time use two databases. All runs in one checkout use
-# the same name, so each run drops the database that a killed run left.
-if command -v shasum >/dev/null 2>&1; then
-  hash=$(printf '%s' "$PWD" | shasum -a 256)
-else
-  hash=$(printf '%s' "$PWD" | sha256sum)
-fi
-database="caltodo_sqlx_$(printf '%s' "$hash" | cut -c1-16)"
-drop_database() {
-  docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --set ON_ERROR_STOP=1 \
-    --command "DROP DATABASE IF EXISTS $database WITH (FORCE)"
-}
-# The EXIT trap drops the database also after a failed step. INT and TERM
-# exit through the EXIT trap. A failed drop fails the task.
-cleanup() {
-  status=$?
-  trap - EXIT
-  drop_database || status=1
-  exit "$status"
-}
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-drop_database
-docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --set ON_ERROR_STOP=1 \
-  --command "CREATE DATABASE $database"
-export DATABASE_URL="$CALTODO_PG_URL/$database"
-# sqlx-cli applies the migrations without a build. A build of the server
-# (`caltodo migrate`) compiles the queries against the committed metadata,
-# so the build fails for a new or changed query.
-sqlx migrate run --no-dotenv --source migrations
-SQLX_OFFLINE=false cargo sqlx prepare --no-dotenv --workspace --check -- --all-targets --locked
-'''
+run = "scripts/caltodo-pg with-test-db -- scripts/sqlx-metadata check"
 
 [tasks."sqlx:prepare"]
 description = "Write the SQLx query metadata (.sqlx) from a freshly migrated database"
-depends = ["db:start"]
-run = '''
-set -eu
-# Keep this script the same as the script of `sqlx:check`, except
-# `--check` (STACK.md §3).
-#
-# The database name is a hash of the checkout path. Two checkouts that run
-# the task at the same time use two databases. All runs in one checkout use
-# the same name, so each run drops the database that a killed run left.
-if command -v shasum >/dev/null 2>&1; then
-  hash=$(printf '%s' "$PWD" | shasum -a 256)
-else
-  hash=$(printf '%s' "$PWD" | sha256sum)
-fi
-database="caltodo_sqlx_$(printf '%s' "$hash" | cut -c1-16)"
-drop_database() {
-  docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --set ON_ERROR_STOP=1 \
-    --command "DROP DATABASE IF EXISTS $database WITH (FORCE)"
-}
-# The EXIT trap drops the database also after a failed step. INT and TERM
-# exit through the EXIT trap. A failed drop fails the task.
-cleanup() {
-  status=$?
-  trap - EXIT
-  drop_database || status=1
-  exit "$status"
-}
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-drop_database
-docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --set ON_ERROR_STOP=1 \
-  --command "CREATE DATABASE $database"
-export DATABASE_URL="$CALTODO_PG_URL/$database"
-# sqlx-cli applies the migrations without a build. A build of the server
-# (`caltodo migrate`) compiles the queries against the committed metadata,
-# so the build fails for a new or changed query.
-sqlx migrate run --no-dotenv --source migrations
-SQLX_OFFLINE=false cargo sqlx prepare --no-dotenv --workspace -- --all-targets --locked
-'''
+run = "scripts/caltodo-pg with-test-db -- scripts/sqlx-metadata prepare"
 
 [tasks."contract:export"]
 description = "Write contract/openapi.json from the Rust HTTP types"
@@ -261,6 +192,12 @@ run = [
 
 [tasks.build]
 description = "OpenAPI export, client generation, web build, and the release server"
+# The steps write shared files of the checkout, so one build runs at a time
+# in one checkout (STACK.md §3).
+run = "scripts/checkout-lock build -- mise run build:steps"
+
+[tasks."build:steps"]
+hide = true
 run = [
   "rm -rf web/build",
   { task = "contract:export" },
@@ -271,8 +208,11 @@ run = [
 
 [tasks.test]
 description = "Nextest, the doc tests, Vitest in every TypeScript package, and the browser journeys"
-depends = ["db:start"]
-env = { DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:55473/caltodo" }
+# One temporary test server for all steps (scripts/caltodo-pg).
+run = "scripts/caltodo-pg with-test-db -- mise run test:steps"
+
+[tasks."test:steps"]
+hide = true
 run = [
   # The database tests (`#[sqlx::test]` and tests/lifecycle.rs) create and
   # drop their own databases on the server of DATABASE_URL.
@@ -285,19 +225,15 @@ run = [
 
 [tasks."test:e2e"]
 description = "Playwright and axe journeys against the deterministic test server (STACK.md §11)"
-depends = ["db:start"]
-env = { E2E_DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:55473/caltodo_e2e" }
-run = [
-  # The journeys test the current client and test server, so both are built
-  # first, and each run starts from an empty database.
-  "pnpm --filter @caltodo/web run build",
-  "cargo build --release --locked -p caltodo --example e2e_server",
-  'docker exec "$CALTODO_PG_CONTAINER" psql --username postgres --quiet --command "DROP DATABASE IF EXISTS caltodo_e2e WITH (FORCE)" --command "CREATE DATABASE caltodo_e2e"',
-  "pnpm --filter @caltodo/e2e run e2e",
-]
+run = "scripts/caltodo-pg with-test-db -- scripts/e2e-run"
 
 [tasks.verify]
 description = "The full verification (VERIFY_CMD); stops at the first failed step"
+# One temporary test server for all steps; a separate run gets its own.
+run = "scripts/caltodo-pg with-test-db -- mise run verify:steps"
+
+[tasks."verify:steps"]
+hide = true
 run = [
   { task = "format-check" },
   { task = "lint" },
