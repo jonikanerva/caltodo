@@ -1,4 +1,4 @@
-# ADR 0006: The database moves from Railway PostgreSQL to the Neon Free plan
+# ADR 0007: The database moves from Railway PostgreSQL to the Neon Free plan
 
 - Status: accepted
 - Date: 2026-11-15

@@ -3,7 +3,9 @@
 // One deterministic test server runs the release build of
 // `crates/server/examples/e2e_server.rs`: the real router, middleware, and
 // client build over the fake Google services, on the PostgreSQL database of
-// `E2E_DATABASE_URL`, which `mise run test:e2e` creates empty.
+// `E2E_DATABASE_URL`, which `mise run test:e2e` creates empty in the test
+// container of the run (scripts/e2e-run). The run also sets the port, the
+// client build, and the output directory, so runs do not share them.
 //
 // The journeys run one at a time against one fake account: the server keeps
 // its real rate limits (25 sign-ins per 15 minutes per client), so the setup
@@ -11,18 +13,23 @@
 import { defineConfig, devices } from "@playwright/test"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { BASE_URL, PORT, STORAGE_STATE } from "./tests/servers.js"
+import {
+  BASE_URL,
+  DATABASE_URL,
+  OUTPUT_DIR,
+  PORT,
+  STORAGE_STATE,
+} from "./tests/servers.js"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const SERVER = path.join(ROOT, "target/release/examples/e2e_server")
-const WEB_BUILD = path.join(ROOT, "web/build")
-const DATABASE_URL =
-  process.env["E2E_DATABASE_URL"] ??
-  "postgres://postgres:postgres@127.0.0.1:55473/caltodo_e2e"
+const WEB_BUILD = path.resolve(
+  process.env["E2E_WEB_BUILD"] ?? path.join(ROOT, "web/build"),
+)
 
 export default defineConfig({
   testDir: "./tests",
-  outputDir: "./test-results",
+  outputDir: OUTPUT_DIR,
   forbidOnly: true,
   // A failure is investigated, never retried away (DOCTRINE.md P6).
   retries: 0,

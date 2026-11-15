@@ -14,7 +14,7 @@ Each task is an event in the user's Google Calendar, in the first free slot with
 
 ## Audience and environment
 
-- **(owner to confirm)** People with a Google account who plan their work day in Google Calendar. The service runs at one public address on Railway. Its PostgreSQL database runs on Neon (owner decision 2026-11-15, `docs/adr/0006-database-on-neon.md`).
+- **(owner to confirm)** People with a Google account who plan their work day in Google Calendar. The service runs at one public address on Railway. Its PostgreSQL database runs on Neon (owner decision 2026-11-15, `docs/adr/0007-database-on-neon.md`).
 - The user works in a desktop or a mobile browser. The calendar app (Google Calendar) is the second place where the user sees and acts on tasks, through the action links in the event description.
 - Constraints: Google OAuth with calendar scopes; Google's API limits; the user's time zone and work hours.
 

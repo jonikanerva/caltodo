@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# checkout-lock NAME -- COMMAND: run COMMAND while this checkout holds the lock
+# NAME. The lock protects a step that writes shared files of one checkout
+# (STACK.md §3): the build outputs and the SQLx metadata. Other checkouts have
+# their own locks. shlock(1) replaces the lock of a dead process.
+set -euo pipefail
+[ $# -ge 3 ] && [ "$2" = "--" ] || {
+  echo "usage: checkout-lock NAME -- COMMAND" >&2
+  exit 2
+}
+name=$1
+shift 2
+root=$(git rev-parse --show-toplevel)
+lock="$root/target/caltodo-locks/$name.lock"
+mkdir -p "$(dirname "$lock")"
+waited=0
+until shlock -f "$lock" -p $$; do
+  if [ "$waited" -eq 0 ]; then echo "checkout-lock: waiting for $name" >&2; fi
+  waited=$((waited + 1))
+  if [ "$waited" -ge 3600 ]; then
+    echo "checkout-lock: timed out waiting for $name" >&2
+    exit 1
+  fi
+  sleep 0.5
+done
+trap 'rm -f "$lock"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+"$@"
