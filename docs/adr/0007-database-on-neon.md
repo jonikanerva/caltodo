@@ -19,7 +19,7 @@ Unlike the mastofeed data, the caltodo data is not regenerable. It holds the use
 2. The service connects to the direct Neon endpoint with `sslmode=verify-full`. It does not use the Neon pooler.
 3. The pool opens no connection by itself (SQLx default `min_connections` 0). An idle connection in the pool does not keep the compute active: the compute suspends after 5 minutes without queries (`STACK.md` §5 Compute time).
 4. A fresh copy (`pg_dump` and `pg_restore`, `STACK.md` §15 Data move) moves the data right before the switch of `DATABASE_URL`, outside the job times. The row counts of every table must match. After Railway removes the previous deployment, the content checksums of the Railway tables must equal the checksums of the copy, so no write between the copy and the switch is lost.
-5. The Railway service `Postgres caltodo` stays unchanged as the rollback database. The owner decides when to remove it.
+5. The Railway service `Postgres caltodo` stays unchanged as the rollback database. The owner decides when to remove it. Update of 2026-11-15: the owner removed the service and its volume on the day of the switch, after the release checks.
 
 ## Alternatives
 
@@ -34,11 +34,11 @@ Unlike the mastofeed data, the caltodo data is not regenerable. It holds the use
 - Database traffic goes over the public internet from `europe-west4` to Frankfurt, with TLS and a certificate check. Each query has more latency than on the Railway private network. The first request after a suspension waits for the compute to start. The Google calls of a task request take more time than this.
 - When the project uses all CU-hours of a month, Neon suspends the compute until the next month, and sign-in, the task list, and the jobs fail. The estimate is below 15 CU-hours a month (`STACK.md` §5).
 - The Neon history window of 6 hours adds a short restore path that Railway Hobby did not have.
-- Railway removes the cost of `Postgres caltodo` only after the owner removes that service. The saving on the Railway bill is at most about $0.65 a month, and less when the usage falls below the $5 included in the Hobby plan.
+- Railway removes the cost of `Postgres caltodo` only after the owner removes that service (done on 2026-11-15). The saving on the Railway bill is at most about $0.65 a month, and less when the usage falls below the $5 included in the Hobby plan.
 
 ## Cost of reversal
 
-Low while the Railway database exists: copy the data from Neon back to Railway, then set `DATABASE_URL` back to the Railway reference (`STACK.md` §15 Back to Railway PostgreSQL). No code change is necessary. Without the copy, the changes after the switch are lost. After the owner removes the Railway database, a reversal is a data move to a new database.
+Medium. The owner removed the Railway database on 2026-11-15. A reversal is a data move to a new database (`STACK.md` §15 Data move), then a change of `DATABASE_URL`. No code change is necessary.
 
 ## Reassessment condition
 
