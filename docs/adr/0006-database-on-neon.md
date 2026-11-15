@@ -18,7 +18,7 @@ Unlike the mastofeed data, the caltodo data is not regenerable. It holds the use
 1. The service uses the Neon project `caltodo` as its database. The service stays on Railway.
 2. The service connects to the direct Neon endpoint with `sslmode=verify-full`. It does not use the Neon pooler.
 3. The pool keeps no idle connection open (SQLx default `min_connections` 0), so the compute can suspend between requests.
-4. A fresh copy (`pg_dump` and `pg_restore`, `STACK.md` §15 Data move) moves the data right before the switch of `DATABASE_URL`, and the row counts of every table must match.
+4. A fresh copy (`pg_dump` and `pg_restore`, `STACK.md` §15 Data move) moves the data right before the switch of `DATABASE_URL`, outside the job times. The row counts of every table must match. After Railway removes the previous deployment, the content checksums of the Railway tables must equal the checksums of the copy, so no write between the copy and the switch is lost.
 5. The Railway service `Postgres caltodo` stays unchanged as the rollback database. The owner decides when to remove it.
 
 ## Alternatives
