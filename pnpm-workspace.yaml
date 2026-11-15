@@ -22,5 +22,12 @@ catalog:
 # version has GHSA-52cp-r559-cp3m, GHSA-5p4m-2wfm-xmqj, and
 # GHSA-2883-xcg3-v3hh; 4.3.2 fixes all three. Remove this override when the
 # generator depends on a fixed js-yaml (STACK.md §13).
+# rolldown 1.2.19 (through vite ~1.2.18) adds the optional package
+# @rolldown/binding-wasm32-wasi, which depends on @emnapi/core and
+# @emnapi/runtime 2.0.0-beta.2. Prereleases need a reviewed exception
+# (DOCTRINE.md P7). rolldown 1.2.18 has no wasm32 binding. Remove this
+# override when a rolldown release has no prerelease dependency in its wasm32
+# binding (STACK.md §6).
 overrides:
   "@hey-api/json-schema-ref-parser@1.4.4>js-yaml": "4.3.2"
+  rolldown: "1.2.18"
