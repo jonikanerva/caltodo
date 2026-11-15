@@ -1,4 +1,4 @@
-# ADR 0007: One database script for three projects, with automatic clean-up
+# ADR 0008: One database script for three projects, with automatic clean-up
 
 - Status: accepted
 - Date: 2026-11-15

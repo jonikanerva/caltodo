@@ -132,12 +132,12 @@ You do not start or stop a database yourself. Each checkout (worktree) has its o
 
 ## Production Deployment
 
-Railway builds the service with Railpack from `railpack.json` and starts it with `./bin/caltodo migrate && exec ./bin/caltodo serve`. `STACK.md` §15 describes the release, the checks, and the rollback.
+Railway builds the service with Railpack from `railpack.json` and starts it with `./bin/caltodo migrate && exec ./bin/caltodo serve`. The PostgreSQL database runs on Neon (`docs/adr/0007-database-on-neon.md`). `STACK.md` §5 describes the database connection, and §15 describes the release, the checks, and the rollback.
 
 ### Environment Variables (Production)
 
 ```env
-DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
+DATABASE_URL=postgresql://user:password@direct-host:5432/dbname?sslmode=verify-full
 GOOGLE_CLIENT_ID=your-production-client-id
 GOOGLE_CLIENT_SECRET=your-production-client-secret
 SESSION_SECRET=strong-random-secret-min-32-chars

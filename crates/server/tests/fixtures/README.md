@@ -25,16 +25,20 @@ The generators need the Node server code, which a later commit of the same chang
 git checkout "$(git log --diff-filter=A --format=%H -1 -- crates/server/tests/fixtures/README.md)"
 pnpm install --frozen-lockfile
 # A PostgreSQL database for the Drizzle snapshot (any empty database). For a
-# temporary server, run the commands in `mise exec -- scripts/db.sh with-test-db -- bash`
-# and create the database there first.
-TZ=UTC FIXTURE_DATABASE_URL=${DATABASE_URL%/*}/caltodo_fixtures \
+# temporary server, keep a test server of a current checkout with
+# `CALTODO_DB_KEEP=always mise exec -- scripts/db.sh with-test-db -- true`
+# (it prints its DATABASE_URL), create the database on it, and put the URL
+# of that database below. `mise run db:gc` in that checkout removes the server.
+# Do not start an interactive shell inside with-test-db: the command runs
+# outside the terminal foreground and stops.
+TZ=UTC FIXTURE_DATABASE_URL=<server URL>/caltodo_fixtures \
   ./node_modules/.bin/vitest run --config script/node-fixtures/vitest.config.ts
 ```
 
 `TZ=UTC` is required: the free-slot and the reschedule cases depend on the process time zone of the Node code. This run skips `naive-time.fixtures.ts`, which needs a zone with a UTC offset. Run it alone on an empty database:
 
 ```bash
-TZ=Europe/Helsinki FIXTURE_DATABASE_URL=${DATABASE_URL%/*}/caltodo_fixtures_tz \
+TZ=Europe/Helsinki FIXTURE_DATABASE_URL=<server URL>/caltodo_fixtures_tz \
   ./node_modules/.bin/vitest run --config script/node-fixtures/vitest.config.ts naive-time
 ```
 

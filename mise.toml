@@ -23,7 +23,7 @@ cargo-deny = "0.20.2"
 "cargo:sqlx-cli" = { version = "0.9.0", default-features = false, features = "postgres,rustls", locked = true }
 
 # The local PostgreSQL servers run in Apple `container` (STACK.md §1, ADR
-# 0006 and 0007). scripts/db.sh owns their lifecycle: one development
+# 0006 and 0008). scripts/db.sh owns their lifecycle: one development
 # container and volume per checkout, and one temporary container per test
 # run. The image has the same PostgreSQL major version as production
 # (STACK.md §15); the major version also names the development volume. The
