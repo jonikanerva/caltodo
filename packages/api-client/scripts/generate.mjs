@@ -19,6 +19,7 @@ import {
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, relative, sep } from "node:path"
+import process from "node:process"
 import { URL, fileURLToPath } from "node:url"
 import { createClient } from "@hey-api/openapi-ts"
 import { generatorConfig } from "./generator-config.mjs"
