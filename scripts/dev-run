@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# dev-run: the server on port 5001 and the Vite dev server on port 5000
+# (`mise run dev`). Run it through `scripts/db.sh with-dev-db`, which sets
+# DATABASE_URL to the development database of this checkout.
+set -euo pipefail
+: "${DATABASE_URL:?run through scripts/db.sh with-dev-db}"
+dev_database_url=$DATABASE_URL
+# `.env` holds the local secrets (README.md). A DATABASE_URL in `.env` does
+# not change the database; CALTODO_DATABASE_URL selects another one.
+set -a
+if [ -f .env ]; then . ./.env; fi
+set +a
+if [ -n "${CALTODO_DATABASE_URL:-}" ]; then
+  echo "dev: using CALTODO_DATABASE_URL, not the development database of this checkout" >&2
+  DATABASE_URL=$CALTODO_DATABASE_URL
+else
+  if [ "${DATABASE_URL:-}" != "$dev_database_url" ]; then
+    echo "dev: ignoring the DATABASE_URL of .env; set CALTODO_DATABASE_URL to use another database" >&2
+  fi
+  DATABASE_URL=$dev_database_url
+fi
+# The dev server always uses port 5001 behind the Vite proxy and writes a
+# readable log.
+export DATABASE_URL PORT=5001 CALTODO_LOG_FORMAT=text
+cargo run --locked -p caltodo -- migrate
+cargo run --locked -p caltodo -- serve &
+server=$!
+trap 'kill "$server" 2>/dev/null || true' EXIT INT TERM
+pnpm --filter @caltodo/web run dev

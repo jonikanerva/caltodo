@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # e2e-run: the Playwright and axe journeys (STACK.md §11). Run it through
-# `scripts/caltodo-pg with-test-db`, which gives the run its own test server.
+# `scripts/db.sh with-test-db`, which gives the run its own test server.
 #
 # Each run has its own client build, database, server port, and Playwright
 # output directory (target/e2e/RUN), so two runs in one checkout do not share
 # a file or a port. The release build of the test server is shared; Cargo
 # locks the target directory, and an unchanged build stays the same file.
 set -euo pipefail
-: "${CALTODO_PG_RUN_ID:?run through scripts/caltodo-pg with-test-db}"
-: "${CALTODO_PG_RUN_URL:?run through scripts/caltodo-pg with-test-db}"
-: "${CALTODO_PG_RUN_CONTAINER:?run through scripts/caltodo-pg with-test-db}"
+: "${CALTODO_DB_CONTAINER:?run through scripts/db.sh with-test-db}"
+: "${DATABASE_URL:?run through scripts/db.sh with-test-db}"
+# The server of the run, without a database name.
+server_url=${DATABASE_URL%/*}
 
 root=$(git rev-parse --show-toplevel)
 # A nested run (verify) reuses the container, so the database name is unique.
 suffix=$(od -An -N4 -tx4 /dev/urandom | tr -d ' ')
-run_dir="$root/target/e2e/$CALTODO_PG_RUN_ID-$suffix"
+run_dir="$root/target/e2e/$CALTODO_DB_CONTAINER-$suffix"
 database="caltodo_e2e_$suffix"
 mkdir -p "$run_dir"
 
@@ -22,7 +23,7 @@ mkdir -p "$run_dir"
 pnpm --filter @caltodo/web exec vite build --outDir "$run_dir/web" --emptyOutDir --logLevel warn
 cargo build --release --locked -p caltodo --example e2e_server
 
-container exec "$CALTODO_PG_RUN_CONTAINER" psql --host 127.0.0.1 --username postgres \
+container exec "$CALTODO_DB_CONTAINER" psql --host 127.0.0.1 --username postgres \
   --dbname postgres --quiet --set ON_ERROR_STOP=1 --command "CREATE DATABASE $database"
 
 # A free port from the system. Another process can take it before the server
@@ -43,7 +44,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 export E2E_PORT=$port
-export E2E_DATABASE_URL="$CALTODO_PG_RUN_URL/$database"
+export E2E_DATABASE_URL="$server_url/$database"
 export E2E_WEB_BUILD="$run_dir/web"
 export E2E_OUTPUT_DIR="$run_dir/results"
 echo "e2e-run: results in $E2E_OUTPUT_DIR" >&2

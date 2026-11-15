@@ -8,6 +8,7 @@ node_modules
 
 # builds
 /target
+/.tmp
 /build
 **/build
 **/dist
@@ -27,6 +28,7 @@ coverage
 .claude/*
 !.claude/agents/
 !.claude/skills/
+!.claude/settings.json
 *.tar.gz
 
 # Baseline screenshots of the visual comparison (see e2e/visual-compare)

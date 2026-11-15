@@ -1,6 +1,6 @@
 # ADR 0006: Local PostgreSQL in Apple container
 
-- Status: accepted
+- Status: accepted; ADR 0007 replaces `scripts/caltodo-pg` with the shared `scripts/db.sh`
 - Date: 2026-11-15
 
 ## Context
