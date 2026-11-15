@@ -7,7 +7,7 @@
 name = "caltodo"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.100"
 publish = false
 default-run = "caltodo"
 description = "The caltodo server: Google Calendar tasks with automatic scheduling"

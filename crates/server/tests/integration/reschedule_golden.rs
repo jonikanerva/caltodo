@@ -32,12 +32,11 @@ fn event(value: &Value) -> CalendarEvent {
         transparency: text("transparency"),
         private_properties: value["extendedProperties"]["private"]
             .as_object()
-            .map(|map| {
+            .map_or_default(|map| {
                 map.iter()
                     .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned()))
                     .collect()
-            })
-            .unwrap_or_default(),
+            }),
     }
 }
 
