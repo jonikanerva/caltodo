@@ -8,7 +8,7 @@
     "verify": "mise run verify"
   },
   "engines": {
-    "node": "^24.22.3"
+    "node": "^26.13.1"
   },
   "packageManager": "pnpm@12.21.0",
   "devDependencies": {
