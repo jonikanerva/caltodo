@@ -11,8 +11,8 @@ ADR 0006 moved the local PostgreSQL servers into Apple `container` with `scripts
 ## Decision
 
 1. `scripts/db.sh` is byte-identical in caltodo, mastofeed, and spot-price. It replaces `scripts/caltodo-pg` and `scripts/sqlx-metadata`. `scripts/db-project.sh` holds the differences of each project: names, database names, the port range, TLS, and the project commands.
-2. The commands that need the development container start it; the last one stops it at exit. `db:start` keeps it running until `db:stop`.
-3. Every command that starts a container first removes the test containers of ended runs, and the development container and volume of removed checkouts. A checkout counts as removed only when git no longer lists it, its directory is gone, and its parent directory exists.
+2. The commands that need the development container start it; the last one stops it at exit. `db:start` keeps it running until `db:stop`. A stop removes the container and keeps the volume: a stopped container keeps a copy of the image (about 750 MB). Added on 2026-11-15 after the owner saw the disk use of stopped containers.
+3. Every command that starts a container first removes the stopped development containers that no command is creating, the test containers of ended runs, and the development container and volume of removed checkouts. A checkout counts as removed only when git no longer lists it, its directory is gone, and its parent directory exists.
 4. `CALTODO_PG_IMAGE` pins the tag and the digest (`postgres:18.7@sha256:…`), like the other two projects. The volume name keeps the major version.
 5. Every container has a random password. The test containers get 2 CPUs and 1 GiB, like the other two projects.
 6. `db:restore`, `db:clone`, and `db:reset` replace the development database and first write a non-empty database to `.tmp/db/backups/`. The next `dev` or `db:migrate` applies the migrations.
@@ -29,7 +29,7 @@ ADR 0006 moved the local PostgreSQL servers into Apple `container` with `scripts
 ## Consequences
 
 - A developer or an agent runs only `dev`, `db:migrate`, `test`, `test:e2e`, `sqlx:*`, or `verify`. The other `db:` tasks are optional tools.
-- `db:recreate` and `db:reap` go away. The clean-up and the restart of a container whose port does not answer replace them.
+- `db:recreate` and `db:reap` go away. The clean-up and the new creation of a container whose port does not answer replace them.
 - A moved checkout loses its development data. Use `db:dump` before the move.
 - An older branch with `scripts/caltodo-pg` still works, but in a checkout that already has a password file it cannot connect with its fixed password; use `db:dump` and `db:restore`, or run that branch in another checkout. Its `db:reap -- --all` can delete a test container of a running new-script test, because the new containers have no `caltodo.pid` label.
 - The old state directories `target/caltodo-pg/` and `~/.local/state/caltodo-pg/` are no longer used.
