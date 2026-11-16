@@ -184,10 +184,13 @@ run = [
 ]
 
 [tasks.test]
-description = "Nextest, the doc tests, Vitest in every TypeScript package, and the browser journeys"
+description = "The lock test of scripts/db.sh, then nextest, the doc tests, Vitest in every TypeScript package, and the browser journeys"
 # One temporary test server for all steps: --share lets the nested test:e2e
 # use it. A separate run gets its own server.
-run = "scripts/db.sh with-test-db --share -- mise run test:steps"
+run = [
+  "scripts/db-lock-test.sh",
+  "scripts/db.sh with-test-db --share -- mise run test:steps",
+]
 
 [tasks."test:steps"]
 hide = true
